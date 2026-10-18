@@ -139,6 +139,8 @@ export interface Chunk {
   end: number
   /** 1-based line number of the chunk start (0 when unknown). */
   line: number
+  /** 1-based line number of the chunk end (0 when unknown). */
+  endLine: number
 }
 
 /**
@@ -166,7 +168,11 @@ export function chunkDocument(text: string, maxChars = 1200, overlap = 150): Chu
     }
     scanned = Math.max(scanned, start)
     const end = start + piece.length
-    chunks.push({ text: piece, start, end, line: lineCount })
+    let endLine = lineCount
+    for (let index = start; index < end; index++) {
+      if (clean.charCodeAt(index) === 10) endLine += 1
+    }
+    chunks.push({ text: piece, start, end, line: lineCount, endLine })
     cursor = Math.max(cursor, end)
   }
   return chunks

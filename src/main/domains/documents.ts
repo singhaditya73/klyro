@@ -15,6 +15,8 @@ interface StoredChunk {
   end: number
   /** 1-based line number of the chunk start, or 0 when it cannot be derived. */
   line: number
+  /** 1-based line number of the chunk end, or 0 when it cannot be derived. */
+  endLine: number
 }
 
 interface StoredDocument {
@@ -37,6 +39,7 @@ export interface RecalledChunk {
   name: string
   text: string
   line: number
+  endLine: number
   path: string | null
 }
 
@@ -72,14 +75,16 @@ function stripMarkup(input: string): string {
  * on-disk format can change without losing a user's library.
  */
 function toChunk(raw: unknown, index: number): StoredChunk {
-  if (typeof raw === 'string') return { text: raw, start: 0, end: raw.length, line: 0 }
-  if (!raw || typeof raw !== 'object') return { text: '', start: 0, end: 0, line: 0 }
+  if (typeof raw === 'string') return { text: raw, start: 0, end: raw.length, line: 0, endLine: 0 }
+  if (!raw || typeof raw !== 'object') return { text: '', start: 0, end: 0, line: 0, endLine: 0 }
   const record = raw as Partial<StoredChunk>
+  const line = Number.isFinite(record.line) ? Number(record.line) : index === 0 ? 1 : 0
   return {
     text: typeof record.text === 'string' ? record.text : '',
     start: Number.isFinite(record.start) ? Number(record.start) : 0,
     end: Number.isFinite(record.end) ? Number(record.end) : 0,
-    line: Number.isFinite(record.line) ? Number(record.line) : index === 0 ? 1 : 0
+    line,
+    endLine: Number.isFinite(record.endLine) ? Number(record.endLine) : line
   }
 }
 
@@ -294,6 +299,7 @@ class DocumentDomain {
         text: chunk.text,
         name: document.name,
         line: chunk.line,
+        endLine: chunk.endLine,
         path: document.sourcePath
       }))
     )
@@ -313,6 +319,7 @@ class DocumentDomain {
           snippet: entry.text.slice(0, 200),
           score: Number(hit.score.toFixed(3)),
           line: entry.line,
+          endLine: entry.endLine,
           path: entry.path ?? undefined
         }
       ]
@@ -329,6 +336,7 @@ class DocumentDomain {
           text: chunk.text,
           name: document.name,
           line: chunk.line,
+          endLine: chunk.endLine,
           path: document.sourcePath
         }))
       )
@@ -339,7 +347,9 @@ class DocumentDomain {
       limit
     ).flatMap((hit) => {
       const entry = byId.get(hit.id)
-      return entry ? [{ name: entry.name, text: entry.text, line: entry.line, path: entry.path }] : []
+      return entry
+        ? [{ name: entry.name, text: entry.text, line: entry.line, endLine: entry.endLine, path: entry.path }]
+        : []
     })
   }
 

@@ -80,6 +80,12 @@ export const IPC = {
   workflowCancel: 'workflow:cancel',
   workflowEvent: 'workflow:event',
 
+  patchList: 'patch:list',
+  patchPropose: 'patch:propose',
+  patchApply: 'patch:apply',
+  patchRevert: 'patch:revert',
+  patchDiscard: 'patch:discard',
+
   windowHideOverlay: 'window:hideOverlay',
   windowToggleOverlay: 'window:toggleOverlay'
 } as const

@@ -1,3 +1,4 @@
+import { formatLocation } from '../knowledge/locations'
 import { wrapUntrusted } from '../security/untrusted'
 import { documents } from './documents'
 import { memory } from './memory'
@@ -39,8 +40,7 @@ export function buildKnowledgeContext(query: string): KnowledgeContext {
     const recalled = documents.recall(query, Math.max(1, settings.documentRecallCount))
     documentHits = recalled.length
     for (const hit of recalled) {
-      const label = `document: ${hit.name}${hit.line > 0 ? `:${hit.line}` : ''}`
-      sections.push(wrapUntrusted(label, hit.text))
+      sections.push(wrapUntrusted(`document: ${formatLocation(hit)}`, hit.text))
     }
   }
 

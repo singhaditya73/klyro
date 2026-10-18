@@ -10,6 +10,7 @@ import type {
   KlyroApi,
   MeetingDraft,
   MemoryDraft,
+  PatchRequest,
   ProviderId,
   SendChatRequest,
   WorkflowDraft,
@@ -93,6 +94,12 @@ const api: KlyroApi = {
   projectStatus: () => ipcRenderer.invoke(IPC.projectStatus),
   projectIndex: () => ipcRenderer.invoke(IPC.projectIndex),
   projectClear: () => ipcRenderer.invoke(IPC.projectClear),
+
+  patchList: () => ipcRenderer.invoke(IPC.patchList),
+  patchPropose: (request: PatchRequest) => ipcRenderer.invoke(IPC.patchPropose, request),
+  patchApply: (id: string) => ipcRenderer.invoke(IPC.patchApply, id),
+  patchRevert: (id: string) => ipcRenderer.invoke(IPC.patchRevert, id),
+  patchDiscard: (id: string) => ipcRenderer.invoke(IPC.patchDiscard, id),
   codeAssist: (request: CodeAssistRequest) => ipcRenderer.invoke(IPC.codeAssist, request),
 
   meetingList: () => ipcRenderer.invoke(IPC.meetingList),

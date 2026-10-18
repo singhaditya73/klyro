@@ -328,6 +328,8 @@ export interface KnowledgeHit {
   score: number
   /** 1-based line number when the hit came from a known location. */
   line?: number
+  /** 1-based end line when the hit came from a known range. */
+  endLine?: number
   /** Absolute source path for document hits. */
   path?: string
 }
@@ -367,7 +369,6 @@ export interface GitHubIssue {
 }
 
 /* ---------- Coding mode ---------- */
-
 export type CodeActionKind = 'explain' | 'bugs' | 'tests' | 'refactor' | 'docs'
 
 export interface ProjectStatus {
@@ -376,6 +377,45 @@ export interface ProjectStatus {
   chunks: number
   indexedAt: number | null
   skipped: number
+  /** What the last scan actually did, so indexing is never a black box. */
+  lastScan?: {
+    added: number
+    updated: number
+    reused: number
+    removed: number
+    skipped: number
+  }
+}
+
+/* ---------- Reviewable file edits ---------- */
+
+export type PatchStatus = 'pending' | 'applied' | 'reverted'
+
+export interface PatchRequest {
+  /** Path relative to the indexed project root. */
+  path: string
+  /** The complete proposed file contents. */
+  content: string
+}
+
+export interface PatchRecord {
+  id: string
+  path: string
+  absolutePath: string
+  /** True when the file did not exist before this patch. */
+  createdFile: boolean
+  created: number
+  appliedAt: number | null
+  revertedAt: number | null
+  status: PatchStatus
+  addedLines: number
+  removedLines: number
+  /** Hash of the file the diff was built from, so stale diffs cannot be applied. */
+  beforeHash: string
+  diff: string
+  content: string
+  backupPath: string | null
+  error: string | null
 }
 
 export interface CodeAssistRequest {
@@ -390,6 +430,8 @@ export interface CodeCitation {
   name: string
   /** 1-based line where the cited chunk starts, or 0 when unknown. */
   line: number
+  /** 1-based line where the cited chunk ends, when known. */
+  endLine?: number
   /** Absolute path on disk, when known. */
   path: string | null
 }
@@ -617,6 +659,12 @@ export interface KlyroApi {
   projectStatus(): Promise<ProjectStatus>
   projectIndex(): Promise<ProjectStatus>
   projectClear(): Promise<ProjectStatus>
+
+  patchList(): Promise<PatchRecord[]>
+  patchPropose(request: PatchRequest): Promise<PatchRecord>
+  patchApply(id: string): Promise<PatchRecord>
+  patchRevert(id: string): Promise<PatchRecord>
+  patchDiscard(id: string): Promise<PatchRecord[]>
   codeAssist(request: CodeAssistRequest): Promise<CodeAssistResult>
 
   meetingList(): Promise<MeetingRecord[]>

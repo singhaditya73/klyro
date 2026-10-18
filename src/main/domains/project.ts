@@ -7,11 +7,20 @@ import { logger } from '../logger'
 import { JsonStore } from '../store/json-store'
 import { documents } from './documents'
 
+/** What we knew about a file the last time it was indexed. */
+interface TrackedFile {
+  size: number
+  mtimeMs: number
+}
+
 interface ProjectState {
   root: string | null
   indexedAt: number | null
   files: number
   skipped: number
+  /** Relative path → the file's size/mtime when it was last indexed. */
+  tracked: Record<string, TrackedFile>
+  lastScan: { added: number; updated: number; reused: number; removed: number; skipped: number } | null
 }
 
 const MAX_FILES = 1500
@@ -23,7 +32,9 @@ class ProjectDomain {
     root: null,
     indexedAt: null,
     files: 0,
-    skipped: 0
+    skipped: 0,
+    tracked: {},
+    lastScan: null
   })
 
   status(): ProjectStatus {
@@ -34,7 +45,8 @@ class ProjectDomain {
       files: stats.files,
       chunks: stats.chunks,
       indexedAt: state.indexedAt,
-      skipped: state.skipped
+      skipped: state.skipped,
+      lastScan: state.lastScan ?? undefined
     }
   }
 
@@ -42,7 +54,7 @@ class ProjectDomain {
     root: string,
     directory: string,
     depth: number,
-    collector: string[]
+    collector: { path: string; size: number; mtimeMs: number }[]
   ): Promise<void> {
     if (depth > MAX_DEPTH || collector.length >= MAX_FILES) return
     let entries
@@ -64,7 +76,9 @@ class ProjectDomain {
       const relativePath = relative(root, absolute).split(sep).join('/')
       try {
         const info = await stat(absolute)
-        if (isIndexableFile(relativePath, info.size)) collector.push(absolute)
+        if (isIndexableFile(relativePath, info.size)) {
+          collector.push({ path: absolute, size: info.size, mtimeMs: info.mtimeMs })
+        }
       } catch {
         // unreadable entry — skip
       }
@@ -80,37 +94,76 @@ class ProjectDomain {
     return this.indexPath(selection.filePaths[0])
   }
 
+  /**
+   * Re-scan a workspace, only re-reading files that actually changed.
+   *
+   * Unchanged files (same size and modified time) keep their existing chunks, so
+   * re-indexing a large project after editing one file is cheap. Files that
+   * disappeared are dropped from the index.
+   */
   async indexPath(root: string): Promise<ProjectStatus> {
-    const files: string[] = []
-    await this.walk(root, root, 0, files)
+    const state = this.store.get()
+    // Only trust previous file records when re-indexing the same folder.
+    const previous = state.root === root ? state.tracked ?? {} : {}
 
-    documents.clearGroup('workspace')
-    let imported = 0
+    const scanned: { path: string; size: number; mtimeMs: number }[] = []
+    await this.walk(root, root, 0, scanned)
+
+    const tracked: Record<string, TrackedFile> = {}
+    let added = 0
+    let updated = 0
+    let reused = 0
     let skipped = 0
-    for (const file of files) {
-      const relativePath = relative(root, file).split(sep).join('/')
+
+    for (const file of scanned) {
+      const relativePath = relative(root, file.path).split(sep).join('/')
+      const before = previous[relativePath]
+      if (before && before.size === file.size && before.mtimeMs === file.mtimeMs) {
+        tracked[relativePath] = before
+        reused += 1
+        continue
+      }
       try {
-        await documents.importFromPath(file, 'workspace', relativePath)
-        imported += 1
-      } catch {
+        await documents.importFromPath(file.path, 'workspace', relativePath)
+        tracked[relativePath] = { size: file.size, mtimeMs: file.mtimeMs }
+        if (before) updated += 1
+        else added += 1
+      } catch (error) {
+        logger.warn(`Project: skipped ${relativePath}`, (error as Error).message)
         skipped += 1
       }
     }
 
-    const next = this.store.set({ root, indexedAt: Date.now(), files: imported, skipped })
-    logger.info(`Project: indexed ${imported} file(s) from ${root} (${skipped} skipped)`)
-    return {
-      root: next.root,
-      files: this.status().files,
-      chunks: this.status().chunks,
-      indexedAt: next.indexedAt,
-      skipped: next.skipped
+    // Drop index entries for files that are gone or no longer indexable.
+    let removed = 0
+    for (const document of documents.list()) {
+      if (document.group !== 'workspace' || !document.sourcePath) continue
+      const relativePath = relative(root, document.sourcePath).split(sep).join('/')
+      if (!tracked[relativePath]) {
+        documents.remove(document.id)
+        removed += 1
+      }
     }
+
+    const lastScan = { added, updated, reused, removed, skipped }
+    this.store.set({ root, indexedAt: Date.now(), files: Object.keys(tracked).length, skipped, tracked, lastScan })
+    logger.info(
+      `Project: indexed ${root} — ${added} added, ${updated} updated, ${reused} unchanged, ${removed} removed, ${skipped} skipped`
+    )
+    return this.status()
+  }
+
+  /** True when the given absolute path is inside the currently indexed project. */
+  isInsideProject(absolutePath: string): boolean {
+    const root = this.store.get().root
+    if (!root) return false
+    const normalizedRoot = root.endsWith(sep) ? root : `${root}${sep}`
+    return absolutePath.startsWith(normalizedRoot)
   }
 
   clear(): ProjectStatus {
     documents.clearGroup('workspace')
-    this.store.set({ root: null, indexedAt: null, files: 0, skipped: 0 })
+    this.store.set({ root: null, indexedAt: null, files: 0, skipped: 0, tracked: {}, lastScan: null })
     return this.status()
   }
 }

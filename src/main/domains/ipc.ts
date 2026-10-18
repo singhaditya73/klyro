@@ -2,7 +2,7 @@ import { app, ipcMain } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import { z } from 'zod'
 import { IPC } from '@shared/ipc'
-import type { AppSettings, DataScope, ProviderId, SendChatRequest, SecurityStatus, WorkflowDraft } from '@shared/types'
+import type { AppSettings, DataScope, PatchRequest, ProviderId, SendChatRequest, SecurityStatus, WorkflowDraft } from '@shared/types'
 import { logger } from '../logger'
 import { getProvider } from '../providers'
 import { PROVIDER_IDS } from '../providers/defaults'
@@ -17,6 +17,7 @@ import { integrationStatuses, github } from './integrations'
 import { meetings } from './meetings'
 import { memory } from './memory'
 import { privacy } from './privacy'
+import { patches } from './patches'
 import { project } from './project'
 import { workflows } from './workflows'
 import { transcribeAudio } from './audio'
@@ -119,6 +120,11 @@ const meetingDraftSchema = z.object({
   startedAt: z.number(),
   endedAt: z.number(),
   segments: z.array(z.object({ at: z.number(), text: z.string().max(4000) })).max(4000)
+})
+
+const patchRequestSchema = z.object({
+  path: z.string().min(1).max(500),
+  content: z.string().max(2 * 1024 * 1024)
 })
 
 const workflowStepOptions = {
@@ -333,6 +339,12 @@ export function registerIpcHandlers(): void {
   handle(IPC.projectStatus, () => project.status())
   handle(IPC.projectIndex, () => project.index())
   handle(IPC.projectClear, () => project.clear())
+
+  handle(IPC.patchList, () => patches.list())
+  handle(IPC.patchPropose, (_event, request: unknown) => patches.propose(patchRequestSchema.parse(request) as PatchRequest))
+  handle(IPC.patchApply, (_event, id: unknown) => patches.apply(idSchema.parse(id)))
+  handle(IPC.patchRevert, (_event, id: unknown) => patches.revert(idSchema.parse(id)))
+  handle(IPC.patchDiscard, (_event, id: unknown) => patches.discard(idSchema.parse(id)))
   handle(IPC.codeAssist, (_event, request: unknown) => code.assist(codeAssistSchema.parse(request)))
 
   handle(IPC.meetingList, () => meetings.list())

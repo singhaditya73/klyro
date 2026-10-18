@@ -73,8 +73,8 @@ Legend: ✅ done+tested · 🟡 implemented, not fully verified · ⛔ blocked (
 | D | D2 durable execution lifecycle | ✅ verified |
 | D | D3 typed reusable workflow tools | ✅ verified |
 | D | D4 multi-step evaluation with mocked services | ✅ verified |
-| E | E1 incremental indexing + exclusions + safe paths | 🟡 exclusions exist (B4); indexing is still a full re-scan |
-| E | E2 line-range citations + diff/apply with approval + revert | 🟡 citations done (C2); diff/apply not started |
+| E | E1 incremental indexing + exclusions + safe paths | ✅ verified |
+| E | E2 line-range citations + diff/apply with approval + revert | ✅ verified |
 | F | F1 meeting chunk dedup/retry + structured extraction | ⬜ not started |
 | G | G1 common integration contract | ⬜ not started |
 | G | G2 Google Calendar / Email / Slack / Drive | ⛔ blocked on OAuth credentials |
@@ -107,8 +107,16 @@ Status column reflects **verified in this program**, not intent. Only mark ✅ a
 - UI (no redesign): "Stop run", truthful run status in the result, and a compact "Recent runs" list.
 - Tests: 187 passing, typecheck clean, build clean.
 
-### Metrics (measured, not estimated)
+### Phase E — safe modification + incremental indexing (this commit)
 
+- `src/main/util/diff.ts` (+ tests): dependency-free line diff (LCS with a coarse fallback for very large inputs), hunk grouping with context, unified-diff text. A trailing newline counts as a real change, so the "did anything change?" guard is honest.
+- `patches.ts` (+ tests): propose → review → apply → revert. Nothing is written until approval; a diff is only applied when the file still matches the hash it was built from; a backup copy is taken first and revert restores it (reverting a newly created file deletes it). Paths are confined to the indexed project root and credential files are refused outright.
+- `project.ts`: indexing is now incremental — files whose size and mtime match the last scan keep their chunks, changed files are re-read, and files that vanished are dropped. `ProjectStatus.lastScan` reports added/updated/reused/removed.
+- `retrieval.ts`/`documents.ts`: chunks carry an end line; citations render as `file.ts:12-40` via `knowledge/locations.ts`.
+- UI (no redesign): the indexed-project section shows what the last scan did, and the code tab gains "Edit a project file" with a diff preview plus Apply / Discard / Revert.
+- Tests: 207 passing, typecheck clean, build clean, smoke OK.
+
+### Metrics (measured, not estimated)
 | Measurement | Value | Where |
 | --- | --- | --- |
 | Keyword-query retrieval recall@5 | ≥ 0.9 (asserted) | `retrieval-eval.test.ts` |

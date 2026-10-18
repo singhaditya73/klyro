@@ -30,6 +30,8 @@ export function StudioPanel({ onClose }: Props) {
   const [tab, setTab] = useState<Tab>('code')
   const [snippet, setSnippet] = useState('')
   const [question, setQuestion] = useState('')
+  const [editPath, setEditPath] = useState('')
+  const [editContent, setEditContent] = useState('')
   const [meetingTitle, setMeetingTitle] = useState('')
   const [openMeeting, setOpenMeeting] = useState<string | null>(null)
 
@@ -103,6 +105,12 @@ export function StudioPanel({ onClose }: Props) {
                   <div className="muted">
                     Indexed files ground code answers, workflow prompts, and normal chat.
                   </div>
+                  {studio.project.lastScan ? (
+                    <div className="muted">
+                      Last scan: {studio.project.lastScan.added} added · {studio.project.lastScan.updated} updated ·{' '}
+                      {studio.project.lastScan.reused} unchanged · {studio.project.lastScan.removed} removed
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <div className="provider__actions">
@@ -146,11 +154,88 @@ export function StudioPanel({ onClose }: Props) {
                 <div className="muted">
                   Used:{' '}
                   {studio.codeCitations
-                    .map((citation) => `${citation.name}${citation.line > 0 ? `:${citation.line}` : ''}`)
+                    .map(
+                      (citation) =>
+                        `${citation.name}${
+                          citation.line > 0
+                            ? `:${citation.line}${citation.endLine && citation.endLine > citation.line ? `-${citation.endLine}` : ''}`
+                            : ''
+                        }`
+                    )
                     .join(', ')}
                 </div>
               ) : null}
               {studio.codeOutput ? <pre className="code-out">{studio.codeOutput}</pre> : null}
+
+              <h3>Edit a project file</h3>
+              <p className="muted">
+                Klyro never writes a file on its own: it shows you the exact diff and waits. A backup is kept so every
+                applied change can be reverted.
+              </p>
+              <label className="field">
+                File path (relative to the indexed project)
+                <input
+                  value={editPath}
+                  onChange={(event) => setEditPath(event.target.value)}
+                  placeholder="src/main/index.ts"
+                  spellCheck={false}
+                />
+              </label>
+              <label className="field">
+                Proposed complete contents
+                <textarea
+                  rows={8}
+                  value={editContent}
+                  onChange={(event) => setEditContent(event.target.value)}
+                  placeholder="Paste the full new contents of the file…"
+                  spellCheck={false}
+                />
+              </label>
+              <div className="provider__actions">
+                <button
+                  className="btn"
+                  disabled={!editPath.trim() || !editContent.trim() || studio.patchBusy || !studio.project?.root}
+                  onClick={() => void studio.proposePatch(editPath.trim(), editContent)}
+                >
+                  {studio.patchBusy ? 'Working…' : 'Preview change'}
+                </button>
+                {!studio.project?.root ? <span className="muted">Index a project first.</span> : null}
+              </div>
+
+              {studio.patches.length > 0 ? (
+                <>
+                  <h3>Changes</h3>
+                  {studio.patches.slice(0, 5).map((patch) => (
+                    <div key={patch.id} className="card">
+                      <div className="card__row">
+                        <span className={`pill${patch.status === 'applied' ? ' pill--ok' : ''}`}>{patch.status}</span>
+                        <strong>{patch.path}</strong>
+                        <span className="muted card__spacer">
+                          +{patch.addedLines} / −{patch.removedLines}
+                        </span>
+                      </div>
+                      <pre className="code-out">{patch.diff}</pre>
+                      <div className="provider__actions">
+                        {patch.status === 'pending' ? (
+                          <>
+                            <button className="btn btn--primary" disabled={studio.patchBusy} onClick={() => void studio.applyPatch(patch.id)}>
+                              Apply
+                            </button>
+                            <button className="btn" disabled={studio.patchBusy} onClick={() => void studio.discardPatch(patch.id)}>
+                              Discard
+                            </button>
+                          </>
+                        ) : null}
+                        {patch.status === 'applied' ? (
+                          <button className="btn" disabled={studio.patchBusy} onClick={() => void studio.revertPatch(patch.id)}>
+                            Revert
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              ) : null}
             </section>
           ) : null}
 

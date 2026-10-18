@@ -4,6 +4,7 @@ import type {
   CodeCitation,
   MeetingRecord,
   MeetingSegment,
+  PatchRecord,
   ProjectStatus,
   WorkflowRecord,
   WorkflowRun,
@@ -19,6 +20,13 @@ export interface StudioController {
   runCodeAction: (kind: CodeActionKind, code: string, question?: string) => Promise<void>
   indexProject: () => Promise<void>
   clearProject: () => Promise<void>
+
+  patches: PatchRecord[]
+  patchBusy: boolean
+  proposePatch: (path: string, content: string) => Promise<void>
+  applyPatch: (id: string) => Promise<void>
+  revertPatch: (id: string) => Promise<void>
+  discardPatch: (id: string) => Promise<void>
 
   meetings: MeetingRecord[]
   recording: boolean
@@ -61,6 +69,8 @@ export function useStudio(): StudioController {
   const [codeOutput, setCodeOutput] = useState('')
   const [codeCitations, setCodeCitations] = useState<CodeCitation[]>([])
   const [codeBusy, setCodeBusy] = useState(false)
+  const [patches, setPatches] = useState<PatchRecord[]>([])
+  const [patchBusy, setPatchBusy] = useState(false)
 
   const [meetings, setMeetings] = useState<MeetingRecord[]>([])
   const [recording, setRecording] = useState(false)
@@ -99,6 +109,11 @@ export function useStudio(): StudioController {
     setMeetings(await window.klyro.meetingList())
     setWorkflows(await window.klyro.workflowList())
     await refreshRuns()
+    try {
+      setPatches(await window.klyro.patchList())
+    } catch {
+      setPatches([])
+    }
   }, [refreshRuns])
 
   useEffect(() => {
@@ -171,7 +186,63 @@ export function useStudio(): StudioController {
   }, [])
 
   const clearProject = useCallback(async (): Promise<void> => {
-    setProject(await window.klyro.projectClear())
+    try {
+      setProject(await window.klyro.projectClear())
+      setPatches(await window.klyro.patchList())
+    } catch (caught) {
+      setError((caught as Error).message)
+    }
+  }, [])
+
+  /** Build a diff for a proposed edit. Nothing is written until it is applied. */
+  const proposePatch = useCallback(async (path: string, content: string): Promise<void> => {
+    setError(null)
+    setPatchBusy(true)
+    try {
+      const patch = await window.klyro.patchPropose({ path, content })
+      setPatches((previous) => [patch, ...previous.filter((candidate) => candidate.id !== patch.id)])
+    } catch (caught) {
+      setError((caught as Error).message)
+    } finally {
+      setPatchBusy(false)
+    }
+  }, [])
+
+  const applyPatch = useCallback(async (id: string): Promise<void> => {
+    setError(null)
+    setPatchBusy(true)
+    try {
+      const updated = await window.klyro.patchApply(id)
+      setPatches((previous) => previous.map((patch) => (patch.id === id ? updated : patch)))
+      setProject(await window.klyro.projectStatus())
+    } catch (caught) {
+      setError((caught as Error).message)
+    } finally {
+      setPatchBusy(false)
+    }
+  }, [])
+
+  const revertPatch = useCallback(async (id: string): Promise<void> => {
+    setError(null)
+    setPatchBusy(true)
+    try {
+      const updated = await window.klyro.patchRevert(id)
+      setPatches((previous) => previous.map((patch) => (patch.id === id ? updated : patch)))
+      setProject(await window.klyro.projectStatus())
+    } catch (caught) {
+      setError((caught as Error).message)
+    } finally {
+      setPatchBusy(false)
+    }
+  }, [])
+
+  const discardPatch = useCallback(async (id: string): Promise<void> => {
+    setError(null)
+    try {
+      setPatches(await window.klyro.patchDiscard(id))
+    } catch (caught) {
+      setError((caught as Error).message)
+    }
   }, [])
 
   const handleChunk = useCallback(async (blob: Blob): Promise<void> => {
@@ -317,6 +388,12 @@ export function useStudio(): StudioController {
     codeOutput,
     codeCitations,
     codeBusy,
+    patches,
+    patchBusy,
+    proposePatch,
+    applyPatch,
+    revertPatch,
+    discardPatch,
     runCodeAction,
     indexProject,
     clearProject,

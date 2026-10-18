@@ -14,6 +14,7 @@ import type {
   WorkflowStepResult
 } from '@shared/types'
 import { renderTemplate } from '../knowledge/code-files'
+import { formatLocation } from '../knowledge/locations'
 import { logger } from '../logger'
 import { getProvider } from '../providers'
 import { wrapUntrusted } from '../security/untrusted'
@@ -278,9 +279,7 @@ const WORKFLOW_TOOLS: Record<WorkflowStepKind, WorkflowTool> = {
       if (!query) throw new Error('This step needs a search query.')
       const hits = documents.recall(query, 5, 'workspace')
       if (hits.length === 0) return '(nothing indexed in this project matches that query)'
-      const body = hits
-        .map((hit) => `${hit.name}${hit.line > 0 ? `:${hit.line}` : ''}\n${hit.text.slice(0, 700)}`)
-        .join('\n\n')
+      const body = hits.map((hit) => `${formatLocation(hit)}\n${hit.text.slice(0, 700)}`).join('\n\n')
       return wrapUntrusted(`project search: ${query}`, body)
     }
   },
@@ -294,9 +293,7 @@ const WORKFLOW_TOOLS: Record<WorkflowStepKind, WorkflowTool> = {
       if (!query) throw new Error('This step needs a search query.')
       const sections = [
         ...memory.recall(query, 4).map((record) => wrapUntrusted(`memory (${record.origin ?? record.source})`, record.text)),
-        ...documents
-          .recall(query, 4)
-          .map((hit) => wrapUntrusted(`document: ${hit.name}${hit.line > 0 ? `:${hit.line}` : ''}`, hit.text.slice(0, 1500)))
+        ...documents.recall(query, 4).map((hit) => wrapUntrusted(`document: ${formatLocation(hit)}`, hit.text.slice(0, 1500)))
       ]
       if (sections.length === 0) return `(nothing in local knowledge matches "${query}")`
       return sections.join('\n\n')
