@@ -51,6 +51,9 @@ select {
   height: 100vh;
   overflow: hidden;
 }
+.app--agent {
+  grid-template-columns: 288px 1fr 360px;
+}
 
 /* ---------- Buttons ---------- */
 .btn {
@@ -241,6 +244,123 @@ select {
 }
 .sidebar__settings {
   justify-content: center;
+}
+.sidebar__agent {
+  justify-content: center;
+}
+
+/* ---------- Desktop agent ---------- */
+.agent {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100vh;
+  padding: 16px;
+  overflow-y: auto;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+}
+.agent__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.agent__head h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.agent__warning,
+.agent__caps,
+.agent__confirm {
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+.agent__warning {
+  border-color: #a16207;
+}
+.agent__confirm {
+  border-color: var(--accent);
+}
+.agent__code {
+  display: block;
+  padding: 8px;
+  background: var(--bg-input);
+  border-radius: 6px;
+  font-size: 12px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.agent__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.agent__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.step {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  font-size: 13px;
+}
+.step__icon {
+  color: var(--muted);
+}
+.step--executed .step__icon {
+  color: var(--ok);
+}
+.step--failed .step__icon {
+  color: var(--danger);
+}
+.step--skipped {
+  opacity: 0.6;
+}
+.step__detail {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 2px;
+}
+.agent__outcome {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  border: 1px solid var(--border);
+}
+.agent__outcome--done {
+  border-color: var(--ok);
+}
+.agent__outcome--error {
+  border-color: var(--danger);
+}
+.agent__history h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+.agent__task {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.agent__task-goal {
+  margin-bottom: 2px;
+}
+.btn--danger {
+  background: var(--danger);
+  border-color: var(--danger);
 }
 
 /* ---------- Chat ---------- */

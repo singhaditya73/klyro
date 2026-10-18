@@ -21,6 +21,8 @@ export interface AppSettings {
   theme: ThemeMode
   launchAtLogin: boolean
   toggleShortcut: string
+  agentConfirmConsequential: boolean
+  agentMaxSteps: number
 }
 
 export interface ProviderStatus {
@@ -114,6 +116,87 @@ export interface TranscribeResult {
   text: string
 }
 
+/* ---------- Desktop automation / agent ---------- */
+
+export type AgentSession = 'wayland' | 'x11' | 'macos' | 'windows' | 'unknown'
+
+export interface AutomationCapabilities {
+  platform: string
+  session: AgentSession
+  available: boolean
+  backends: string[]
+  missing: string[]
+  installHint: string
+  limitations: string[]
+}
+
+export type AgentActionType =
+  | 'move'
+  | 'click'
+  | 'doubleClick'
+  | 'type'
+  | 'key'
+  | 'scroll'
+  | 'wait'
+  | 'screenshot'
+  | 'done'
+  | 'ask'
+
+export interface AgentAction {
+  type: AgentActionType
+  x?: number
+  y?: number
+  button?: 'left' | 'right' | 'middle'
+  text?: string
+  keys?: string
+  dy?: number
+  ms?: number
+  summary?: string
+  question?: string
+  requiresConfirmation?: boolean
+  reason?: string
+}
+
+export type AgentStepStatus = 'planned' | 'executing' | 'executed' | 'failed' | 'skipped'
+
+export type AgentEvent =
+  | { type: 'start'; runId: string; goal: string }
+  | { type: 'step'; runId: string; index: number; action: AgentAction; status: AgentStepStatus; detail?: string }
+  | { type: 'needsConfirmation'; runId: string; index: number; action: AgentAction; reason: string }
+  | { type: 'done'; runId: string; summary: string }
+  | { type: 'cancelled'; runId: string }
+  | { type: 'error'; runId: string; message: string }
+
+export interface AgentRunRequest {
+  goal: string
+  maxSteps?: number
+}
+
+export interface AgentStatus {
+  running: boolean
+  runId: string | null
+  goal: string | null
+}
+
+export interface AgentStepRecord {
+  index: number
+  action: AgentAction
+  status: AgentStepStatus
+  detail?: string
+}
+
+export type AgentOutcome = 'done' | 'cancelled' | 'error' | 'step-limit'
+
+export interface AgentTaskRecord {
+  id: string
+  goal: string
+  startedAt: number
+  finishedAt: number
+  outcome: AgentOutcome
+  summary: string
+  steps: AgentStepRecord[]
+}
+
 /** The API exposed on `window.klyro` by the preload bridge. */
 export interface KlyroApi {
   getAppInfo(): Promise<AppInfo>
@@ -141,4 +224,12 @@ export interface KlyroApi {
 
   checkPermissions(): Promise<PermissionState>
   hideOverlay(): Promise<void>
+
+  getAutomationCapabilities(): Promise<AutomationCapabilities>
+  runAgent(request: AgentRunRequest): Promise<void>
+  cancelAgent(): Promise<void>
+  confirmAgent(runId: string, approved: boolean): Promise<void>
+  getAgentStatus(): Promise<AgentStatus>
+  listAgentTasks(): Promise<AgentTaskRecord[]>
+  onAgentEvent(listener: (event: AgentEvent) => void): () => void
 }

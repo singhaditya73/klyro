@@ -1,6 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '@shared/ipc'
-import type { AppSettings, ChatStreamEvent, KlyroApi, ProviderId, SendChatRequest } from '@shared/types'
+import type {
+  AgentEvent,
+  AgentRunRequest,
+  AppSettings,
+  ChatStreamEvent,
+  KlyroApi,
+  ProviderId,
+  SendChatRequest
+} from '@shared/types'
 
 const api: KlyroApi = {
   getAppInfo: () => ipcRenderer.invoke(IPC.appInfo),
@@ -33,7 +41,21 @@ const api: KlyroApi = {
   transcribe: (audio: ArrayBuffer, mimeType: string) => ipcRenderer.invoke(IPC.transcribe, audio, mimeType),
 
   checkPermissions: () => ipcRenderer.invoke(IPC.permissionsCheck),
-  hideOverlay: () => ipcRenderer.invoke(IPC.windowHideOverlay)
+  hideOverlay: () => ipcRenderer.invoke(IPC.windowHideOverlay),
+
+  getAutomationCapabilities: () => ipcRenderer.invoke(IPC.agentCapabilities),
+  runAgent: (request: AgentRunRequest) => ipcRenderer.invoke(IPC.agentRun, request),
+  cancelAgent: () => ipcRenderer.invoke(IPC.agentCancel),
+  confirmAgent: (runId: string, approved: boolean) => ipcRenderer.invoke(IPC.agentConfirm, runId, approved),
+  getAgentStatus: () => ipcRenderer.invoke(IPC.agentStatus),
+  listAgentTasks: () => ipcRenderer.invoke(IPC.agentTasks),
+  onAgentEvent: (listener: (event: AgentEvent) => void) => {
+    const wrapped = (_event: unknown, payload: AgentEvent): void => listener(payload)
+    ipcRenderer.on(IPC.agentEvent, wrapped)
+    return () => {
+      ipcRenderer.off(IPC.agentEvent, wrapped)
+    }
+  }
 }
 
 contextBridge.exposeInMainWorld('klyro', api)

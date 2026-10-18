@@ -9,6 +9,8 @@ interface Props {
   openConversation: (id: string) => Promise<void>
   newConversation: () => Promise<void>
   deleteConversation: (id: string) => Promise<void>
+  agentRunning: boolean
+  onOpenAgent: () => void
   onOpenSettings: () => void
 }
 
@@ -59,6 +61,9 @@ export function Sidebar(props: Props) {
         {props.summaries.length === 0 ? <div className="sidebar__empty">No chats yet</div> : null}
       </div>
 
+      <button className="btn sidebar__agent" onClick={props.onOpenAgent}>
+        {props.agentRunning ? '◐ Agent running…' : '🖥️ Agent'}
+      </button>
       <button className="btn sidebar__settings" onClick={props.onOpenSettings}>
         ⚙️ Settings
       </button>

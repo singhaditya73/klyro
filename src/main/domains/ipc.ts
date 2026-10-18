@@ -8,6 +8,8 @@ import { getProvider } from '../providers'
 import { PROVIDER_IDS } from '../providers/defaults'
 import { secrets } from '../security/secrets'
 import { sendChat, abortChat } from './chat'
+import { agentRunner } from './agent'
+import { automation } from './automation'
 import { transcribeAudio } from './audio'
 import { conversations } from './conversations'
 import { checkPermissions } from './permissions'
@@ -59,6 +61,8 @@ const settingsPatchSchema = z
     theme: z.enum(['system', 'dark', 'light']).optional(),
     launchAtLogin: z.boolean().optional(),
     toggleShortcut: z.string().max(64).optional(),
+    agentConfirmConsequential: z.boolean().optional(),
+    agentMaxSteps: z.number().int().min(1).max(30).optional(),
     providers: z
       .record(z.string(), z.object({ baseUrl: z.string().max(500), model: z.string().max(200) }))
       .optional()
@@ -79,6 +83,11 @@ const sendChatSchema = z.object({
     )
     .max(8)
     .optional()
+})
+
+const agentRunSchema = z.object({
+  goal: z.string().min(1).max(4000),
+  maxSteps: z.number().int().min(1).max(30).optional()
 })
 
 export function registerIpcHandlers(): void {
@@ -160,6 +169,27 @@ export function registerIpcHandlers(): void {
   )
 
   handle(IPC.permissionsCheck, () => checkPermissions())
+
+  handle(IPC.agentCapabilities, () => automation.capabilities())
+  handle(IPC.agentStatus, () => agentRunner.status())
+  handle(IPC.agentTasks, () => agentRunner.tasks())
+  handle(IPC.agentRun, async (_event, request: unknown) => {
+    const parsed = agentRunSchema.parse(request)
+    if (agentRunner.status().running) throw new Error('A task is already running.')
+    const caps = await automation.capabilities()
+    if (!caps.available) {
+      const hint = caps.installHint ? ` Install a backend, e.g.: ${caps.installHint}` : ''
+      throw new Error(`Desktop automation is unavailable on this system.${hint}`)
+    }
+    // Fire-and-forget: progress and outcome arrive via the agentEvent channel.
+    void agentRunner.run(parsed).catch((error) => logger.error('Agent run rejected', (error as Error).message))
+  })
+  handle(IPC.agentCancel, () => {
+    agentRunner.cancel()
+  })
+  handle(IPC.agentConfirm, (_event, runId: string, approved: boolean) => {
+    agentRunner.confirm(String(runId), Boolean(approved))
+  })
 
   handle(IPC.windowHideOverlay, () => {
     const win = getOverlayWindow()

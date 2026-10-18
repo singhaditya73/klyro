@@ -32,21 +32,45 @@ Status legend: **✅ done** · **🟡 partial** · **⬜ planned**
 
 | Feature | Status | Notes |
 | --- | --- | --- |
-| 7. Autonomous desktop agent | ⬜ | Highest priority (Stage B) |
+| 7. Autonomous desktop agent | 🟡 | Observe → plan → act loop with per-action confirmation, cancellation, and persisted task history. Requires a system input backend (see below). |
 | 8. Persistent personal memory | ⬜ | Stage C |
 | 9. Integrations (GitHub, Drive, …) | ⬜ | Stage C |
 | 10. AI coding mode | ⬜ | Stage D |
 | 11. Reusable skills / workflows | ⬜ | Stage D |
 | 12. Document & research intelligence | ⬜ | Stage C |
 | 13. Productivity / task management | ⬜ | Stage D |
-| 14. Trust, security, reliability | 🟡 | Isolation, origin-checked IPC, encrypted keys, visible capture state |
+| 14. Trust, security, reliability | 🟡 | Isolation, origin-checked IPC, encrypted keys, visible capture state, explicit confirmation for state-changing actions |
+
+## Desktop agent (Stage B)
+
+The agent captures the primary display, asks the active (vision-capable) model for
+the **single next action** as strict JSON, and executes it by synthesising input.
+Every loop iteration re-captures the screen, so each decision is made against the
+observed result of the previous action.
+
+**Input backends** — Klyro shells out to platform tools and reports honestly when
+none is present:
+
+| Platform | Backend | Install |
+| --- | --- | --- |
+| Linux (X11 / XWayland) | `xdotool` | `sudo dnf install -y xdotool` |
+| Linux (native Wayland) | `ydotool` (+ `ydotoold` daemon) | `sudo dnf install -y ydotool` |
+| Linux (typing only) | `wtype` | `sudo dnf install -y wtype` |
+| macOS | `osascript`; `cliclick` for the mouse | `brew install cliclick` |
+| Windows | PowerShell `SendKeys` + `user32` | built in |
+
+Safety: state-changing actions (clicks, typing, Enter/modified keys, or anything the
+model flags) pause for an explicit **Approve / Decline** by default
+(`agentConfirmConsequential`), the run is cancellable at any point, coordinates are
+mapped from screenshot space back to screen space, and completed runs are stored in
+`agent-tasks.json`.
 
 ## Delivery stages
 
-- **Stage A (in progress):** desktop shell, global shortcut, chat, screen
-  understanding, voice input, history, provider config. ← current
-- **Stage B:** reliable computer-use automation (input control, verification,
-  permissions, cancellation, recovery).
+- **Stage A (done):** desktop shell, global shortcut, chat, screen
+  understanding, voice input, history, provider config.
+- **Stage B (in progress):** reliable computer-use automation (input control,
+  verification, permissions, cancellation, recovery). ← current
 - **Stage C:** personal memory, local document understanding, first integrations.
 - **Stage D:** coding mode, meeting intelligence, reusable workflows.
 - **Stage E:** performance, security hardening, accessibility, packaging, release.
@@ -54,6 +78,10 @@ Status legend: **✅ done** · **🟡 partial** · **⬜ planned**
 ## Known limitations
 
 - Voice transcription requires an OpenAI-compatible provider (or local Whisper).
-- Screen capture uses thumbnails (fine for vision models; high-DPI capture planned).
-- Automation, memory, and integrations are not yet implemented (Stages B–D).
+- Desktop automation requires a system input backend (`xdotool` / `ydotool` /
+  `wtype` on Linux, `cliclick`/Accessibility on macOS, PowerShell on Windows).
+  Klyro detects this at runtime and shows the exact install command.
+- The agent plans one action per screenshot and re-observes after acting; it does
+  not yet run a separate verifier pass or learn from failures across runs.
+- Automation is limited to the primary display.
 - Global shortcut registration fails silently if the OS already reserves it.

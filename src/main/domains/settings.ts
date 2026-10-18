@@ -11,7 +11,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   responseStyle: 'balanced',
   theme: 'system',
   launchAtLogin: false,
-  toggleShortcut: 'CommandOrControl+Shift+Space'
+  toggleShortcut: 'CommandOrControl+Shift+Space',
+  agentConfirmConsequential: true,
+  agentMaxSteps: 12
 }
 
 class SettingsDomain {

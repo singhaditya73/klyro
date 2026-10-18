@@ -22,7 +22,7 @@ partial, or planned.
 src/
   main/            Electron main process (Node)
     domains/       Feature domains: windows, settings, chat, screen,
-                   shortcuts, tray, permissions, conversations
+                   shortcuts, tray, permissions, conversations, automation, agent
     providers/     Model provider abstraction (OpenAI-compatible, Anthropic,
                    Gemini, Ollama/local)
     store/         Atomic JSON persistence
@@ -56,6 +56,27 @@ paste your API key (stored encrypted locally), and pick a model:
 - **Anthropic** (Claude)
 - **Google Gemini**
 - **Local** (Ollama at `http://localhost:11434`) — no cloud key required
+
+### Desktop agent
+
+Klyro can carry out multi-step tasks on your computer: it captions the current
+screen, asks a vision-capable model for the single next action, executes it, and
+re-observes. Open the **Agent** panel, describe a goal, and press *Run task*.
+
+State-changing actions (clicks, typing, Enter or modified keys) pause for
+**Approve / Decline** by default; the run can be stopped at any time and every
+completed task is saved to your local history.
+
+Driving the mouse and keyboard needs a system input backend. Klyro detects what
+is available and shows the command to install one:
+
+| Platform | Backend |
+| --- | --- |
+| Linux (X11 / XWayland) | `xdotool` |
+| Linux (native Wayland) | `ydotool` (+ `ydotoold`) |
+| Linux (typing only) | `wtype` |
+| macOS | `osascript` + `cliclick` (mouse), Accessibility permission |
+| Windows | built in (PowerShell) |
 
 ## License
 

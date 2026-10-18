@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { AppSettings, PermissionState, ProviderId, ProviderStatus } from '@shared/types'
+import type { AppSettings, AutomationCapabilities, PermissionState, ProviderId, ProviderStatus } from '@shared/types'
 
 interface Props {
   onClose: () => void
@@ -9,6 +9,7 @@ export function SettingsPanel({ onClose }: Props) {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [providers, setProviders] = useState<ProviderStatus[]>([])
   const [permissions, setPermissions] = useState<PermissionState | null>(null)
+  const [automation, setAutomation] = useState<AutomationCapabilities | null>(null)
   const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({})
   const [testing, setTesting] = useState<Record<string, string>>({})
 
@@ -17,6 +18,7 @@ export function SettingsPanel({ onClose }: Props) {
       setSettings(await window.klyro.getSettings())
       setProviders(await window.klyro.listProviders())
       setPermissions(await window.klyro.checkPermissions())
+      setAutomation(await window.klyro.getAutomationCapabilities())
     })()
   }, [])
 
@@ -213,6 +215,46 @@ export function SettingsPanel({ onClose }: Props) {
                   Accessibility: <strong>{permissions.accessibility}</strong>
                 </div>
                 {permissions.notes.map((note, index) => (
+                  <div key={index} className="muted">
+                    {note}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            <h4>Desktop agent</h4>
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={settings.agentConfirmConsequential}
+                onChange={(event) => void patch({ agentConfirmConsequential: event.target.checked })}
+              />
+              Ask before clicks, typing, and other state-changing actions
+            </label>
+            <label className="field">
+              Max steps per task
+              <input
+                type="number"
+                min={1}
+                max={30}
+                value={settings.agentMaxSteps}
+                onChange={(event) => void patch({ agentMaxSteps: Number(event.target.value) || 1 })}
+              />
+            </label>
+            {automation ? (
+              <div className="permissions">
+                <h4>Automation backend</h4>
+                <div>
+                  Status:{' '}
+                  <strong>{automation.available ? `ready (${automation.backends.join(', ')})` : 'unavailable'}</strong>
+                </div>
+                {automation.missing.length ? <div className="muted">Missing: {automation.missing.join(', ')}</div> : null}
+                {automation.installHint ? (
+                  <div className="muted">
+                    Install: <code>{automation.installHint}</code>
+                  </div>
+                ) : null}
+                {automation.limitations.map((note, index) => (
                   <div key={index} className="muted">
                     {note}
                   </div>

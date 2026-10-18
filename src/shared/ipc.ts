@@ -27,6 +27,14 @@ export const IPC = {
 
   permissionsCheck: 'permissions:check',
 
+  agentCapabilities: 'agent:capabilities',
+  agentRun: 'agent:run',
+  agentCancel: 'agent:cancel',
+  agentConfirm: 'agent:confirm',
+  agentStatus: 'agent:status',
+  agentTasks: 'agent:tasks',
+  agentEvent: 'agent:event',
+
   windowHideOverlay: 'window:hideOverlay',
   windowToggleOverlay: 'window:toggleOverlay'
 } as const
