@@ -450,17 +450,49 @@ export interface DataSummary {
 
 /* ---------- Workflows ---------- */
 
-export type WorkflowStep =
-  | { kind: 'prompt'; name: string; template: string }
-  | { kind: 'githubIssues'; name: string; repo: string }
+export type WorkflowStepKind =
+  | 'prompt'
+  | 'githubIssues'
+  | 'githubCreateIssue'
+  | 'projectSearch'
+  | 'knowledge'
+  | 'meetingSummary'
+
+/** Fields every step shares. All are optional so older drafts stay valid. */
+export interface WorkflowStepOptions {
+  /** Stable id. Generated when omitted; unique within a workflow. */
+  id?: string
+  name: string
+  /** Stop the run (default) or record the failure and carry on. */
+  onFailure?: 'stop' | 'continue'
+  /** Extra attempts after the first failure (0–3). */
+  retries?: number
+  /** Per-step timeout in milliseconds. */
+  timeoutMs?: number
+  /** Key later steps refer to as {{steps.<key>}}. Defaults to the step id. */
+  output?: string
+}
+
+export type WorkflowStep = WorkflowStepOptions &
+  (
+    | { kind: 'prompt'; template: string }
+    | { kind: 'githubIssues'; repo: string }
+    | { kind: 'githubCreateIssue'; repo: string; title: string; body: string }
+    | { kind: 'projectSearch'; query: string }
+    | { kind: 'knowledge'; query: string }
+    | { kind: 'meetingSummary'; meetingId: string }
+  )
 
 export interface WorkflowRecord {
   id: string
+  /** Schema version of this definition. */
+  version: number
   name: string
   description: string
   builtin: boolean
   steps: WorkflowStep[]
   createdAt: number
+  updatedAt?: number
 }
 
 export interface WorkflowDraft {
@@ -470,21 +502,54 @@ export interface WorkflowDraft {
 }
 
 export interface WorkflowStepResult {
+  id: string
   name: string
   output: string
   ok: boolean
+  /** How many attempts were made (1 when it worked first time). */
+  attempts?: number
+  error?: string
+}
+
+export type WorkflowRunStatus = 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
+
+export interface WorkflowRunStepState {
+  id: string
+  name: string
+  status: 'pending' | 'running' | 'done' | 'failed' | 'skipped'
+  output?: string
+  error?: string
+  attempts: number
+  startedAt?: number
+  finishedAt?: number
+}
+
+/** Durable record of one workflow run, kept across restarts. */
+export interface WorkflowRun {
+  id: string
+  workflowId: string
+  workflowName: string
+  input: string
+  conversationId: string
+  status: WorkflowRunStatus
+  startedAt: number
+  finishedAt: number
+  steps: WorkflowRunStepState[]
+  error?: string
 }
 
 export interface WorkflowRunResult {
   runId: string
   conversationId: string
+  status: WorkflowRunStatus
+  error?: string
   steps: WorkflowStepResult[]
 }
 
 export type WorkflowEvent =
   | { type: 'start'; runId: string; workflowId: string; name: string }
   | { type: 'step'; runId: string; index: number; name: string; status: 'running' | 'done' | 'failed'; detail?: string }
-  | { type: 'done'; runId: string; conversationId: string }
+  | { type: 'done'; runId: string; conversationId: string; status: WorkflowRunStatus }
   | { type: 'error'; runId: string; message: string }
 
 /** The API exposed on `window.klyro` by the preload bridge. */
@@ -563,5 +628,7 @@ export interface KlyroApi {
   workflowCreate(draft: WorkflowDraft): Promise<WorkflowRecord[]>
   workflowDelete(id: string): Promise<WorkflowRecord[]>
   workflowRun(id: string, input: string): Promise<WorkflowRunResult>
+  workflowRuns(): Promise<WorkflowRun[]>
+  workflowCancel(runId: string): Promise<void>
   onWorkflowEvent(listener: (event: WorkflowEvent) => void): () => void
 }

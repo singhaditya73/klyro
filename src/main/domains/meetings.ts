@@ -72,6 +72,16 @@ class MeetingDomain {
     return meeting.segments.map((segment) => `[${formatClock(segment.at)}] ${segment.text}`).join('\n')
   }
 
+  /**
+   * The plain-text transcript of a stored meeting. Callers treat it as untrusted
+   * reference material (it is what somebody said on a call, not instructions).
+   */
+  transcriptText(id: string): string {
+    const meeting = this.get(id)
+    if (!meeting) throw new Error('Meeting not found.')
+    return this.transcript(meeting)
+  }
+
   async summarize(id: string): Promise<MeetingRecord> {
     const meeting = this.get(id)
     if (!meeting) throw new Error('Meeting not found.')
