@@ -1,7 +1,12 @@
 {
   "name": "klyro",
   "version": "0.2.0",
-  "description": "Klyro — Your AI. Your entire computer. Understand. Remember. Act.",
+  "description": "Klyro \u2014 Your AI. Your entire computer. Understand. Remember. Act.",
+  "homepage": "https://github.com/singhaditya73/klyro#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/singhaditya73/klyro.git"
+  },
   "author": {
     "name": "Aditya Singh",
     "email": "adityasinghrajput755@gmail.com"

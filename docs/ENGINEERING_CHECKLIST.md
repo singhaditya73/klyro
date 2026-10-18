@@ -81,9 +81,9 @@ Legend: ✅ done+tested · 🟡 implemented, not fully verified · ⛔ blocked (
 | H | H1 provider error categories, retry, rate-limit handling | ✅ verified |
 | H | H2 model routing guardrails | ✅ verified |
 | I | I1 storage hardening, pagination, temp cleanup | ✅ verified |
-| J | J1 release verification docs + signing/updates notes | ⬜ not started |
+| J | J1 release verification docs + signing/updates notes | ✅ verified |
 | J | J2 opt-in crash/diagnostics reporting | ✅ verified |
-| J | J3 documentation refresh | ⬜ not started |
+| J | J3 documentation refresh | ✅ verified |
 
 Status column reflects **verified in this program**, not intent. Only mark ✅ after tests/commands actually passed on this machine.
 
@@ -245,6 +245,31 @@ Status column reflects **verified in this program**, not intent. Only mark ✅ a
 - IPC: `diagnostics:list` / `diagnostics:clear`; Settings gains a "Crash
   reports" section with the opt-in toggle, honest copy in both states, and a
   saved-report count with Clear.
+
+### Phase J — release readiness (this commit)
+
+**J1 — release verification (`docs/RELEASE_VERIFICATION.md`)**
+
+- One ordered gate: typecheck → 303 tests → build → smoke (both on this
+  machine and in CI), plus the sidebar click-through described as repeatable.
+- Packaging matrix: Linux AppImage **and** deb now build and are verified
+  locally (AppImage + deb produced; the unpacked `release/linux-unpacked/klyro`
+  boots, logs "Klyro 0.2.0 ready", and stays up). Fix shipped for the deb
+  target: `package.json` was missing `homepage`/`repository`, which made the
+  FPM metadata step fail — both fields are set now.
+- Windows NSIS and macOS dmg stay honestly marked "must build on that
+  platform / not verified here". Nothing is signed or notarized; §3 states
+  exactly that plus the concrete steps to add signing and (later)
+  `electron-updater` auto-updates. Tagging procedure documented.
+
+**J2 — crash diagnostics** (see its own section above).
+
+**J3 — documentation refresh**
+
+- `README.md`: status paragraph now reflects the A–J completion program,
+  links `docs/ENGINEERING_CHECKLIST.md` and `docs/RELEASE_VERIFICATION.md`,
+  and documents the Integrations "Test connection" button, the crash-report
+  opt-in (off by default, local-first), and the release-verification gate.
 
 ## UI redesign addendum (interleaved scope, functionally verified)
 

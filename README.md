@@ -13,10 +13,20 @@ or assets are used.
 
 ## Status
 
-Stages A–E of the roadmap are implemented: desktop shell, autonomous agent, memory
-and knowledge, coding/meetings/workflows, and hardening, packaging and release
-automation. See `docs/FEATURE_MATRIX.md` for the feature-by-feature status and known
-limitations, and `CHANGELOG.md` for release notes.
+The engineering completion program (Phases A–J) is implemented and tracked in
+`docs/ENGINEERING_CHECKLIST.md`: autonomous-agent reliability, IPC/security
+hardening, retrieval evaluation and citations, a durable workflow engine, safe
+reviewable file edits, meeting/transcription reliability, a common integration
+contract, provider error taxonomy with safe retries, storage hardening and
+pagination, release verification, and an opt-in crash-report capture. Items that
+are blocked by external setup (OAuth credentials for more integrations, Wayland
+portal permissions) or deferred after measurement (embedding/hybrid retrieval)
+are marked as such there — nothing is claimed done that was not run.
+
+Release preparation steps, the packaging matrix and honest signing/updates
+notes live in `docs/RELEASE_VERIFICATION.md`. See `docs/FEATURE_MATRIX.md` for
+the feature-by-feature status and known limitations, and `CHANGELOG.md` for
+release notes.
 
 ## Architecture
 
@@ -43,6 +53,12 @@ src/
 Security posture: `contextIsolation` on, `nodeIntegration` off, sandboxed
 renderer, origin-validated IPC, and API keys stored encrypted at rest — never in
 the frontend bundle.
+
+Privacy controls live in **Settings → Data & privacy**: per-scope wiping, a
+storage breakdown with cleanup, and an opt-in crash-report capture that is
+**off by default**. When enabled, redacted crash reports are stored locally
+only (you can read and clear them) and are sent nowhere unless an upload
+endpoint is explicitly configured (`KLYRO_DIAGNOSTICS_URL`).
 
 ## Getting started
 
@@ -113,7 +129,8 @@ stored locally, never uploaded except as part of the prompt you send.
 - **Search everything** — one box ranks across memories and document chunks.
 - **Integrations** — connect **GitHub** with a personal access token (stored
   encrypted) to see your repositories and issues, or file an issue without
-  leaving Klyro.
+  leaving Klyro. *Test connection* runs a live credential check and shows the
+  result without ever exposing the token.
 
 ## Studio
 
