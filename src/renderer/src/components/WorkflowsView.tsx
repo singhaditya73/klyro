@@ -32,7 +32,7 @@ export function WorkflowsView() {
       <div style={{ flex: 1, overflow: 'auto', padding: '32px 20px', display: 'flex', flexDirection: 'column', maxWidth: '1000px', margin: '0 auto', width: '100%' }}>
         <section style={sectionStyle}>
           <h2 style={h2Style}>Run a workflow</h2>
-          <label className="field" style={{ marginBottom: 16 }}>
+          <div className="field" style={{ marginBottom: 16 }}>
             <span className="field__label">Input</span>
             <textarea
               rows={4}
@@ -42,7 +42,7 @@ export function WorkflowsView() {
               className="field"
               style={{ borderRadius: 'var(--radius-lg)', padding: '14px 16px', fontSize: '14px' }}
             />
-          </label>
+          </div>
           <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
             The input is available as <code style={{ background: 'var(--surface-base)', padding: '2px 6px', borderRadius: '4px', fontSize: '11px' }}>{{input}}</code> in workflow steps.
           </p>

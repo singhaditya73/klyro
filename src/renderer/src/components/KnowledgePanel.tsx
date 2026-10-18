@@ -3,7 +3,7 @@ import type { KnowledgeHit } from '@shared/types'
 import { useKnowledge } from '../hooks/useKnowledge'
 import { useModal } from '../hooks/useModal'
 import { timeAgo } from '../lib/format'
-import { Brain, FileText, Plug, Search, Loader2, Plus, Trash2, Pin, PinOff, Edit2, Blocks, GitBranch, CheckCircle, AlertCircle, ExternalLink, ChevronUp, ChevronDown, Mail, MessageSquare, Info, Key, RotateCcw, X } from 'lucide-react'
+import { Brain, FileText, Plug, Search, Loader2, Plus, Trash2, Pin, PinOff, Edit2, Blocks, GitBranch, CheckCircle, AlertCircle, ExternalLink, ChevronUp, ChevronDown, Mail, MessageSquare, Info, Key, X } from 'lucide-react'
 import KlyroMark from '../assets/logo/klyro-mark.svg'
 
 interface Props {
@@ -53,7 +53,6 @@ export function KnowledgePanel({ onClose }: Props) {
     }
   }
 
-  const h2Style: React.CSSProperties = { margin: '0 0 16px', fontSize: '14px', fontWeight: 600 }
   const h3Style: React.CSSProperties = { margin: '0 0 16px', fontSize: '14px', fontWeight: 600 }
   const h4Style: React.CSSProperties = { margin: '0 0 12px', fontSize: '13px', fontWeight: 600 }
 

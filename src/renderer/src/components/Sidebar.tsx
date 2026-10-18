@@ -1,8 +1,6 @@
-import { useState } from 'react'
 import type { ConversationSummary } from '@shared/types'
 import {
   Plus,
-  Search,
   MessageSquare,
   Monitor,
   Bot,
@@ -10,15 +8,9 @@ import {
   Brain,
   Blocks,
   Settings2,
-  X,
-  ChevronLeft,
-  ChevronRight,
   Trash2,
-  Menu,
-  ArrowLeft,
 } from 'lucide-react'
 import { timeAgo } from '../lib/format'
-import KlyroLogo from '../assets/logo/klyro-logo-dark.svg'
 import KlyroMark from '../assets/logo/klyro-mark.svg'
 
 interface Props {

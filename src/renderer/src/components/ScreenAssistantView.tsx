@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import type { CaptureSource } from '@shared/types'
-import { Monitor, Mic, AlertCircle, CheckCircle, ArrowRight, X } from 'lucide-react'
+import type { CaptureSource, Attachment, SendChatRequest } from '@shared/types'
+import { Monitor, ArrowRight, X } from 'lucide-react'
 import KlyroMark from '../assets/logo/klyro-mark.svg'
 
 interface Props {
@@ -55,11 +55,14 @@ export function ScreenAssistantView({ onOpenView }: Props) {
     setStreaming(true)
     setAnswer(null)
     try {
-      const result = await window.klyro.screenAssist({
-        question,
-        image: preview ? { dataUrl: preview, mime: 'image/png' } : undefined
-      })
-      setAnswer(result)
+      const attachments: Attachment[] = preview ? [{ kind: 'image', mime: 'image/png', dataUrl: preview, label: selectedSource || 'screen' }] : []
+      const request: SendChatRequest = {
+        conversationId: '',
+        content: question,
+        attachments
+      }
+      await window.klyro.sendChat(request)
+      // The answer will come through the chat stream
     } catch (caught) {
       setError((caught as Error).message)
     } finally {
@@ -78,13 +81,6 @@ export function ScreenAssistantView({ onOpenView }: Props) {
   const titleStyle: React.CSSProperties = { margin: '2px 0 0', fontSize: '13px', color: 'var(--text-muted)' }
   const sectionStyle: React.CSSProperties = { marginBottom: 32 }
   const h2Style: React.CSSProperties = { margin: '0 0 16px', fontSize: '16px', fontWeight: 600 }
-  const previewContainerStyle: React.CSSProperties = { position: 'relative', borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border-subtle)', background: 'var(--surface-base)' }
-  const previewImgStyle: React.CSSProperties = { width: '100%', maxHeight: 400, objectFit: 'contain', display: 'block' }
-  const buttonGroupStyle: React.CSSProperties = { display: 'flex', gap: 12, flexWrap: 'wrap' }
-  const questionSectionStyle: React.CSSProperties = { marginBottom: 32 }
-  const textareaStyle: React.CSSProperties = { borderRadius: 'var(--radius-lg)', padding: '14px 16px', fontSize: '14px' }
-  const buttonGroupStyle2: React.CSSProperties = { display: 'flex', gap: 10 }
-  const answerSectionStyle: React.CSSProperties = { marginTop: 24 }
 
   return (
     <div className="workspace" style={workspaceStyle}>
@@ -125,8 +121,8 @@ export function ScreenAssistantView({ onOpenView }: Props) {
           
           {preview ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={previewContainerStyle}>
-                <img src={preview} alt="Screen preview" style={previewImgStyle} />
+              <div style={{ position: 'relative', borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border-subtle)', background: 'var(--surface-base)' }}>
+                <img src={preview} alt="Screen preview" style={{ width: '100%', maxHeight: 400, objectFit: 'contain', display: 'block' }} />
                 <div style={{ position: 'absolute', top: '12px', right: '12px', display: 'flex', gap: '8px' }}>
                   <button className="btn btn--icon btn--icon-sm btn--ghost" onClick={clearPreview} aria-label="Clear preview">
                     <X className="icon icon--sm" aria-hidden="true" />
@@ -142,7 +138,7 @@ export function ScreenAssistantView({ onOpenView }: Props) {
               </div>
             </div>
           ) : (
-            <div style={buttonGroupStyle}>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
               <button className="btn btn--primary" onClick={openSources} disabled={permissionStatus !== 'granted'}>
                 <Monitor className="icon icon--sm" aria-hidden="true" />
                 <span>Capture screen</span>
@@ -167,6 +163,7 @@ export function ScreenAssistantView({ onOpenView }: Props) {
               )}
             </div>
           )}
+
         </section>
 
         <section style={sectionStyle}>
@@ -178,9 +175,9 @@ export function ScreenAssistantView({ onOpenView }: Props) {
               placeholder="What would you like to know about your screen?"
               rows={3}
               className="field"
-              style={textareaStyle}
+              style={{ borderRadius: 'var(--radius-lg)', padding: '14px 16px', fontSize: '14px' }}
             />
-            <div style={buttonGroupStyle2}>
+            <div style={{ display: 'flex', gap: '10px' }}>
               <button
                 className="btn btn--primary"
                 onClick={ask}
@@ -211,7 +208,7 @@ export function ScreenAssistantView({ onOpenView }: Props) {
         </section>
 
         {answer && (
-          <section style={answerSectionStyle}>
+          <section>
             <h2 style={h2Style}>Answer</h2>
             <div className="card" style={{ background: 'var(--surface-raised)', border: '1px solid var(--border-subtle)' }}>
               <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.65, color: 'var(--text-primary)' }}>{answer}</div>
@@ -222,3 +219,5 @@ export function ScreenAssistantView({ onOpenView }: Props) {
     </div>
   )
 }
+
+import { AlertCircle, Monitor, ArrowRight, X } from 'lucide-react'

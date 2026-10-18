@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Blocks, GitBranch, Plug, CheckCircle, AlertCircle, ExternalLink, ChevronDown, ChevronUp, Trash2, Key, Loader2, Mail, MessageSquare, FileText } from 'lucide-react'
+import { Blocks, GitBranch, Plug, CheckCircle, AlertCircle, ExternalLink, ChevronDown, ChevronUp, Trash2, Key, Mail, MessageSquare, FileText } from 'lucide-react'
 import { useKnowledge } from '../hooks/useKnowledge'
-import { useModal } from '../hooks/useModal'
 import KlyroMark from '../assets/logo/klyro-mark.svg'
 
 interface Props {
@@ -10,7 +9,6 @@ interface Props {
 
 export function IntegrationsView({ onOpenView }: Props) {
   const knowledge = useKnowledge()
-  const panelRef = useModal(() => {})
   const [githubToken, setGithubToken] = useState('')
   const [repo, setRepo] = useState('')
   const [issueTitle, setIssueTitle] = useState('')
@@ -19,10 +17,6 @@ export function IntegrationsView({ onOpenView }: Props) {
   const [openRepos, setOpenRepos] = useState(false)
 
   const github = knowledge.integrations.find((entry) => entry.id === 'github')
-
-  const h2Style: React.CSSProperties = { margin: '0 0 16px', fontSize: '16px', fontWeight: 600 }
-  const h3Style: React.CSSProperties = { margin: '0 0 12px', fontSize: '14px', fontWeight: 600 }
-  const h4Style: React.CSSProperties = { margin: '0 0 12px', fontSize: '13px', fontWeight: 600 }
 
   async function createIssue() {
     setIssueNotice(null)

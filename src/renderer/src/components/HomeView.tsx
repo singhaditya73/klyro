@@ -1,23 +1,15 @@
 import { useState, useEffect } from 'react'
-import type { ConversationSummary, Attachment } from '@shared/types'
+import type { Attachment } from '@shared/types'
 import {
-  MessageSquare,
   Monitor,
   Bot,
   Search,
-  Brain,
-  Blocks,
   FileText,
-  Zap,
   ArrowRight,
   Mic,
   Plus,
-  Clock,
   HelpCircle,
   Send,
-  StopCircle,
-  Loader2,
-  X,
 } from 'lucide-react'
 import { timeAgo } from '../lib/format'
 import KlyroLogo from '../assets/logo/klyro-logo-dark.svg'
