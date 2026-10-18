@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   CodeActionKind,
+  CodeCitation,
   MeetingRecord,
   MeetingSegment,
   ProjectStatus,
@@ -11,6 +12,7 @@ export interface StudioController {
   project: ProjectStatus | null
   indexing: boolean
   codeOutput: string
+  codeCitations: CodeCitation[]
   codeBusy: boolean
   runCodeAction: (kind: CodeActionKind, code: string, question?: string) => Promise<void>
   indexProject: () => Promise<void>
@@ -53,6 +55,7 @@ export function useStudio(): StudioController {
   const [project, setProject] = useState<ProjectStatus | null>(null)
   const [indexing, setIndexing] = useState(false)
   const [codeOutput, setCodeOutput] = useState('')
+  const [codeCitations, setCodeCitations] = useState<CodeCitation[]>([])
   const [codeBusy, setCodeBusy] = useState(false)
 
   const [meetings, setMeetings] = useState<MeetingRecord[]>([])
@@ -124,9 +127,11 @@ export function useStudio(): StudioController {
       setError(null)
       setCodeBusy(true)
       setCodeOutput('')
+      setCodeCitations([])
       try {
         const result = await window.klyro.codeAssist({ kind, code, question })
         setCodeOutput(result.text)
+        setCodeCitations(result.citations)
       } catch (caught) {
         setError((caught as Error).message)
       } finally {
@@ -284,6 +289,7 @@ export function useStudio(): StudioController {
     project,
     indexing,
     codeOutput,
+    codeCitations,
     codeBusy,
     runCodeAction,
     indexProject,

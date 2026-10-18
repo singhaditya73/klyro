@@ -12,8 +12,18 @@ interface MemoryState {
 
 const MAX_RECORDS = 2000
 const DUPLICATE_THRESHOLD = 0.82
+const CONFLICT_SIMILARITY = 0.45
 
-/** Persistent personal memory with lexical recall and near-duplicate suppression. */
+/** Hedged or speculative phrasing we never want to persist as a durable fact. */
+const SPECULATIVE_PATTERN = /\b(maybe|perhaps|possibly|probably|might|may be|i think|i guess|not sure|unclear|could be|seems|appears)\b/i
+const NEGATION_PATTERN = /\b(not|no|never|without|isn't|aren't|doesn't|don't|didn't|cannot|can't|won't|dislikes?|hates?)\b/i
+
+/** True when a candidate fact looks like a guess rather than a plain statement. */
+export function isSpeculativeFact(text: string): boolean {
+  return SPECULATIVE_PATTERN.test(text)
+}
+
+/** Persistent personal memory with lexical recall, de-duplication and conflict detection. */
 class MemoryDomain {
   private readonly store = new JsonStore<MemoryState>('memory.json', { records: [] })
 
@@ -33,6 +43,32 @@ class MemoryDomain {
     return records.some((record) => jaccard(candidate, record.text) >= DUPLICATE_THRESHOLD)
   }
 
+  private isNegated(text: string): boolean {
+    return NEGATION_PATTERN.test(text)
+  }
+
+  /**
+   * Facts that talk about the same thing but disagree in polarity — e.g.
+   * "prefers dark mode" vs "does not prefer dark mode". Lexical similarity alone
+   * cannot decide which is right, so we surface both instead of silently
+   * accumulating a contradiction.
+   */
+  conflicts(text: string): MemoryRecord[] {
+    const candidate = this.normalize(text)
+    if (!candidate) return []
+    const candidateNegated = this.isNegated(candidate)
+    return this.store
+      .get()
+      .records.filter(
+        (record) => jaccard(candidate, record.text) >= CONFLICT_SIMILARITY && this.isNegated(record.text) !== candidateNegated
+      )
+  }
+
+  /** True when a fact looks like a guess rather than something the user stated plainly. */
+  static isSpeculative(text: string): boolean {
+    return isSpeculativeFact(text)
+  }
+
   /** Adds a memory, returning the record or null when it was a near-duplicate. */
   add(draft: MemoryDraft): MemoryRecord | null {
     const text = this.normalize(draft.text ?? '')
@@ -41,19 +77,31 @@ class MemoryDomain {
     let created: MemoryRecord | null = null
     this.store.update((state) => {
       if (this.isDuplicate(text, state.records)) return
+      const source = (draft.source ?? 'user') as MemorySource
+      // Automatically-extracted facts must never contradict something we already
+      // know; the user can add the correction explicitly if it is real.
+      if (source === 'auto' && this.conflictsFrom(text, state.records).length > 0) return
       const now = Date.now()
       created = {
         id: randomUUID(),
         text,
         tags: (draft.tags ?? []).map((tag) => tag.trim().toLowerCase()).filter(Boolean).slice(0, 12),
-        source: (draft.source ?? 'user') as MemorySource,
+        source,
         pinned: draft.pinned ?? false,
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
+        ...(draft.origin ? { origin: draft.origin.slice(0, 200) } : {})
       }
       state.records = [created, ...state.records].slice(0, MAX_RECORDS)
     })
     return created
+  }
+
+  private conflictsFrom(text: string, records: MemoryRecord[]): MemoryRecord[] {
+    const candidateNegated = this.isNegated(text)
+    return records.filter(
+      (record) => jaccard(text, record.text) >= CONFLICT_SIMILARITY && this.isNegated(record.text) !== candidateNegated
+    )
   }
 
   update(id: string, patch: Partial<MemoryDraft>): void {
@@ -120,7 +168,7 @@ class MemoryDomain {
   }
 
   /** Ask the active model to distil durable facts from an exchange. */
-  async extractFromExchange(userText: string, assistantText: string): Promise<MemoryRecord[]> {
+  async extractFromExchange(userText: string, assistantText: string, origin?: string): Promise<MemoryRecord[]> {
     const settings = settingsDomain.get()
     const providerId = settings.activeProvider
     const provider = getProvider(providerId)
@@ -129,6 +177,7 @@ class MemoryDomain {
     const prompt = [
       'Extract durable, personal facts worth remembering about the user from this exchange.',
       'Only include stable preferences, identities, projects, or constraints — never transient requests or anything secret (passwords, keys, card numbers).',
+      'Never include guesses, possibilities, or anything phrased with hedging such as "maybe", "perhaps", or "I think".',
       'Respond with a JSON array of strings. Return [] when there is nothing worth remembering.',
       '',
       `User: ${userText.slice(0, 4000)}`,
@@ -168,9 +217,12 @@ class MemoryDomain {
     if (!Array.isArray(facts)) return []
 
     const added: MemoryRecord[] = []
-    for (const fact of facts.slice(0, 5)) {
+    for (const fact of facts.slice(0, 6)) {
       if (typeof fact !== 'string') continue
-      const record = this.add({ text: fact, source: 'auto', tags: ['auto'] })
+      const clean = fact.replace(/\s+/g, ' ').trim()
+      // Auto-extracted facts are only kept when they are substantive statements.
+      if (clean.length < 12 || isSpeculativeFact(clean)) continue
+      const record = this.add({ text: clean, source: 'auto', tags: ['auto'], origin })
       if (record) added.push(record)
     }
     if (added.length) logger.info(`Memory: stored ${added.length} auto-extracted fact(s)`)

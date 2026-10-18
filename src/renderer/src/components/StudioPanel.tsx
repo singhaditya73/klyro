@@ -142,6 +142,14 @@ export function StudioPanel({ onClose }: Props) {
               </div>
 
               {studio.codeBusy ? <div className="muted">Thinking…</div> : null}
+              {studio.codeCitations.length > 0 ? (
+                <div className="muted">
+                  Used:{' '}
+                  {studio.codeCitations
+                    .map((citation) => `${citation.name}${citation.line > 0 ? `:${citation.line}` : ''}`)
+                    .join(', ')}
+                </div>
+              ) : null}
               {studio.codeOutput ? <pre className="code-out">{studio.codeOutput}</pre> : null}
             </section>
           ) : null}

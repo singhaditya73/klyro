@@ -291,6 +291,8 @@ export interface MemoryRecord {
   pinned: boolean
   createdAt: number
   updatedAt: number
+  /** How this fact was learned, e.g. "conversation:title" or "document:notes.md". */
+  origin?: string
 }
 
 export interface MemoryDraft {
@@ -298,6 +300,7 @@ export interface MemoryDraft {
   tags?: string[]
   source?: MemorySource
   pinned?: boolean
+  origin?: string
 }
 
 export interface DocumentRecord {
@@ -323,6 +326,10 @@ export interface KnowledgeHit {
   title: string
   snippet: string
   score: number
+  /** 1-based line number when the hit came from a known location. */
+  line?: number
+  /** Absolute source path for document hits. */
+  path?: string
 }
 
 export type IntegrationId = 'github'
@@ -378,8 +385,19 @@ export interface CodeAssistRequest {
   question?: string
 }
 
+export interface CodeCitation {
+  /** Workspace-relative file name as indexed. */
+  name: string
+  /** 1-based line where the cited chunk starts, or 0 when unknown. */
+  line: number
+  /** Absolute path on disk, when known. */
+  path: string | null
+}
+
 export interface CodeAssistResult {
   text: string
+  /** Files the answer drew on, with best-effort line locations. */
+  citations: CodeCitation[]
 }
 
 /* ---------- Meetings ---------- */

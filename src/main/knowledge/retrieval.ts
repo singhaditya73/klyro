@@ -127,3 +127,55 @@ export function jaccard(a: string, b: string): number {
   for (const token of setA) if (setB.has(token)) intersection += 1
   return intersection / (setA.size + setB.size - intersection)
 }
+
+function normalizeText(text: string): string {
+  return text.replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n')
+}
+
+export interface Chunk {
+  text: string
+  /** Character offset of the chunk's start within the normalised source text. */
+  start: number
+  end: number
+  /** 1-based line number of the chunk start (0 when unknown). */
+  line: number
+}
+
+/**
+ * Chunk a document and report where each chunk came from. Offsets and line
+ * numbers are derived from the source text, so citations point at real
+ * locations rather than being invented.
+ */
+export function chunkDocument(text: string, maxChars = 1200, overlap = 150): Chunk[] {
+  const clean = normalizeText(text).trim()
+  if (!clean) return []
+  const pieces = chunkText(clean, maxChars, overlap)
+
+  const chunks: Chunk[] = []
+  let cursor = 0
+  let scanned = 0
+  let lineCount = 1
+
+  for (const piece of pieces) {
+    let start = clean.indexOf(piece, cursor)
+    if (start < 0) start = clean.indexOf(piece)
+    if (start < 0) start = cursor
+    // Count newlines between the previous scan position and this chunk start.
+    for (let index = scanned; index < start; index++) {
+      if (clean.charCodeAt(index) === 10) lineCount += 1
+    }
+    scanned = Math.max(scanned, start)
+    const end = start + piece.length
+    chunks.push({ text: piece, start, end, line: lineCount })
+    cursor = Math.max(cursor, end)
+  }
+  return chunks
+}
+
+/** Reciprocal rank of the first relevant document, or 0 when none is found. */
+export function reciprocalRank(rankedIds: string[], relevant: string[]): number {
+  const wanted = new Set(relevant)
+  const index = rankedIds.findIndex((id) => wanted.has(id))
+  return index < 0 ? 0 : 1 / (index + 1)
+}
+

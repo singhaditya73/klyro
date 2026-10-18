@@ -5,8 +5,17 @@ import { basename, extname } from 'node:path'
 import { dialog } from 'electron'
 import type { DocumentRecord, ImportResult, KnowledgeHit } from '@shared/types'
 import { logger } from '../logger'
-import { bm25Search, chunkText } from '../knowledge/retrieval'
+import { bm25Search, chunkDocument } from '../knowledge/retrieval'
 import { JsonStore } from '../store/json-store'
+
+/** A chunk plus where it came from, so citations can point at real locations. */
+interface StoredChunk {
+  text: string
+  start: number
+  end: number
+  /** 1-based line number of the chunk start, or 0 when it cannot be derived. */
+  line: number
+}
 
 interface StoredDocument {
   id: string
@@ -16,12 +25,19 @@ interface StoredDocument {
   sourcePath: string | null
   size: number
   addedAt: number
-  chunks: string[]
+  chunks: StoredChunk[]
 }
 
 interface DocumentState {
   documents: StoredDocument[]
   totalChars: number
+}
+
+export interface RecalledChunk {
+  name: string
+  text: string
+  line: number
+  path: string | null
 }
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024
@@ -49,6 +65,22 @@ function stripMarkup(input: string): string {
     .replace(/[ \t]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
+}
+
+/**
+ * Older stores saved chunks as bare strings. Normalise them on read so the
+ * on-disk format can change without losing a user's library.
+ */
+function toChunk(raw: unknown, index: number): StoredChunk {
+  if (typeof raw === 'string') return { text: raw, start: 0, end: raw.length, line: 0 }
+  if (!raw || typeof raw !== 'object') return { text: '', start: 0, end: 0, line: 0 }
+  const record = raw as Partial<StoredChunk>
+  return {
+    text: typeof record.text === 'string' ? record.text : '',
+    start: Number.isFinite(record.start) ? Number(record.start) : 0,
+    end: Number.isFinite(record.end) ? Number(record.end) : 0,
+    line: Number.isFinite(record.line) ? Number(record.line) : index === 0 ? 1 : 0
+  }
 }
 
 function runCommand(binary: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
@@ -85,13 +117,20 @@ class DocumentDomain {
     return this.tools[tool]
   }
 
+  /** Documents with chunks normalised to the current shape. */
+  private normalized(): StoredDocument[] {
+    return this.store.get().documents.map((document) => ({
+      ...document,
+      chunks: (document.chunks ?? []).map(toChunk).filter((chunk) => chunk.text.length > 0)
+    }))
+  }
+
   list(): DocumentRecord[] {
-    return this.store
-      .get()
-      .documents.map(({ chunks, ...rest }) => ({
+    return this.normalized()
+      .map(({ chunks, ...rest }) => ({
         ...rest,
         chunkCount: chunks.length,
-        excerpt: chunks[0]?.slice(0, 180) ?? ''
+        excerpt: chunks[0]?.text.slice(0, 180) ?? ''
       }))
       .sort((a, b) => b.addedAt - a.addedAt)
   }
@@ -144,10 +183,15 @@ class DocumentDomain {
     return { text, kind: extension }
   }
 
+  private toRecord(document: StoredDocument): DocumentRecord {
+    const { chunks, ...rest } = document
+    return { ...rest, chunkCount: chunks.length, excerpt: chunks[0]?.text.slice(0, 180) ?? '' }
+  }
+
   async importFromPath(filePath: string, group: 'manual' | 'workspace' = 'manual', nameOverride?: string): Promise<DocumentRecord> {
     const name = nameOverride ?? basename(filePath)
     const { text, kind } = await this.extract(filePath)
-    const chunks = chunkText(text, CHUNK_CHARS)
+    const chunks = chunkDocument(text, CHUNK_CHARS)
     if (chunks.length === 0) throw new Error('No readable text found')
 
     const state = this.store.get()
@@ -172,7 +216,7 @@ class DocumentDomain {
     })
 
     logger.info(`Knowledge: imported ${name} (${chunks.length} chunk(s))`)
-    return { ...document, chunkCount: chunks.length, excerpt: chunks[0]?.slice(0, 180) ?? '' }
+    return this.toRecord(document)
   }
 
   async importFromDialog(): Promise<ImportResult> {
@@ -199,7 +243,7 @@ class DocumentDomain {
   }
 
   importText(name: string, text: string, sourcePath: string | null = null, group: 'manual' | 'workspace' = 'manual'): DocumentRecord {
-    const chunks = chunkText(text, CHUNK_CHARS)
+    const chunks = chunkDocument(text, CHUNK_CHARS)
     const document: StoredDocument = {
       id: randomUUID(),
       name,
@@ -214,7 +258,7 @@ class DocumentDomain {
       draft.documents = [document, ...draft.documents]
       draft.totalChars = draft.documents.reduce((sum, d) => sum + d.size, 0)
     })
-    return { ...document, chunkCount: chunks.length, excerpt: chunks[0]?.slice(0, 180) ?? '' }
+    return this.toRecord(document)
   }
 
   remove(id: string): void {
@@ -232,7 +276,7 @@ class DocumentDomain {
   }
 
   statsFor(group: 'manual' | 'workspace'): { files: number; chunks: number } {
-    const matched = this.store.get().documents.filter((document) => document.group === group)
+    const matched = this.normalized().filter((document) => document.group === group)
     return {
       files: matched.length,
       chunks: matched.reduce((sum, document) => sum + document.chunks.length, 0)
@@ -244,39 +288,67 @@ class DocumentDomain {
   }
 
   search(query: string, limit = 20): KnowledgeHit[] {
-    const corpus = this.store.get().documents.flatMap((document) =>
-      document.chunks.map((text, index) => ({ id: `${document.id}:${index}`, text, name: document.name }))
+    const corpus = this.normalized().flatMap((document) =>
+      document.chunks.map((chunk, index) => ({
+        id: `${document.id}:${index}`,
+        text: chunk.text,
+        name: document.name,
+        line: chunk.line,
+        path: document.sourcePath
+      }))
     )
-    const names = new Map(corpus.map((entry) => [entry.id, entry.name]))
-    return bm25Search(query, corpus, limit).map((hit) => ({
-      kind: 'document' as const,
-      id: hit.id,
-      title: names.get(hit.id) ?? 'Document',
-      snippet: corpus.find((entry) => entry.id === hit.id)?.text.slice(0, 200) ?? '',
-      score: Number(hit.score.toFixed(3))
-    }))
+    const byId = new Map(corpus.map((entry) => [entry.id, entry]))
+    return bm25Search(
+      query,
+      corpus.map((entry) => ({ id: entry.id, text: entry.text })),
+      limit
+    ).flatMap((hit) => {
+      const entry = byId.get(hit.id)
+      if (!entry) return []
+      return [
+        {
+          kind: 'document' as const,
+          id: hit.id,
+          title: entry.name,
+          snippet: entry.text.slice(0, 200),
+          score: Number(hit.score.toFixed(3)),
+          line: entry.line,
+          path: entry.path ?? undefined
+        }
+      ]
+    })
   }
 
-  /** Chunks most relevant to a query, for grounding a chat turn. */
-  recall(query: string, limit: number, group?: 'manual' | 'workspace'): { name: string; text: string }[] {
-    const corpus = this.store
-      .get()
-      .documents.filter((document) => !group || document.group === group)
+  /** Chunks most relevant to a query, with their source location, for grounding. */
+  recall(query: string, limit: number, group?: 'manual' | 'workspace'): RecalledChunk[] {
+    const corpus = this.normalized()
+      .filter((document) => !group || document.group === group)
       .flatMap((document) =>
-        document.chunks.map((text, index) => ({ id: `${document.id}:${index}`, text, name: document.name }))
+        document.chunks.map((chunk, index) => ({
+          id: `${document.id}:${index}`,
+          text: chunk.text,
+          name: document.name,
+          line: chunk.line,
+          path: document.sourcePath
+        }))
       )
     const byId = new Map(corpus.map((entry) => [entry.id, entry]))
-    return bm25Search(query, corpus, limit).flatMap((hit) => {
+    return bm25Search(
+      query,
+      corpus.map((entry) => ({ id: entry.id, text: entry.text })),
+      limit
+    ).flatMap((hit) => {
       const entry = byId.get(hit.id)
-      return entry ? [{ name: entry.name, text: entry.text }] : []
+      return entry ? [{ name: entry.name, text: entry.text, line: entry.line, path: entry.path }] : []
     })
   }
 
   stats(): { documents: number; chunks: number; chars: number } {
     const state = this.store.get()
+    const documents = this.normalized()
     return {
       documents: state.documents.length,
-      chunks: state.documents.reduce((sum, d) => sum + d.chunks.length, 0),
+      chunks: documents.reduce((sum, document) => sum + document.chunks.length, 0),
       chars: state.totalChars
     }
   }

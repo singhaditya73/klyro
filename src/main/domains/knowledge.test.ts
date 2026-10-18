@@ -15,7 +15,7 @@ vi.mock('electron', () => ({
   }
 }))
 
-const { memory } = await import('./memory')
+const { memory, isSpeculativeFact } = await import('./memory')
 const { documents } = await import('./documents')
 const { buildKnowledgeContext } = await import('./context')
 const { settingsDomain } = await import('./settings')
@@ -55,6 +55,39 @@ describe('memory', () => {
 
   it('rejects trivial input', () => {
     expect(memory.add({ text: '  a ' })).toBeNull()
+  })
+
+  it('records where a fact came from', () => {
+    memory.clear()
+    const record = memory.add({ text: 'The user reviews pull requests on Fridays', origin: 'document:team-notes.md' })
+    expect(record?.origin).toBe('document:team-notes.md')
+  })
+
+  it('detects contradictory facts instead of silently accumulating them', () => {
+    memory.clear()
+    memory.add({ text: 'The user prefers dark mode' })
+    const conflicts = memory.conflicts('The user does not prefer dark mode')
+    expect(conflicts).toHaveLength(1)
+    // Agreement is not a conflict.
+    expect(memory.conflicts('The user prefers dark mode')).toHaveLength(0)
+  })
+
+  it('never lets an auto-extracted fact contradict a known fact', () => {
+    memory.clear()
+    memory.add({ text: 'The user prefers dark mode' })
+    const contradictory = memory.add({ text: 'The user does not prefer dark mode', source: 'auto', tags: ['auto'] })
+    expect(contradictory).toBeNull()
+    expect(memory.list()).toHaveLength(1)
+    // The user can always correct it explicitly.
+    const correction = memory.add({ text: 'The user does not prefer dark mode' })
+    expect(correction).not.toBeNull()
+    expect(memory.conflicts('The user prefers dark mode').length).toBeGreaterThan(0)
+  })
+
+  it('treats hedged statements as speculative, not durable', () => {
+    expect(isSpeculativeFact('The user might move to Lisbon')).toBe(true)
+    expect(isSpeculativeFact('I think the user likes Rust')).toBe(true)
+    expect(isSpeculativeFact('The user prefers TypeScript')).toBe(false)
   })
 })
 

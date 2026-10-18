@@ -39,7 +39,8 @@ export function buildKnowledgeContext(query: string): KnowledgeContext {
     const recalled = documents.recall(query, Math.max(1, settings.documentRecallCount))
     documentHits = recalled.length
     for (const hit of recalled) {
-      sections.push(wrapUntrusted(`document: ${hit.name}`, hit.text))
+      const label = `document: ${hit.name}${hit.line > 0 ? `:${hit.line}` : ''}`
+      sections.push(wrapUntrusted(label, hit.text))
     }
   }
 

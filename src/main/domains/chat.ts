@@ -105,9 +105,11 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
     }
     conversations.updateMessage(conversationId, assistantId, { content: text })
     emit({ type: 'done', messageId: assistantId })
-    if (settings.memoryAutoExtract && text.trim() && request.content.trim()) {
+    // Extraction costs a model call, so only run it for substantive exchanges.
+    if (settings.memoryAutoExtract && text.trim().length >= 24 && request.content.trim().length >= 24) {
+      const origin = `conversation:${conversation.title || conversationId}`
       void memory
-        .extractFromExchange(request.content, text)
+        .extractFromExchange(request.content, text, origin)
         .catch((error) => logger.warn('Memory extraction failed', (error as Error).message))
     }
   } catch (error) {
