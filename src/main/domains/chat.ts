@@ -5,6 +5,7 @@ import { IPC } from '@shared/ipc'
 import { logger } from '../logger'
 import { getProvider } from '../providers'
 import type { ChatTurn } from '../providers/types'
+import { withIdleTimeout } from '../util/idle-timeout'
 import { conversations } from './conversations'
 import { buildKnowledgeContext } from './context'
 import { memory } from './memory'
@@ -86,16 +87,19 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
   let text = ''
 
   try {
-    for await (const delta of provider.chat({
-      model: providerSettings.model,
-      baseUrl: providerSettings.baseUrl,
-      apiKey,
-      system: [settings.systemPrompt + styleSuffix(settings.responseStyle), knowledge.block]
-        .filter(Boolean)
-        .join('\n\n'),
-      turns,
-      signal: abort.signal
-    })) {
+    for await (const delta of withIdleTimeout(
+      provider.chat({
+        model: providerSettings.model,
+        baseUrl: providerSettings.baseUrl,
+        apiKey,
+        system: [settings.systemPrompt + styleSuffix(settings.responseStyle), knowledge.block]
+          .filter(Boolean)
+          .join('\n\n'),
+        turns,
+        signal: abort.signal
+      }),
+      { onStall: () => abort.abort() }
+    )) {
       text += delta
       emit({ type: 'delta', messageId: assistantId, text: delta })
     }

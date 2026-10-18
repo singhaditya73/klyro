@@ -51,6 +51,7 @@ export function Sidebar(props: Props) {
             <button
               className="conv__delete"
               title="Delete chat"
+              aria-label={`Delete chat ${summary.title}`}
               onClick={(event) => {
                 event.stopPropagation()
                 void props.deleteConversation(summary.id)

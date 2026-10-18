@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import type { CodeActionKind } from '@shared/types'
-import type { StudioController } from '../hooks/useStudio'
+import { useStudio } from '../hooks/useStudio'
+import { useModal } from '../hooks/useModal'
 import { timeAgo } from '../lib/format'
 
 interface Props {
-  studio: StudioController
   onClose: () => void
 }
 
@@ -24,7 +24,9 @@ function clock(totalSeconds: number): string {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
-export function StudioPanel({ studio, onClose }: Props) {
+export function StudioPanel({ onClose }: Props) {
+  const studio = useStudio()
+  const panelRef = useModal(onClose)
   const [tab, setTab] = useState<Tab>('code')
   const [snippet, setSnippet] = useState('')
   const [question, setQuestion] = useState('')
@@ -33,22 +35,43 @@ export function StudioPanel({ studio, onClose }: Props) {
 
   return (
     <div className="modal">
-      <div className="modal__panel modal__panel--wide">
+      <div className="modal__panel modal__panel--wide" ref={panelRef} role="dialog" aria-modal="true" aria-label="Studio" tabIndex={-1}>
         <div className="modal__head">
           <h2>Studio</h2>
-          <button className="btn btn--ghost" onClick={onClose}>
+          <button
+            className="btn btn--ghost"
+            aria-label="Close Studio"
+            disabled={studio.recording}
+            title={studio.recording ? 'Stop the recording first' : undefined}
+            onClick={onClose}
+          >
             Close
           </button>
         </div>
 
-        <div className="tabs">
-          <button className={`tab${tab === 'code' ? ' tab--active' : ''}`} onClick={() => setTab('code')}>
+        <div className="tabs" role="tablist">
+          <button
+            className={`tab${tab === 'code' ? ' tab--active' : ''}`}
+            role="tab"
+            aria-selected={tab === 'code'}
+            onClick={() => setTab('code')}
+          >
             Coding
           </button>
-          <button className={`tab${tab === 'meetings' ? ' tab--active' : ''}`} onClick={() => setTab('meetings')}>
+          <button
+            className={`tab${tab === 'meetings' ? ' tab--active' : ''}`}
+            role="tab"
+            aria-selected={tab === 'meetings'}
+            onClick={() => setTab('meetings')}
+          >
             Meetings ({studio.meetings.length})
           </button>
-          <button className={`tab${tab === 'workflows' ? ' tab--active' : ''}`} onClick={() => setTab('workflows')}>
+          <button
+            className={`tab${tab === 'workflows' ? ' tab--active' : ''}`}
+            role="tab"
+            aria-selected={tab === 'workflows'}
+            onClick={() => setTab('workflows')}
+          >
             Workflows ({studio.workflows.length})
           </button>
         </div>
@@ -190,7 +213,11 @@ export function StudioPanel({ studio, onClose }: Props) {
                     <button className="btn" disabled={studio.meetingBusy} onClick={() => void studio.summarizeMeeting(meeting.id)}>
                       Summarize
                     </button>
-                    <button className="conv__delete" onClick={() => void studio.deleteMeeting(meeting.id)}>
+                    <button
+                      className="conv__delete"
+                      aria-label={`Delete meeting ${meeting.title}`}
+                      onClick={() => void studio.deleteMeeting(meeting.id)}
+                    >
                       ×
                     </button>
                   </div>
@@ -248,7 +275,11 @@ export function StudioPanel({ studio, onClose }: Props) {
                     {workflow.builtin ? <span className="pill">built-in</span> : null}
                     <span className="muted card__spacer">{workflow.steps.length} step(s)</span>
                     {!workflow.builtin ? (
-                      <button className="conv__delete" onClick={() => void studio.deleteWorkflow(workflow.id)}>
+                      <button
+                        className="conv__delete"
+                        aria-label={`Delete workflow ${workflow.name}`}
+                        onClick={() => void studio.deleteWorkflow(workflow.id)}
+                      >
                         ×
                       </button>
                     ) : null}

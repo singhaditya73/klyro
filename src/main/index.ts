@@ -1,6 +1,8 @@
+import { join } from 'node:path'
 import { BrowserWindow, app, session } from 'electron'
 import { logger } from './logger'
 import { secrets } from './security/secrets'
+import { isAllowedPermission, isTrustedRendererUrl, setPackagedRenderer } from './security/origins'
 import { registerIpcHandlers } from './domains/ipc'
 import { registerShortcuts, unregisterShortcuts } from './domains/shortcuts'
 import { createTray } from './domains/tray'
@@ -16,8 +18,11 @@ function applyContentSecurityPolicy(): void {
       responseHeaders: {
         ...details.responseHeaders,
         'Content-Security-Policy': [
-          "default-src 'self'; img-src 'self' data: blob:; media-src 'self' data: blob:; " +
-            "style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'"
+          "default-src 'none'; " +
+            "script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+            "img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self'; " +
+            "connect-src 'self'; " +
+            "object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
         ]
       }
     })
@@ -26,15 +31,12 @@ function applyContentSecurityPolicy(): void {
 
 /** Only our own renderer may use the microphone; everything else is denied. */
 function applyPermissionPolicy(): void {
-  const devUrl = process.env.ELECTRON_RENDERER_URL ?? ''
-  const isTrusted = (url: string): boolean => url.startsWith('file://') || (devUrl !== '' && url.startsWith(devUrl))
-  const isMedia = (permission: string): boolean => permission === 'media' || permission === 'audioCapture'
-
   session.defaultSession.setPermissionRequestHandler((contents, permission, callback) => {
-    callback(isTrusted(contents.getURL()) && isMedia(permission))
+    callback(isTrustedRendererUrl(contents.getURL()) && isAllowedPermission(permission))
   })
-  session.defaultSession.setPermissionCheckHandler((_contents, permission) => isMedia(permission))
+  session.defaultSession.setPermissionCheckHandler((_contents, permission) => isAllowedPermission(permission))
 }
+
 
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
@@ -44,6 +46,7 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
     secrets.init()
+    setPackagedRenderer(join(__dirname, '../renderer/index.html'))
     applyContentSecurityPolicy()
     applyPermissionPolicy()
     registerIpcHandlers()

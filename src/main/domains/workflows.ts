@@ -14,6 +14,7 @@ import { renderTemplate } from '../knowledge/code-files'
 import { logger } from '../logger'
 import { getProvider } from '../providers'
 import { JsonStore } from '../store/json-store'
+import { withIdleTimeout } from '../util/idle-timeout'
 import { buildKnowledgeContext } from './context'
 import { conversations } from './conversations'
 import { github } from './integrations'
@@ -144,15 +145,17 @@ class WorkflowDomain {
     conversations.addMessage(conversationId, userMessage)
 
     let text = ''
-    for await (const delta of provider.chat({
-      model: config.model,
-      baseUrl: config.baseUrl,
-      apiKey: settingsDomain.apiKey(providerId),
-      system: [settings.systemPrompt, knowledge.block].filter(Boolean).join('\n\n'),
-      turns: [{ role: 'user', text: rendered }],
-      temperature: 0.3,
-      maxTokens: 1800
-    })) {
+    for await (const delta of withIdleTimeout(
+      provider.chat({
+        model: config.model,
+        baseUrl: config.baseUrl,
+        apiKey: settingsDomain.apiKey(providerId),
+        system: [settings.systemPrompt, knowledge.block].filter(Boolean).join('\n\n'),
+        turns: [{ role: 'user', text: rendered }],
+        temperature: 0.3,
+        maxTokens: 1800
+      })
+    )) {
       text += delta
     }
     text = text.trim()

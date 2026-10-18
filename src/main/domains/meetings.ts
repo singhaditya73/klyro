@@ -4,6 +4,7 @@ import { parseMeetingSummary } from '../knowledge/code-files'
 import { logger } from '../logger'
 import { getProvider } from '../providers'
 import { JsonStore } from '../store/json-store'
+import { withIdleTimeout } from '../util/idle-timeout'
 import { settingsDomain } from './settings'
 
 interface MeetingState {
@@ -85,15 +86,17 @@ class MeetingDomain {
     ].join('\n')
 
     let output = ''
-    for await (const delta of provider.chat({
-      model: config.model,
-      baseUrl: config.baseUrl,
-      apiKey: settingsDomain.apiKey(providerId),
-      system: 'You write accurate, neutral meeting summaries. Respond with JSON only.',
-      turns: [{ role: 'user', text: prompt }],
-      temperature: 0.2,
-      maxTokens: 900
-    })) {
+    for await (const delta of withIdleTimeout(
+      provider.chat({
+        model: config.model,
+        baseUrl: config.baseUrl,
+        apiKey: settingsDomain.apiKey(providerId),
+        system: 'You write accurate, neutral meeting summaries. Respond with JSON only.',
+        turns: [{ role: 'user', text: prompt }],
+        temperature: 0.2,
+        maxTokens: 900
+      })
+    )) {
       output += delta
     }
 

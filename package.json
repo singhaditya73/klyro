@@ -1,10 +1,14 @@
 {
   "name": "klyro",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Klyro — Your AI. Your entire computer. Understand. Remember. Act.",
-  "author": "Aditya Singh",
+  "author": {
+    "name": "Aditya Singh",
+    "email": "adityasinghrajput755@gmail.com"
+  },
   "license": "MIT",
   "private": true,
+  "desktopName": "klyro.desktop",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -15,6 +19,11 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "test": "vitest run",
     "test:watch": "vitest",
+    "icons": "python3 scripts/make-icons.py",
+    "smoke": "npm run build && electron scripts/smoke.cjs",
+    "pack": "npm run build && electron-builder --dir",
+    "pack:linux": "npm run build && electron-builder --linux --dir",
+    "pack:win": "npm run build && electron-builder --win --dir",
     "dist": "npm run build && electron-builder",
     "dist:linux": "npm run build && electron-builder --linux",
     "dist:win": "npm run build && electron-builder --win",

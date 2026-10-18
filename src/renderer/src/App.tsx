@@ -1,20 +1,23 @@
-import { useState } from 'react'
-import { AgentPanel } from './components/AgentPanel'
+import { Suspense, lazy, useState } from 'react'
 import { ChatView } from './components/ChatView'
-import { KnowledgePanel } from './components/KnowledgePanel'
-import { SettingsPanel } from './components/SettingsPanel'
 import { Sidebar } from './components/Sidebar'
-import { StudioPanel } from './components/StudioPanel'
 import { useAgent } from './hooks/useAgent'
 import { useChat } from './hooks/useChat'
-import { useKnowledge } from './hooks/useKnowledge'
-import { useStudio } from './hooks/useStudio'
+
+// Panels are loaded on first open: their code (and the data they fetch) stays out
+// of the startup path.
+const AgentPanel = lazy(() => import('./components/AgentPanel').then((module) => ({ default: module.AgentPanel })))
+const KnowledgePanel = lazy(() =>
+  import('./components/KnowledgePanel').then((module) => ({ default: module.KnowledgePanel }))
+)
+const SettingsPanel = lazy(() =>
+  import('./components/SettingsPanel').then((module) => ({ default: module.SettingsPanel }))
+)
+const StudioPanel = lazy(() => import('./components/StudioPanel').then((module) => ({ default: module.StudioPanel })))
 
 export default function App() {
   const chat = useChat()
   const agent = useAgent()
-  const knowledge = useKnowledge()
-  const studio = useStudio()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [agentOpen, setAgentOpen] = useState(false)
   const [knowledgeOpen, setKnowledgeOpen] = useState(false)
@@ -43,10 +46,12 @@ export default function App() {
         onSend={chat.send}
         onStop={chat.stop}
       />
-      {agentOpen ? <AgentPanel agent={agent} onClose={() => setAgentOpen(false)} /> : null}
-      {knowledgeOpen ? <KnowledgePanel knowledge={knowledge} onClose={() => setKnowledgeOpen(false)} /> : null}
-      {studioOpen ? <StudioPanel studio={studio} onClose={() => setStudioOpen(false)} /> : null}
-      {settingsOpen ? <SettingsPanel onClose={() => setSettingsOpen(false)} /> : null}
+      <Suspense fallback={null}>
+        {agentOpen ? <AgentPanel agent={agent} onClose={() => setAgentOpen(false)} /> : null}
+        {knowledgeOpen ? <KnowledgePanel onClose={() => setKnowledgeOpen(false)} /> : null}
+        {studioOpen ? <StudioPanel onClose={() => setStudioOpen(false)} /> : null}
+        {settingsOpen ? <SettingsPanel onClose={() => setSettingsOpen(false)} /> : null}
+      </Suspense>
     </div>
   )
 }

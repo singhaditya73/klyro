@@ -19,11 +19,11 @@ export function ChatView({ messages, streamingId, contexts, onSend, onStop }: Pr
   }, [messages])
 
   return (
-    <section className="chat">
-      <div className="chat__messages">
+    <section className="chat" aria-label="Conversation">
+      <div className="chat__messages" role="log" aria-live="polite" aria-relevant="additions text">
         {messages.length === 0 ? (
           <div className="empty">
-            <div className="empty__logo" />
+            <div className="empty__logo" aria-hidden="true" />
             <h1>Klyro</h1>
             <p>Your AI. Your entire computer.</p>
             <p className="muted">Ask a question, share your screen, or use your voice.</p>

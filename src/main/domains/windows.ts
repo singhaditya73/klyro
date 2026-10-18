@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { BrowserWindow, screen, shell } from 'electron'
+import { isExternalHttpUrl, isTrustedRendererUrl } from '../security/origins'
 
 const OVERLAY_WIDTH = 640
 const OVERLAY_HEIGHT = 208
@@ -9,6 +10,27 @@ let overlayWindow: BrowserWindow | null = null
 
 function isDev(): boolean {
   return Boolean(process.env.ELECTRON_RENDERER_URL)
+}
+
+/**
+ * A window may only ever display Klyro's own renderer. Anything the renderer
+ * tries to navigate to is refused, and real web links are handed to the user's
+ * browser instead of being loaded inside the app.
+ */
+function attachNavigationGuards(win: BrowserWindow): void {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (isExternalHttpUrl(url)) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
+
+  win.webContents.on('will-navigate', (event, url) => {
+    if (isTrustedRendererUrl(url)) return
+    event.preventDefault()
+    if (isExternalHttpUrl(url)) void shell.openExternal(url)
+  })
+
+  // Klyro never embeds third-party content.
+  win.webContents.on('will-attach-webview', (event) => event.preventDefault())
 }
 
 function loadRoute(win: BrowserWindow, route: string): void {
@@ -45,10 +67,7 @@ export function createMainWindow(): BrowserWindow {
     webPreferences: baseWebPreferences()
   })
   mainWindow.once('ready-to-show', () => mainWindow?.show())
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url)
-    return { action: 'deny' }
-  })
+  attachNavigationGuards(mainWindow)
   loadRoute(mainWindow, '/')
   mainWindow.on('closed', () => {
     mainWindow = null
@@ -74,6 +93,7 @@ export function createOverlayWindow(): BrowserWindow {
   overlayWindow.setAlwaysOnTop(true, 'screen-saver')
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   overlayWindow.on('blur', () => overlayWindow?.hide())
+  attachNavigationGuards(overlayWindow)
   loadRoute(overlayWindow, 'overlay')
   overlayWindow.on('closed', () => {
     overlayWindow = null

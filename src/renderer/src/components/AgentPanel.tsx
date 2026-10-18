@@ -1,6 +1,7 @@
 import type { AgentController } from '../hooks/useAgent'
 import { describeAction, STATUS_ICON } from '../lib/agent'
 import { timeAgo } from '../lib/format'
+import { useModal } from '../hooks/useModal'
 
 interface Props {
   agent: AgentController
@@ -9,12 +10,13 @@ interface Props {
 
 export function AgentPanel({ agent, onClose }: Props) {
   const { caps } = agent
+  const panelRef = useModal(onClose)
 
   return (
-    <aside className="agent">
+    <aside className="agent" ref={panelRef} role="complementary" aria-label="Desktop agent" tabIndex={-1}>
       <div className="agent__head">
         <h2>Desktop agent</h2>
-        <button className="btn btn--ghost" onClick={onClose}>
+        <button className="btn btn--ghost" aria-label="Close the agent panel" onClick={onClose}>
           Close
         </button>
       </div>

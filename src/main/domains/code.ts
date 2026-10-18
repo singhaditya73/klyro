@@ -1,6 +1,7 @@
 import type { CodeActionKind, CodeAssistRequest, CodeAssistResult } from '@shared/types'
 import { detectLanguage } from '../knowledge/code-files'
 import { getProvider } from '../providers'
+import { withIdleTimeout } from '../util/idle-timeout'
 import { documents } from './documents'
 import { settingsDomain } from './settings'
 
@@ -26,15 +27,17 @@ class CodeDomain {
     const config = settings.providers[providerId]
 
     let text = ''
-    for await (const delta of provider.chat({
-      model: config.model,
-      baseUrl: config.baseUrl,
-      apiKey: settingsDomain.apiKey(providerId),
-      system,
-      turns: [{ role: 'user', text: prompt }],
-      temperature: 0.2,
-      maxTokens
-    })) {
+    for await (const delta of withIdleTimeout(
+      provider.chat({
+        model: config.model,
+        baseUrl: config.baseUrl,
+        apiKey: settingsDomain.apiKey(providerId),
+        system,
+        turns: [{ role: 'user', text: prompt }],
+        temperature: 0.2,
+        maxTokens
+      })
+    )) {
       text += delta
     }
     return text.trim()

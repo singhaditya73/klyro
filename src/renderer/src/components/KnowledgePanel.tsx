@@ -1,16 +1,18 @@
 import { useState } from 'react'
 import type { KnowledgeHit } from '@shared/types'
-import type { KnowledgeController } from '../hooks/useKnowledge'
+import { useKnowledge } from '../hooks/useKnowledge'
+import { useModal } from '../hooks/useModal'
 import { timeAgo } from '../lib/format'
 
 interface Props {
-  knowledge: KnowledgeController
   onClose: () => void
 }
 
 type Tab = 'memories' | 'documents' | 'integrations'
 
-export function KnowledgePanel({ knowledge, onClose }: Props) {
+export function KnowledgePanel({ onClose }: Props) {
+  const knowledge = useKnowledge()
+  const panelRef = useModal(onClose)
   const [tab, setTab] = useState<Tab>('memories')
   const [memoryText, setMemoryText] = useState('')
   const [memoryTags, setMemoryTags] = useState('')
@@ -50,23 +52,35 @@ export function KnowledgePanel({ knowledge, onClose }: Props) {
 
   return (
     <div className="modal">
-      <div className="modal__panel">
+      <div className="modal__panel" ref={panelRef} role="dialog" aria-modal="true" aria-label="Knowledge" tabIndex={-1}>
         <div className="modal__head">
           <h2>Knowledge</h2>
-          <button className="btn btn--ghost" onClick={onClose}>
+          <button className="btn btn--ghost" aria-label="Close the knowledge panel" onClick={onClose}>
             Close
           </button>
         </div>
 
-        <div className="tabs">
-          <button className={`tab${tab === 'memories' ? ' tab--active' : ''}`} onClick={() => setTab('memories')}>
+        <div className="tabs" role="tablist" aria-label="Knowledge sections">
+          <button
+            className={`tab${tab === 'memories' ? ' tab--active' : ''}`}
+            role="tab"
+            aria-selected={tab === 'memories'}
+            onClick={() => setTab('memories')}
+          >
             Memory ({knowledge.memories.length})
           </button>
-          <button className={`tab${tab === 'documents' ? ' tab--active' : ''}`} onClick={() => setTab('documents')}>
+          <button
+            className={`tab${tab === 'documents' ? ' tab--active' : ''}`}
+            role="tab"
+            aria-selected={tab === 'documents'}
+            onClick={() => setTab('documents')}
+          >
             Documents ({knowledge.documents.length})
           </button>
           <button
             className={`tab${tab === 'integrations' ? ' tab--active' : ''}`}
+            role="tab"
+            aria-selected={tab === 'integrations'}
             onClick={() => setTab('integrations')}
           >
             Integrations
@@ -159,7 +173,11 @@ export function KnowledgePanel({ knowledge, onClose }: Props) {
                     >
                       Edit
                     </button>
-                    <button className="conv__delete" onClick={() => void knowledge.deleteMemory(record.id)}>
+                    <button
+                      className="conv__delete"
+                      aria-label={`Forget memory ${record.text.slice(0, 40)}`}
+                      onClick={() => void knowledge.deleteMemory(record.id)}
+                    >
                       ×
                     </button>
                   </div>
@@ -192,7 +210,11 @@ export function KnowledgePanel({ knowledge, onClose }: Props) {
                     <span className="pill">{document.kind}</span>
                     <span className="muted">{document.chunkCount} chunks</span>
                     <span className="muted card__spacer">{timeAgo(document.addedAt)}</span>
-                    <button className="conv__delete" onClick={() => void knowledge.deleteDocument(document.id)}>
+                    <button
+                      className="conv__delete"
+                      aria-label={`Remove document ${document.name}`}
+                      onClick={() => void knowledge.deleteDocument(document.id)}
+                    >
                       ×
                     </button>
                   </div>

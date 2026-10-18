@@ -8,17 +8,52 @@ files:
   - out/**
   - package.json
   - '!**/*.map'
+  # Keep only what runs: no type declarations, sources, tests, or docs.
+  - '!node_modules/**/*.{d.ts,d.cts,d.mts}'
+  - '!node_modules/**/{src,test,tests,__tests__,docs,doc,example,examples,benchmark,benchmarks}/**'
+  - '!node_modules/**/{.eslintrc*,.prettierrc*,tsconfig*.json,readme*,README*,changelog*,CHANGELOG*}'
 asar: true
+compression: normal
+artifactName: ${productName}-${version}-${arch}.${ext}
+
 linux:
   target:
     - AppImage
     - deb
   category: Utility
+  icon: build/icon.png
   synopsis: Klyro — Your AI. Your entire computer.
+  syncDesktopName: true
+  description: >-
+    Klyro is a local-first AI desktop assistant. It can see your screen, hear
+    your voice, remember what matters, search your documents and code, and act
+    on your computer. Bring your own model provider — cloud or fully local.
+
+deb:
+  depends:
+    - libgtk-3-0
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0
+
 win:
   target:
     - nsis
+  icon: build/icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Klyro
+
 mac:
   target:
     - dmg
   category: public.app-category.productivity
+  # Not a supported release target yet (see docs/FEATURE_MATRIX.md).

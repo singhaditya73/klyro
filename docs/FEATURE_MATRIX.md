@@ -12,20 +12,21 @@ Status legend: **✅ done** · **🟡 partial** · **⬜ planned**
 | 1.4 Voice input | 🟡 | Record → transcribe via OpenAI-compatible `/audio/transcriptions`; local Whisper supported |
 | 1.5 Contextual follow-ups | ✅ | Full conversation history sent to the provider |
 | 1.6 Stays accessible over other apps | ✅ | Overlay window |
-| 1.7 Window controls / keyboard nav | 🟡 | Basic; more polish planned |
+| 1.7 Window controls / keyboard nav | 🟡 | Escape closes panels, dialogs take focus, visible focus rings; full arrow-key navigation still open |
 | 2.1 Permission-gated screen capture | ✅ | `desktopCapturer` + explicit source picker |
 | 2.2 Ask about screen / region | 🟡 | Full screen + window picker; region crop planned |
 | 2.3 Understand text/code/UI | ✅ | Vision models (provider-dependent) |
 | 2.4 Conversation context across turns | ✅ | Persisted history |
 | 3.1 Microphone capture with consent | ✅ | `getUserMedia` + visible recording state |
 | 3.2 Live transcription | 🟡 | Push-to-talk transcription; continuous streaming planned |
-| 3.3—3.4 Real-time suggestions | ⬜ | Planned (Stage E) |
+| 3.3—3.4 Real-time suggestions | ⬜ | No live suggestion overlay yet |
 | 4.1 Meeting transcripts / summaries | 🟡 | Chunked recording → transcript → summary + action items. No live in-call overlay yet |
 | 5.1 Saved + searchable history | ✅ | Local JSON store + search |
-| 5.2 Custom instructions / preferences | ✅ | System prompt + response style || 6.1 Provider abstraction | ✅ | OpenAI-compatible, Anthropic, Gemini, Ollama |
+| 5.2 Custom instructions / preferences | ✅ | System prompt + response style |
+| 6.1 Provider abstraction | ✅ | OpenAI-compatible, Anthropic, Gemini, Ollama |
 | 6.2 Configurable endpoints | ✅ | Per-provider Base URL + model |
 | 6.3 Secure API keys | ✅ | Encrypted at rest via Electron `safeStorage` |
-| 6.4 Error handling / timeouts | 🟡 | Errors surfaced; explicit timeouts planned |
+| 6.4 Error handling / timeouts | ✅ | Errors surfaced per message; a stalled stream fails after 90s of silence instead of hanging |
 
 ## Part 2 — Differentiating features
 
@@ -38,7 +39,7 @@ Status legend: **✅ done** · **🟡 partial** · **⬜ planned**
 | 11. Reusable skills / workflows | ✅ | Named multi-step workflows (prompt + GitHub steps), 4 built-ins, custom creation, runs land in a real conversation |
 | 12. Document & research intelligence | 🟡 | Local document import (text, code, HTML, PDF via `pdftotext`, Office via `unzip`) + BM25 grounding. Web research planned |
 | 13. Productivity / task management | 🟡 | Meeting action items and workflow runs; no task board yet |
-| 14. Trust, security, reliability | 🟡 | Isolation, origin-checked IPC, encrypted keys, visible capture state, explicit confirmation for state-changing actions |
+| 14. Trust, security, reliability | 🟡 | Sandboxed renderer with context isolation, origin-validated IPC, encrypted keys, encrypted-at-rest secrets, navigation guards, locked-down CSP, microphone-only permission policy, idle-timeout on model streams |
 
 ## Desktop agent (Stage B)
 
@@ -109,6 +110,35 @@ so you can keep asking follow-ups afterwards. Steps are either a **prompt**
 output feeds the next. Four built-ins ship: *Standup from GitHub issues*, *Explain
 an area of the codebase*, *Turn notes into action items*, and *Review a diff*.
 
+## Hardening, packaging & release (Stage E)
+
+**Security.** Beyond the Stage A baseline (sandboxed renderer, `contextIsolation`,
+origin-validated IPC, encrypted keys), a window may now *only* display Klyro's own
+renderer: navigation elsewhere is refused, real links are handed to the user's
+browser, embedded webviews cannot attach, and the permission policy grants
+microphone capture to Klyro's origin and nothing else. The production CSP is
+`default-src 'none'` with `object-src`, `base-uri`, `form-action` and
+`frame-ancestors` all disabled.
+
+**Accessibility.** Dialog semantics (`role="dialog"`, `aria-modal`) with focus moved
+into the panel on open, Escape to dismiss every panel, a live region for the chat
+transcript, labelled icon-only buttons, tab roles with `aria-selected`, visible
+focus rings, and `prefers-reduced-motion` support.
+
+**Performance.** The panels are code-split and load on first open, which also defers
+their data fetching, cutting the startup bundle from 656 kB to 594 kB (the rest
+lands in four chunks of 7–25 kB). The packaged asar keeps only runtime files:
+6.76 MB → 3.19 MB, with dependency licences retained.
+
+**Reliability.** Every model call is wrapped in an idle-timeout guard: 90 seconds
+of silence fails the request with a clear message instead of an endless spinner.
+
+**Packaging.** `npm run pack:linux` / `pack:win` produce unpacked builds;
+`npm run dist:linux` produces an **AppImage** and a **deb** (verified metadata,
+dependencies, desktop entry, icons and `StartupWMClass`), and `dist:win` produces
+the **NSIS** installer. `npm run smoke` boots the built app and asserts both windows
+render, the preload bridge is present, and the renderer logged no errors.
+
 ## Delivery stages
 
 - **Stage A (done):** desktop shell, global shortcut, chat, screen
@@ -117,9 +147,9 @@ an area of the codebase*, *Turn notes into action items*, and *Review a diff*.
   verification, permissions, cancellation, recovery).
 - **Stage C (done):** personal memory, local document understanding, first
   integrations.
-- **Stage D (in progress):** coding mode, meeting intelligence, reusable
-  workflows. ← current
-- **Stage E:** performance, security hardening, accessibility, packaging, release.
+- **Stage D (done):** coding mode, meeting intelligence, reusable workflows.
+- **Stage E (done):** performance, security hardening, accessibility, packaging,
+  release automation.
 
 ## Known limitations
 
@@ -138,3 +168,10 @@ an area of the codebase*, *Turn notes into action items*, and *Review a diff*.
   can be lost; there is no live in-call overlay.
 - GitHub is the only integration so far.
 - Global shortcut registration fails silently if the OS already reserves it.
+- Windows installers must be built on Windows: electron-builder needs Wine to run
+  NSIS from Linux. The Linux build can still produce `release/win-unpacked` (a real
+  `Klyro.exe` with correct version resources and icon) for inspection.
+- macOS is not a supported release target; the `dmg` target exists but is untested.
+- The smoke check needs a display; on CI it runs under `xvfb-run`.
+- Code signing and notarisation are not configured — Windows SmartScreen and
+  Linux users will see an unsigned build.
