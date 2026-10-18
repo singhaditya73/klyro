@@ -17,6 +17,7 @@ import { renderTemplate } from '../knowledge/code-files'
 import { formatLocation } from '../knowledge/locations'
 import { logger } from '../logger'
 import { getProvider } from '../providers'
+import { resolveRoute } from '../providers/routing'
 import { wrapUntrusted } from '../security/untrusted'
 import { JsonStore } from '../store/json-store'
 import { withIdleTimeout } from '../util/idle-timeout'
@@ -206,7 +207,7 @@ const WORKFLOW_TOOLS: Record<WorkflowStepKind, WorkflowTool> = {
       const settings = settingsDomain.get()
       const providerId = settings.activeProvider
       const provider = getProvider(providerId)
-      const config = settings.providers[providerId]
+      const route = resolveRoute({ settings, apiKey: settingsDomain.apiKey(providerId), purpose: 'chat' })
       const knowledge = buildKnowledgeContext(context.rendered)
 
       context.note(context.step.name, context.rendered)
@@ -214,9 +215,9 @@ const WORKFLOW_TOOLS: Record<WorkflowStepKind, WorkflowTool> = {
       let text = ''
       for await (const delta of withIdleTimeout(
         provider.chat({
-          model: config.model,
-          baseUrl: config.baseUrl,
-          apiKey: settingsDomain.apiKey(providerId),
+          model: route.model,
+          baseUrl: route.baseUrl,
+          apiKey: route.apiKey,
           system: [settings.systemPrompt, knowledge.block].filter(Boolean).join('\n\n'),
           turns: [{ role: 'user', text: context.rendered }],
           temperature: 0.3,
@@ -233,7 +234,7 @@ const WORKFLOW_TOOLS: Record<WorkflowStepKind, WorkflowTool> = {
         role: 'assistant',
         content: text,
         createdAt: Date.now(),
-        model: config.model
+        model: route.model
       })
       return text
     }

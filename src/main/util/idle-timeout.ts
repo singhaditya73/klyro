@@ -45,7 +45,10 @@ export async function* withIdleTimeout<T>(
       let timer: ReturnType<typeof setTimeout> | undefined
       const stalled = new Promise<never>((_resolve, reject) => {
         timer = setTimeout(() => {
-          options.onStall?.()
+          // Abort the request *after* this failure has been delivered. Aborting
+          // first would usually settle the upstream read too, and the abort error
+          // can win the race — making a dead provider look like a user cancel.
+          queueMicrotask(() => options.onStall?.())
           reject(new StreamStalledError(idleMs))
         }, idleMs)
       })

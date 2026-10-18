@@ -36,6 +36,11 @@ const { conversations } = await import('./conversations')
 const { github } = await import('./integrations')
 const { documents } = await import('./documents')
 const { memory } = await import('./memory')
+const { secrets } = await import('../security/secrets')
+
+// Provider routing refuses to call a hosted provider with no key; these tests
+// exercise the engine, so configure a key rather than weakening the guard.
+secrets.set('openai', 'test-key')
 
 afterEach(() => {
   vi.unstubAllGlobals()

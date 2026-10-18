@@ -167,6 +167,13 @@ export function SettingsPanel({ onClose }: Props) {
                   </button>
                   {testing[provider.id] ? <span className="muted">{testing[provider.id]}</span> : null}
                 </div>
+
+                {settings.activeProvider === provider.id && provider.vision === 'no' ? (
+                  <p className="agent__warning">
+                    “{config.model || 'This model'}” cannot read images, so the agent cannot run on it. Pick a
+                    vision-capable model above.
+                  </p>
+                ) : null}
               </div>
             )
           })}

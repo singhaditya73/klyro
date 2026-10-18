@@ -4,8 +4,11 @@ import type { ChatStreamEvent, Conversation, ResponseStyle, SendChatRequest } fr
 import { IPC } from '@shared/ipc'
 import { logger } from '../logger'
 import { getProvider } from '../providers'
+import { DEFAULT_PROVIDERS } from '../providers/defaults'
+import { classifyThrown, toUserMessage } from '../providers/errors'
+import { resolveRoute } from '../providers/routing'
 import type { ChatTurn } from '../providers/types'
-import { withIdleTimeout } from '../util/idle-timeout'
+import { StreamStalledError, withIdleTimeout } from '../util/idle-timeout'
 import { conversations } from './conversations'
 import { buildKnowledgeContext } from './context'
 import { memory } from './memory'
@@ -45,8 +48,8 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
   const settings = settingsDomain.get()
   const providerId = settings.activeProvider
   const provider = getProvider(providerId)
-  const apiKey = settingsDomain.apiKey(providerId)
-  const providerSettings = settings.providers[providerId]
+  // Recorded on the message even when the request never reaches the provider.
+  const displayModel = (settings.providers[providerId]?.model ?? '').trim() || DEFAULT_PROVIDERS[providerId].model
 
   let conversation = conversations.get(request.conversationId)
   if (!conversation) conversation = conversations.create()
@@ -66,14 +69,19 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
     role: 'assistant',
     content: '',
     createdAt: Date.now(),
-    model: providerSettings.model
+    model: displayModel
   })
+
+  const abort = new AbortController()
+  // Registered before anything is emitted, so a Stop pressed the instant the
+  // answer starts is never ignored.
+  controller = abort
 
   emit({
     type: 'start',
     conversationId,
     messageId: assistantId,
-    model: providerSettings.model,
+    model: displayModel,
     provider: providerId
   })
 
@@ -82,16 +90,17 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
   if (knowledge.memories || knowledge.documents) {
     emit({ type: 'context', messageId: assistantId, memories: knowledge.memories, documents: knowledge.documents })
   }
-  const abort = new AbortController()
-  controller = abort
   let text = ''
 
   try {
+    // Resolved here so a missing key or an empty model fails with a message that
+    // says what to fix, rather than a 401 from the endpoint.
+    const route = resolveRoute({ settings, apiKey: settingsDomain.apiKey(providerId), purpose: 'chat' })
     for await (const delta of withIdleTimeout(
       provider.chat({
-        model: providerSettings.model,
-        baseUrl: providerSettings.baseUrl,
-        apiKey,
+        model: route.model,
+        baseUrl: route.baseUrl,
+        apiKey: route.apiKey,
         system: [settings.systemPrompt + styleSuffix(settings.responseStyle), knowledge.block]
           .filter(Boolean)
           .join('\n\n'),
@@ -113,14 +122,22 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
         .catch((error) => logger.warn('Memory extraction failed', (error as Error).message))
     }
   } catch (error) {
-    const aborted = abort.signal.aborted
+    // A stalled stream aborts the request too, so check the stall *before* the
+    // abort flag — otherwise a dead provider looks like the user pressed Stop.
+    const stalled = error instanceof StreamStalledError
+    const aborted = !stalled && abort.signal.aborted
     if (aborted) {
       conversations.updateMessage(conversationId, assistantId, { content: text || '(cancelled)' })
       emit({ type: 'done', messageId: assistantId })
     } else {
-      const message = (error as Error).message || 'Request failed'
+      const message = stalled ? error.message : toUserMessage(classifyThrown(error, { provider: providerId }))
       logger.error('Chat failed', message)
-      conversations.updateMessage(conversationId, assistantId, { content: text || message, error: true })
+      // Keep whatever streamed, but never leave a truncated answer unexplained.
+      const partial = text.trimEnd()
+      conversations.updateMessage(conversationId, assistantId, {
+        content: partial ? `${partial}\n\n${message}` : message,
+        error: true
+      })
       emit({ type: 'error', messageId: assistantId, message })
     }
   } finally {

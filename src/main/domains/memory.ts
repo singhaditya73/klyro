@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { KnowledgeHit, MemoryDraft, MemoryRecord, MemorySource } from '@shared/types'
 import { logger } from '../logger'
 import { getProvider } from '../providers'
+import { resolveRoute } from '../providers/routing'
 import { bm25Search, jaccard } from '../knowledge/retrieval'
 import { JsonStore } from '../store/json-store'
 import { settingsDomain } from './settings'
@@ -172,7 +173,7 @@ class MemoryDomain {
     const settings = settingsDomain.get()
     const providerId = settings.activeProvider
     const provider = getProvider(providerId)
-    const config = settings.providers[providerId]
+    const route = resolveRoute({ settings, apiKey: settingsDomain.apiKey(providerId), purpose: 'knowledge' })
 
     const prompt = [
       'Extract durable, personal facts worth remembering about the user from this exchange.',
@@ -188,9 +189,9 @@ class MemoryDomain {
     let output = ''
     try {
       for await (const delta of provider.chat({
-        model: config.model,
-        baseUrl: config.baseUrl,
-        apiKey: settingsDomain.apiKey(providerId),
+        model: route.model,
+        baseUrl: route.baseUrl,
+        apiKey: route.apiKey,
         system: 'You maintain a personal memory store. Respond with JSON only.',
         turns: [{ role: 'user', text: prompt }],
         temperature: 0,

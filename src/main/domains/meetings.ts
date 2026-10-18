@@ -4,6 +4,7 @@ import { parseMeetingSummary } from '../knowledge/code-files'
 import { appendSegment } from '../knowledge/transcript'
 import { logger } from '../logger'
 import { getProvider } from '../providers'
+import { resolveRoute } from '../providers/routing'
 import { wrapUntrusted } from '../security/untrusted'
 import { JsonStore } from '../store/json-store'
 import { withIdleTimeout } from '../util/idle-timeout'
@@ -153,7 +154,7 @@ class MeetingDomain {
     const settings = settingsDomain.get()
     const providerId = settings.activeProvider
     const provider = getProvider(providerId)
-    const config = settings.providers[providerId]
+    const route = resolveRoute({ settings, apiKey: settingsDomain.apiKey(providerId), purpose: 'knowledge' })
 
     const prompt = [
       'Summarize this meeting transcript for someone who was not there.',
@@ -167,9 +168,9 @@ class MeetingDomain {
     let output = ''
     for await (const delta of withIdleTimeout(
       provider.chat({
-        model: config.model,
-        baseUrl: config.baseUrl,
-        apiKey: settingsDomain.apiKey(providerId),
+        model: route.model,
+        baseUrl: route.baseUrl,
+        apiKey: route.apiKey,
         system: 'You write accurate, neutral meeting summaries. Respond with JSON only.',
         turns: [{ role: 'user', text: prompt }],
         temperature: 0.2,

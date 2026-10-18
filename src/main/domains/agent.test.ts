@@ -96,11 +96,13 @@ vi.mock('./settings', () => ({
       agentMaxSteps: 5,
       systemPrompt: ''
     }),
-    apiKey: () => null
+    // A configured app: routing refuses to call a hosted provider without a key.
+    apiKey: () => 'test-key'
   }
 }))
 
-const { AgentRunner, categorizeError } = await import('./agent')
+const { AgentRunner, categorizeError, isPlanRetryable } = await import('./agent')
+const { ProviderError } = await import('../providers/errors')
 
 const click = JSON.stringify({ type: 'click', x: 10, y: 20, reason: 'press the button' })
 const done = (summary: string): string => JSON.stringify({ type: 'done', summary })
@@ -246,5 +248,24 @@ describe('categorizeError', () => {
     expect(categorizeError(new Error('429 Too Many Requests'))).toBe('rate-limit')
     expect(categorizeError(Object.assign(new Error('boom'), { name: 'MalformedActionError' }))).toBe('malformed-action')
     expect(categorizeError(new Error('socket hang up'))).toBe('model')
+  })
+
+  it('prefers the provider taxonomy over message matching', () => {
+    expect(categorizeError(new ProviderError('slow down', { kind: 'rate_limit' }))).toBe('rate-limit')
+    expect(categorizeError(new ProviderError('out of credit', { kind: 'quota' }))).toBe('rate-limit')
+    expect(categorizeError(new ProviderError('stalled', { kind: 'timeout' }))).toBe('timeout')
+    expect(categorizeError(new ProviderError('stopped', { kind: 'cancelled' }))).toBe('cancelled')
+    expect(categorizeError(new ProviderError('bad key', { kind: 'auth' }))).toBe('model')
+  })
+
+  it('only re-plans when re-asking could plausibly help', () => {
+    expect(isPlanRetryable(new ProviderError('busy', { kind: 'rate_limit' }))).toBe(true)
+    expect(isPlanRetryable(new ProviderError('broken', { kind: 'server' }))).toBe(true)
+    expect(isPlanRetryable(new ProviderError('bad key', { kind: 'auth' }))).toBe(false)
+    expect(isPlanRetryable(new ProviderError('no such model', { kind: 'not_found' }))).toBe(false)
+    expect(isPlanRetryable(new ProviderError('stopped', { kind: 'cancelled' }))).toBe(false)
+    // Unclassified errors keep the previous behaviour.
+    expect(isPlanRetryable(new Error('socket hang up'))).toBe(true)
+    expect(isPlanRetryable(Object.assign(new Error('no json'), { name: 'MalformedActionError' }))).toBe(true)
   })
 })

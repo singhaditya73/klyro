@@ -2,6 +2,7 @@ import type { AppSettings, ProviderId, ProviderStatus } from '@shared/types'
 import { JsonStore } from '../store/json-store'
 import { secrets } from '../security/secrets'
 import { DEFAULT_PROVIDERS, PROVIDER_IDS, PROVIDER_META } from '../providers/defaults'
+import { visionSupport } from '../providers/routing'
 
 export const DEFAULT_SETTINGS: AppSettings = {
   activeProvider: 'openai',
@@ -74,14 +75,18 @@ class SettingsDomain {
 
   statuses(): ProviderStatus[] {
     const current = this.get()
-    return PROVIDER_IDS.map((id) => ({
-      id,
-      label: PROVIDER_META[id].label,
-      requiresKey: PROVIDER_META[id].requiresKey,
-      hasKey: secrets.has(id),
-      model: current.providers[id]?.model ?? '',
-      baseUrl: current.providers[id]?.baseUrl ?? ''
-    }))
+    return PROVIDER_IDS.map((id) => {
+      const model = (current.providers[id]?.model ?? '').trim() || DEFAULT_PROVIDERS[id].model
+      return {
+        id,
+        label: PROVIDER_META[id].label,
+        requiresKey: PROVIDER_META[id].requiresKey,
+        hasKey: secrets.has(id),
+        model,
+        baseUrl: current.providers[id]?.baseUrl ?? '',
+        vision: visionSupport(id, model)
+      }
+    })
   }
 }
 

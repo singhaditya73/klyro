@@ -14,8 +14,11 @@ import type {
 } from '@shared/types'
 import { logger } from '../logger'
 import { getProvider } from '../providers'
+import { isProviderError } from '../providers/errors'
+import { assertVisionCapable, resolveRoute } from '../providers/routing'
 import type { ChatTurn } from '../providers/types'
 import { JsonStore } from '../store/json-store'
+import { withIdleTimeout } from '../util/idle-timeout'
 import { coerceAction, describeAction, extractJson, mapCoords } from './agent-plan'
 import { classifyAction, expectsScreenChange, validateAgentAction, type RiskAssessment } from './agent-policy'
 import { assessActionOutcome, frameDiffRatio, type PixelFrame } from './agent-verify'
@@ -82,15 +85,42 @@ function sleep(ms: number): Promise<void> {
 
 /** Bucket a thrown error so the UI and logs can react sensibly. */
 export function categorizeError(error: unknown): AgentErrorCategory {
+  if (error instanceof InputBackendError) return 'input-backend'
   const name = (error as { name?: string })?.name ?? ''
+  if (name === 'MalformedActionError') return 'malformed-action'
+
+  // Providers report *why* a call failed, so trust that over guessing from the
+  // message text (which used to be the only signal available).
+  if (isProviderError(error)) {
+    switch (error.kind) {
+      case 'rate_limit':
+      case 'quota':
+        return 'rate-limit'
+      case 'timeout':
+        return 'timeout'
+      case 'cancelled':
+        return 'cancelled'
+      default:
+        return 'model'
+    }
+  }
+
   const message = ((error as Error)?.message ?? String(error)).toLowerCase()
   if (name === 'StreamStalledError' || /timed out|timeout|no data for/.test(message)) return 'timeout'
   if (/429|rate limit|too many requests|quota/.test(message)) return 'rate-limit'
-  if (name === 'MalformedActionError' || /did not return json|non-object|unsupported action type|malformed/.test(message)) {
-    return 'malformed-action'
-  }
-  if (error instanceof InputBackendError) return 'input-backend'
+  if (/did not return json|non-object|unsupported action type|malformed/.test(message)) return 'malformed-action'
   return 'model'
+}
+
+/**
+ * Whether re-asking the model could plausibly help. A classified provider error
+ * decides for itself, so a bad key or a missing model fails once instead of
+ * burning three model calls on the same rejection.
+ */
+export function isPlanRetryable(error: unknown, category: AgentErrorCategory = categorizeError(error)): boolean {
+  if (category === 'malformed-action') return true
+  if (isProviderError(error)) return error.retryable
+  return category === 'model' || category === 'timeout' || category === 'rate-limit'
 }
 
 interface PendingConfirmation {
@@ -261,7 +291,8 @@ export class AgentRunner {
     const settings = settingsDomain.get()
     const providerId = settings.activeProvider
     const provider = getProvider(providerId)
-    const providerSettings = settings.providers[providerId]
+    const route = resolveRoute({ settings, apiKey: settingsDomain.apiKey(providerId), purpose: 'agent' })
+    assertVisionCapable(route)
 
     const prompt = [
       `Goal (trusted, from the user): ${handle.goal}`,
@@ -279,17 +310,30 @@ export class AgentRunner {
     ]
 
     let text = ''
-    for await (const delta of provider.chat({
-      model: providerSettings.model,
-      baseUrl: providerSettings.baseUrl,
-      apiKey: settingsDomain.apiKey(providerId),
-      system: PLANNER_SYSTEM,
-      turns,
-      temperature: 0.1,
-      maxTokens: 700,
-      signal: handle.controller.signal
-    })) {
-      text += delta
+    // A stalled provider would otherwise park the whole run: fail the *call*, not
+    // the task, so the planner's bounded retry can try again.
+    const requestAbort = new AbortController()
+    const forwardAbort = (): void => requestAbort.abort()
+    if (handle.controller.signal.aborted) requestAbort.abort()
+    else handle.controller.signal.addEventListener('abort', forwardAbort, { once: true })
+    try {
+      for await (const delta of withIdleTimeout(
+        provider.chat({
+          model: route.model,
+          baseUrl: route.baseUrl,
+          apiKey: route.apiKey,
+          system: PLANNER_SYSTEM,
+          turns,
+          temperature: 0.1,
+          maxTokens: 700,
+          signal: requestAbort.signal
+        }),
+        { onStall: () => requestAbort.abort() }
+      )) {
+        text += delta
+      }
+    } finally {
+      handle.controller.signal.removeEventListener('abort', forwardAbort)
     }
 
     const action = coerceAction(extractJson(text))
@@ -315,7 +359,7 @@ export class AgentRunner {
         lastError = error
         if (handle.controller.signal.aborted) throw error
         const category = categorizeError(error)
-        const retryable = category === 'malformed-action' || category === 'model' || category === 'rate-limit' || category === 'timeout'
+        const retryable = isPlanRetryable(error, category)
         if (!retryable || attempt >= MAX_PLAN_ATTEMPTS) break
         // Back off harder for rate limits; malformed output just needs a re-ask.
         await sleep(category === 'rate-limit' ? 2000 * attempt : category === 'malformed-action' ? 0 : 600 * attempt)

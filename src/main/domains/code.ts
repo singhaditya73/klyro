@@ -2,6 +2,7 @@ import type { CodeActionKind, CodeAssistRequest, CodeAssistResult } from '@share
 import { detectLanguage } from '../knowledge/code-files'
 import { formatLocation } from '../knowledge/locations'
 import { getProvider } from '../providers'
+import { resolveRoute } from '../providers/routing'
 import { wrapUntrusted } from '../security/untrusted'
 import { withIdleTimeout } from '../util/idle-timeout'
 import { documents } from './documents'
@@ -26,14 +27,14 @@ class CodeDomain {
     const settings = settingsDomain.get()
     const providerId = settings.activeProvider
     const provider = getProvider(providerId)
-    const config = settings.providers[providerId]
+    const route = resolveRoute({ settings, apiKey: settingsDomain.apiKey(providerId), purpose: 'code' })
 
     let text = ''
     for await (const delta of withIdleTimeout(
       provider.chat({
-        model: config.model,
-        baseUrl: config.baseUrl,
-        apiKey: settingsDomain.apiKey(providerId),
+        model: route.model,
+        baseUrl: route.baseUrl,
+        apiKey: route.apiKey,
         system,
         turns: [{ role: 'user', text: prompt }],
         temperature: 0.2,

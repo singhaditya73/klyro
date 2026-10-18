@@ -32,6 +32,9 @@ export interface AppSettings {
   allowUnencryptedSecrets: boolean
 }
 
+/** Whether a model can read images; `unknown` is honest for local/custom endpoints. */
+export type VisionSupport = 'yes' | 'no' | 'unknown'
+
 export interface ProviderStatus {
   id: ProviderId
   label: string
@@ -39,6 +42,8 @@ export interface ProviderStatus {
   hasKey: boolean
   model: string
   baseUrl: string
+  /** The selected model's known image support, for the agent guardrail. */
+  vision?: VisionSupport
 }
 
 export interface ProviderTestResult {

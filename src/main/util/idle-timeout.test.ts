@@ -52,6 +52,31 @@ describe('withIdleTimeout', () => {
     }).rejects.toThrow('boom 1')
   })
 
+  it('reports a stall even when aborting the request fails the read immediately', async () => {
+    // This is the shape a real provider has: aborting the fetch rejects the
+    // pending read at once. The stall error must still be the one that surfaces,
+    // otherwise a dead provider is reported as a user cancellation.
+    const controller = new AbortController()
+    const source = (async function* () {
+      yield 'first'
+      await new Promise((_resolve, reject) => {
+        controller.signal.addEventListener('abort', () =>
+          reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+        )
+      })
+    })()
+
+    let thrown: unknown
+    try {
+      for await (const _chunk of withIdleTimeout(source, { idleMs: 20, onStall: () => controller.abort() })) {
+        // drain
+      }
+    } catch (error) {
+      thrown = error
+    }
+    expect(thrown).toBeInstanceOf(StreamStalledError)
+  })
+
   it('closes the upstream iterator when the consumer stops early', async () => {
     let closed = false
     const source = (async function* () {

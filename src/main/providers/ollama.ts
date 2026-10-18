@@ -1,5 +1,9 @@
 import type { ChatOptions, Provider, TestOptions } from './types'
-import { errorText, parseDataUrl, rawLines, trimSlash } from './http'
+import { parseDataUrl, rawLines, trimSlash } from './http'
+import { classifyThrown, describeFailure } from './errors'
+import { openResponse, responseDetail } from './request'
+
+const PROVIDER = 'ollama'
 
 /** Local models via Ollama's native API (no API key required). */
 export const ollama: Provider = {
@@ -17,28 +21,35 @@ export const ollama: Provider = {
       }))
     ]
 
-    const res = await fetch(`${trimSlash(options.baseUrl)}/api/chat`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: options.model,
-        stream: true,
-        messages,
-        options: { temperature: options.temperature ?? 0.7 }
-      }),
-      signal: options.signal
-    })
-    if (!res.ok) throw new Error(await errorText(res))
-    for await (const line of rawLines(res)) {
-      let json: any
-      try {
-        json = JSON.parse(line)
-      } catch {
-        continue
+    const res = await openResponse(
+      `${trimSlash(options.baseUrl)}/api/chat`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model: options.model,
+          stream: true,
+          messages,
+          options: { temperature: options.temperature ?? 0.7 }
+        }),
+        signal: options.signal
+      },
+      { provider: PROVIDER, signal: options.signal }
+    )
+    try {
+      for await (const line of rawLines(res)) {
+        let json: any
+        try {
+          json = JSON.parse(line)
+        } catch {
+          continue
+        }
+        const content = json?.message?.content
+        if (typeof content === 'string' && content.length > 0) yield content
+        if (json?.done) return
       }
-      const content = json?.message?.content
-      if (typeof content === 'string' && content.length > 0) yield content
-      if (json?.done) return
+    } catch (error) {
+      throw classifyThrown(error, { provider: PROVIDER })
     }
   },
 
@@ -46,7 +57,7 @@ export const ollama: Provider = {
     const started = Date.now()
     try {
       const res = await fetch(`${trimSlash(options.baseUrl)}/api/tags`)
-      if (!res.ok) return { ok: false, detail: await errorText(res) }
+      if (!res.ok) return { ok: false, detail: await responseDetail(res, PROVIDER) }
       const json = (await res.json()) as { models?: { name: string }[] }
       const names = (json.models ?? []).map((m) => m.name).slice(0, 5)
       return {
@@ -55,7 +66,7 @@ export const ollama: Provider = {
         latencyMs: Date.now() - started
       }
     } catch (error) {
-      return { ok: false, detail: (error as Error).message }
+      return { ok: false, detail: describeFailure(error, PROVIDER) }
     }
   }
 }

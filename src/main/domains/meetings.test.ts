@@ -25,6 +25,10 @@ vi.mock('../providers', () => ({
 }))
 
 const { meetings, TRANSCRIPTION_GAP } = await import('./meetings')
+const { secrets } = await import('../security/secrets')
+
+// Summarizing goes through provider routing, which needs a configured key.
+secrets.set('openai', 'test-key')
 
 describe('live transcript', () => {
   it('accumulates chunk transcriptions and drops silence artefacts', () => {
