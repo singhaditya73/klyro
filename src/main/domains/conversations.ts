@@ -81,6 +81,10 @@ class ConversationsDomain {
     })
   }
 
+  clear(): void {
+    this.store.set({ conversations: [] })
+  }
+
   search(query: string): ConversationSummary[] {
     const needle = query.trim().toLowerCase()
     if (!needle) return this.list()

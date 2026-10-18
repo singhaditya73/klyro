@@ -8,9 +8,9 @@ const userData = mkdtempSync(join(tmpdir(), 'klyro-github-'))
 vi.mock('electron', () => ({
   app: { getPath: () => userData },
   safeStorage: {
-    isEncryptionAvailable: () => false,
-    encryptString: (value: string) => Buffer.from(value, 'utf8'),
-    decryptString: (value: Buffer) => value.toString('utf8')
+    isEncryptionAvailable: () => true,
+    encryptString: (value: string) => Buffer.from(`enc:${value}`, 'utf8'),
+    decryptString: (value: Buffer) => value.toString('utf8').replace(/^enc:/, '')
   }
 }))
 

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { detectLanguage, isIndexableFile, parseMeetingSummary, renderTemplate, shouldSkipDirectory } from './code-files'
+import {
+  detectLanguage,
+  isIndexableFile,
+  isSecretFile,
+  parseMeetingSummary,
+  renderTemplate,
+  shouldSkipDirectory
+} from './code-files'
 
 describe('isIndexableFile', () => {
   it('accepts source files', () => {
@@ -25,6 +32,29 @@ describe('isIndexableFile', () => {
 
   it('rejects extensionless files that are not tooling entry points', () => {
     expect(isIndexableFile('LICENSE', 100)).toBe(false)
+  })
+
+  it('excludes obvious secret and credential files from indexing', () => {
+    expect(isIndexableFile('.env', 100)).toBe(false)
+    expect(isIndexableFile('.env.local', 100)).toBe(false)
+    expect(isIndexableFile('certs/server.pem', 100)).toBe(false)
+    expect(isIndexableFile('deploy/id_rsa', 100)).toBe(false)
+    expect(isIndexableFile('secrets.yaml', 100)).toBe(false)
+    expect(isIndexableFile('credentials.json', 100)).toBe(false)
+    expect(isIndexableFile('.npmrc', 100)).toBe(false)
+    // Non-secret lookalikes stay indexable.
+    expect(isIndexableFile('src/environment.ts', 100)).toBe(true)
+    expect(isIndexableFile('docs/secrets-policy.md', 100)).toBe(true)
+  })
+})
+
+describe('isSecretFile', () => {
+  it('flags private key material but not public certificates', () => {
+    expect(isSecretFile('.env.production')).toBe(true)
+    expect(isSecretFile('id_ed25519')).toBe(true)
+    expect(isSecretFile('client.p12')).toBe(true)
+    expect(isSecretFile('server.crt')).toBe(false)
+    expect(isSecretFile('index.ts')).toBe(false)
   })
 })
 

@@ -13,6 +13,7 @@ import type {
 import { renderTemplate } from '../knowledge/code-files'
 import { logger } from '../logger'
 import { getProvider } from '../providers'
+import { wrapUntrusted } from '../security/untrusted'
 import { JsonStore } from '../store/json-store'
 import { withIdleTimeout } from '../util/idle-timeout'
 import { buildKnowledgeContext } from './context'
@@ -184,14 +185,15 @@ class WorkflowDomain {
           )
           .join('\n')
       : '(no open issues)'
+    const wrapped = wrapUntrusted(`github issues for ${target}`, digest)
 
     conversations.addMessage(conversationId, {
       id: randomUUID(),
       role: 'user',
-      content: `▶ ${label}\n\nFetched from github.com/${target} (data, not a request):\n${digest}`.slice(0, 40000),
+      content: `▶ ${label}\n\nFetched from github.com/${target}:\n${wrapped}`.slice(0, 40000),
       createdAt: Date.now()
     })
-    return digest
+    return wrapped
   }
 
   async run(id: string, input: string): Promise<WorkflowRunResult> {

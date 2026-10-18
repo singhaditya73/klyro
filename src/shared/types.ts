@@ -28,6 +28,8 @@ export interface AppSettings {
   memoryRecallCount: number
   knowledgeEnabled: boolean
   documentRecallCount: number
+  /** Explicit opt-in to unencrypted credential storage when no keychain exists. */
+  allowUnencryptedSecrets: boolean
 }
 
 export interface ProviderStatus {
@@ -405,6 +407,29 @@ export interface MeetingDraft {
   segments: MeetingSegment[]
 }
 
+/* ---------- Security, privacy & data ---------- */
+
+export interface SecurityStatus {
+  encryptionAvailable: boolean
+  plaintextAllowed: boolean
+  hasPlaintextSecrets: boolean
+}
+
+export type DataScope = 'conversations' | 'memory' | 'documents' | 'project' | 'meetings' | 'agentTasks'
+
+export interface DataSummary {
+  conversations: number
+  memories: number
+  documents: number
+  projectFiles: number
+  meetings: number
+  agentTasks: number
+  credentials: number
+  activeProvider: ProviderId
+  /** True when the active provider keeps requests on this machine. */
+  activeProviderIsLocal: boolean
+}
+
 /* ---------- Workflows ---------- */
 
 export type WorkflowStep =
@@ -471,6 +496,9 @@ export interface KlyroApi {
 
   checkPermissions(): Promise<PermissionState>
   hideOverlay(): Promise<void>
+  securityStatus(): Promise<SecurityStatus>
+  dataSummary(): Promise<DataSummary>
+  dataClear(scope: DataScope): Promise<DataSummary>
 
   getAutomationCapabilities(): Promise<AutomationCapabilities>
   runAgent(request: AgentRunRequest): Promise<void>

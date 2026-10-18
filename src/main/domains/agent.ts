@@ -174,6 +174,11 @@ export class AgentRunner {
     return this.store.get().tasks
   }
 
+  /** Deletes recorded task history. A task that is currently running keeps going. */
+  clearTasks(): void {
+    this.store.set({ tasks: [] })
+  }
+
   confirm(runId: string, approved: boolean): void {
     if (!this.handle || this.handle.runId !== runId) return
     const pending = this.pendingConfirmation

@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react'
-import type { AppSettings, AutomationCapabilities, PermissionState, ProviderId, ProviderStatus } from '@shared/types'
+import type {
+  AppSettings,
+  AutomationCapabilities,
+  DataScope,
+  DataSummary,
+  PermissionState,
+  ProviderId,
+  ProviderStatus,
+  SecurityStatus
+} from '@shared/types'
 import { useModal } from '../hooks/useModal'
 
 interface Props {
@@ -12,8 +21,11 @@ export function SettingsPanel({ onClose }: Props) {
   const [providers, setProviders] = useState<ProviderStatus[]>([])
   const [permissions, setPermissions] = useState<PermissionState | null>(null)
   const [automation, setAutomation] = useState<AutomationCapabilities | null>(null)
+  const [security, setSecurity] = useState<SecurityStatus | null>(null)
+  const [data, setData] = useState<DataSummary | null>(null)
   const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({})
   const [testing, setTesting] = useState<Record<string, string>>({})
+  const [keyError, setKeyError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -23,6 +35,8 @@ export function SettingsPanel({ onClose }: Props) {
         setProviders(await window.klyro.listProviders())
         setPermissions(await window.klyro.checkPermissions())
         setAutomation(await window.klyro.getAutomationCapabilities())
+        setSecurity(await window.klyro.securityStatus())
+        setData(await window.klyro.dataSummary())
       } catch (error) {
         setLoadError((error as Error).message)
       }
@@ -42,12 +56,23 @@ export function SettingsPanel({ onClose }: Props) {
   async function saveKey(id: ProviderId): Promise<void> {
     const draft = keyDrafts[id]
     if (draft === undefined) return
-    setProviders(await window.klyro.setApiKey(id, draft))
-    setKeyDrafts((prev) => ({ ...prev, [id]: '' }))
+    setKeyError(null)
+    try {
+      setProviders(await window.klyro.setApiKey(id, draft))
+      setKeyDrafts((prev) => ({ ...prev, [id]: '' }))
+      setSecurity(await window.klyro.securityStatus())
+    } catch (error) {
+      setKeyError((error as Error).message)
+    }
   }
 
   async function clearKey(id: ProviderId): Promise<void> {
     setProviders(await window.klyro.clearApiKey(id))
+    setSecurity(await window.klyro.securityStatus())
+  }
+
+  async function clearScope(scope: DataScope): Promise<void> {
+    setData(await window.klyro.dataClear(scope))
   }
 
   async function test(id: ProviderId): Promise<void> {
@@ -75,6 +100,7 @@ export function SettingsPanel({ onClose }: Props) {
             Choose a provider, paste your API key, and set a model. Keys are stored encrypted on this device and
             never sent to the page.
           </p>
+          {keyError ? <div className="agent__warning">{keyError}</div> : null}
           {providers.map((provider) => {
             const config = settings.providers[provider.id]
             return (
@@ -313,6 +339,86 @@ export function SettingsPanel({ onClose }: Props) {
             />
             Use local documents to ground answers
           </label>
+        </section>
+
+        <section>
+          <h3>Security &amp; data</h3>
+          {security ? (
+            <div className="permissions">
+              <h4>Credential storage</h4>
+              <div>
+                OS keychain:{' '}
+                <strong>{security.encryptionAvailable ? 'available (keys encrypted)' : 'unavailable'}</strong>
+              </div>
+              {security.hasPlaintextSecrets ? (
+                <div className="muted">
+                  Some saved keys are stored unencrypted on disk. Install a keyring (gnome-keyring / kwallet) to
+                  protect them, then re-save the key.
+                </div>
+              ) : null}
+              {!security.encryptionAvailable ? (
+                <label className="checkbox">
+                  <input
+                    type="checkbox"
+                    checked={settings.allowUnencryptedSecrets}
+                    onChange={(event) => void patch({ allowUnencryptedSecrets: event.target.checked })}
+                  />
+                  Allow storing API keys unencrypted on this device (not recommended)
+                </label>
+              ) : null}
+            </div>
+          ) : null}
+
+          {data ? (
+            <div className="permissions">
+              <h4>What is stored</h4>
+              <p className="muted">
+                {data.activeProviderIsLocal
+                  ? `Your active provider (${data.activeProvider}) runs on this device. Prompts are not sent to a third party.`
+                  : `Your active provider (${data.activeProvider}) is a remote service: questions, attachments, and any retrieved excerpts relevant to them are sent to it.`}
+              </p>
+              <div className="data-row">
+                <span>Conversations: {data.conversations}</span>
+                <button className="btn btn--ghost" onClick={() => void clearScope('conversations')}>
+                  Clear
+                </button>
+              </div>
+              <div className="data-row">
+                <span>Memories: {data.memories}</span>
+                <button className="btn btn--ghost" onClick={() => void clearScope('memory')}>
+                  Clear
+                </button>
+              </div>
+              <div className="data-row">
+                <span>Documents: {data.documents}</span>
+                <button className="btn btn--ghost" onClick={() => void clearScope('documents')}>
+                  Clear
+                </button>
+              </div>
+              <div className="data-row">
+                <span>Indexed project files: {data.projectFiles}</span>
+                <button className="btn btn--ghost" onClick={() => void clearScope('project')}>
+                  Clear
+                </button>
+              </div>
+              <div className="data-row">
+                <span>Meetings: {data.meetings}</span>
+                <button className="btn btn--ghost" onClick={() => void clearScope('meetings')}>
+                  Clear
+                </button>
+              </div>
+              <div className="data-row">
+                <span>Agent task history: {data.agentTasks}</span>
+                <button className="btn btn--ghost" onClick={() => void clearScope('agentTasks')}>
+                  Clear
+                </button>
+              </div>
+              <div className="muted">
+                Saved credentials: {data.credentials}. Credentials are removed from Providers above. Screenshots are
+                captured on demand and never written to disk.
+              </div>
+            </div>
+          ) : null}
         </section>
       </>
     )

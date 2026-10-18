@@ -2,10 +2,11 @@ import { app, ipcMain } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import { z } from 'zod'
 import { IPC } from '@shared/ipc'
-import type { AppSettings, ProviderId, SendChatRequest, WorkflowDraft } from '@shared/types'
+import type { AppSettings, DataScope, ProviderId, SendChatRequest, SecurityStatus, WorkflowDraft } from '@shared/types'
 import { logger } from '../logger'
 import { getProvider } from '../providers'
 import { PROVIDER_IDS } from '../providers/defaults'
+import { isTrustedRendererUrl } from '../security/origins'
 import { secrets } from '../security/secrets'
 import { sendChat, abortChat } from './chat'
 import { agentRunner } from './agent'
@@ -15,6 +16,7 @@ import { code } from './code'
 import { integrationStatuses, github } from './integrations'
 import { meetings } from './meetings'
 import { memory } from './memory'
+import { privacy } from './privacy'
 import { project } from './project'
 import { workflows } from './workflows'
 import { transcribeAudio } from './audio'
@@ -25,27 +27,11 @@ import { settingsDomain } from './settings'
 import { registerShortcuts } from './shortcuts'
 import { getOverlayWindow } from './windows'
 
-const allowedOrigins = new Set<string>()
-const devUrl = process.env.ELECTRON_RENDERER_URL
-if (devUrl) {
-  try {
-    allowedOrigins.add(new URL(devUrl).origin)
-  } catch {
-    // ignore malformed dev URL
-  }
-}
-
-/** Reject IPC from any frame that is not our own renderer. */
+/** Reject IPC from any frame that is not Klyro's own renderer. */
 function assertTrusted(event: IpcMainInvokeEvent): void {
   const url = event.senderFrame?.url ?? ''
-  if (url.startsWith('file://')) return
-  if (url === '' || url === 'about:blank') return
-  try {
-    if (allowedOrigins.has(new URL(url).origin)) return
-  } catch {
-    // fall through to rejection
-  }
-  throw new Error(`Rejected IPC from untrusted origin: ${url}`)
+  if (isTrustedRendererUrl(url)) return
+  throw new Error(`Rejected IPC from untrusted origin: ${url || '(none)'}`)
 }
 
 function handle<A extends unknown[], R>(
@@ -59,6 +45,13 @@ function handle<A extends unknown[], R>(
 }
 
 const providerIdSchema = z.enum(['openai', 'anthropic', 'gemini', 'ollama', 'openai-compatible'])
+
+const idSchema = z.string().min(1).max(120)
+const querySchema = z.string().max(500)
+const titleSchema = z.string().max(200)
+const bodySchema = z.string().max(20000)
+const tokenSchema = z.string().max(500)
+const dataScopeSchema = z.enum(['conversations', 'memory', 'documents', 'project', 'meetings', 'agentTasks'])
 
 const settingsPatchSchema = z
   .object({
@@ -75,6 +68,7 @@ const settingsPatchSchema = z
     memoryRecallCount: z.number().int().min(1).max(20).optional(),
     knowledgeEnabled: z.boolean().optional(),
     documentRecallCount: z.number().int().min(1).max(10).optional(),
+    allowUnencryptedSecrets: z.boolean().optional(),
     providers: z
       .record(z.string(), z.object({ baseUrl: z.string().max(500), model: z.string().max(200) }))
       .optional()
@@ -164,15 +158,15 @@ export function registerIpcHandlers(): void {
 
   handle(IPC.providerList, () => settingsDomain.statuses())
 
-  handle(IPC.providerSetKey, (_event, provider: string, key: string) => {
+  handle(IPC.providerSetKey, (_event, provider: unknown, key: unknown) => {
     const id = providerIdSchema.parse(provider) as ProviderId
-    if (typeof key !== 'string' || key.length > 4000) throw new Error('Invalid API key')
+    const value = z.string().max(4000).parse(key)
     if (!PROVIDER_IDS.includes(id)) throw new Error('Unknown provider')
-    secrets.set(id, key)
+    secrets.set(id, value)
     return settingsDomain.statuses()
   })
 
-  handle(IPC.providerClearKey, (_event, provider: string) => {
+  handle(IPC.providerClearKey, (_event, provider: unknown) => {
     const id = providerIdSchema.parse(provider) as ProviderId
     secrets.delete(id)
     return settingsDomain.statuses()
@@ -197,26 +191,46 @@ export function registerIpcHandlers(): void {
   })
 
   handle(IPC.conversationList, () => conversations.list())
-  handle(IPC.conversationGet, (_event, id: string) => conversations.get(String(id)))
+  handle(IPC.conversationGet, (_event, id: unknown) => conversations.get(idSchema.parse(id)))
   handle(IPC.conversationCreate, () => conversations.create())
-  handle(IPC.conversationRename, (_event, id: string, title: string) => {
-    conversations.rename(String(id), String(title))
+  handle(IPC.conversationRename, (_event, id: unknown, title: unknown) => {
+    conversations.rename(idSchema.parse(id), z.string().max(120).parse(title))
   })
-  handle(IPC.conversationDelete, (_event, id: string) => {
-    conversations.remove(String(id))
+  handle(IPC.conversationDelete, (_event, id: unknown) => {
+    conversations.remove(idSchema.parse(id))
   })
-  handle(IPC.conversationSearch, (_event, query: string) => conversations.search(String(query ?? '')))
+  handle(IPC.conversationSearch, (_event, query: unknown) => conversations.search(querySchema.parse(query ?? '')))
 
   handle(IPC.captureSources, () => listCaptureSources())
-  handle(IPC.captureGrab, (_event, sourceId?: string) =>
-    grabScreen(typeof sourceId === 'string' ? sourceId : undefined)
+  handle(IPC.captureGrab, (_event, sourceId?: unknown) =>
+    grabScreen(sourceId === undefined ? undefined : z.string().max(300).parse(sourceId))
   )
 
-  handle(IPC.transcribe, (_event, audio: ArrayBuffer, mimeType: string) =>
-    transcribeAudio(audio, String(mimeType || 'audio/webm')).then((text) => ({ text }))
-  )
+  handle(IPC.transcribe, (_event, audio: unknown, mimeType: unknown) => {
+    const mime = z.string().max(100).regex(/^audio\/[a-z0-9.+-]+$/i).parse(mimeType)
+    const bytes =
+      audio instanceof ArrayBuffer
+        ? new Uint8Array(audio)
+        : ArrayBuffer.isView(audio)
+          ? new Uint8Array(audio.buffer, audio.byteOffset, audio.byteLength)
+          : null
+    if (!bytes) throw new Error('Invalid audio payload')
+    if (bytes.byteLength === 0) throw new Error('The recording is empty')
+    if (bytes.byteLength > 30 * 1024 * 1024) throw new Error('Audio clips are limited to 30 MB')
+    const copy = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+    return transcribeAudio(copy, mime).then((text) => ({ text }))
+  })
 
   handle(IPC.permissionsCheck, () => checkPermissions())
+
+  handle(IPC.securityStatus, (): SecurityStatus => ({
+    encryptionAvailable: secrets.isEncryptionAvailable(),
+    plaintextAllowed: settingsDomain.get().allowUnencryptedSecrets,
+    hasPlaintextSecrets: secrets.hasPlaintextSecrets()
+  }))
+
+  handle(IPC.dataSummary, () => privacy.summary())
+  handle(IPC.dataClear, (_event, scope: unknown) => privacy.clear(dataScopeSchema.parse(scope) as DataScope))
 
   handle(IPC.agentCapabilities, () => automation.capabilities())
   handle(IPC.agentStatus, () => agentRunner.status())
@@ -251,12 +265,12 @@ export function registerIpcHandlers(): void {
     memory.add(memoryDraftSchema.parse(draft))
     return memory.list()
   })
-  handle(IPC.memoryUpdate, (_event, id: string, patch: unknown) => {
-    memory.update(String(id), memoryPatchSchema.parse(patch))
+  handle(IPC.memoryUpdate, (_event, id: unknown, patch: unknown) => {
+    memory.update(idSchema.parse(id), memoryPatchSchema.parse(patch))
     return memory.list()
   })
-  handle(IPC.memoryDelete, (_event, id: string) => {
-    memory.remove(String(id))
+  handle(IPC.memoryDelete, (_event, id: unknown) => {
+    memory.remove(idSchema.parse(id))
     return memory.list()
   })
   handle(IPC.memoryClear, () => {
@@ -266,8 +280,8 @@ export function registerIpcHandlers(): void {
 
   handle(IPC.documentList, () => documents.list())
   handle(IPC.documentImport, () => documents.importFromDialog())
-  handle(IPC.documentDelete, (_event, id: string) => {
-    documents.remove(String(id))
+  handle(IPC.documentDelete, (_event, id: unknown) => {
+    documents.remove(idSchema.parse(id))
     return documents.list()
   })
   handle(IPC.documentClear, () => {
@@ -275,17 +289,15 @@ export function registerIpcHandlers(): void {
     return documents.list()
   })
 
-  handle(IPC.knowledgeSearch, (_event, query: string) => {
-    const value = String(query ?? '').slice(0, 500)
+  handle(IPC.knowledgeSearch, (_event, query: unknown) => {
+    const value = querySchema.parse(query ?? '')
     if (!value.trim()) return []
     return [...memory.search(value), ...documents.search(value)].sort((a, b) => b.score - a.score).slice(0, 40)
   })
 
   handle(IPC.integrationList, () => integrationStatuses())
-  handle(IPC.githubSetToken, (_event, token: string) => {
-    const value = String(token ?? '').trim()
-    if (value.length > 500) throw new Error('Token is too long')
-    github.setToken(value)
+  handle(IPC.githubSetToken, (_event, token: unknown) => {
+    github.setToken(tokenSchema.parse(token ?? '').trim())
     return integrationStatuses()
   })
   handle(IPC.githubClearToken, () => {
@@ -294,13 +306,9 @@ export function registerIpcHandlers(): void {
   })
   handle(IPC.githubAccount, () => github.whoami())
   handle(IPC.githubRepos, () => github.repos(30))
-  handle(IPC.githubIssues, (_event, ownerRepo: string) => github.issues(ownerRepoSchema.parse(ownerRepo), 30))
-  handle(IPC.githubCreateIssue, (_event, ownerRepo: string, title: string, body: string) =>
-    github.createIssue(
-      ownerRepoSchema.parse(ownerRepo),
-      String(title ?? '').slice(0, 200),
-      String(body ?? '').slice(0, 20000)
-    )
+  handle(IPC.githubIssues, (_event, ownerRepo: unknown) => github.issues(ownerRepoSchema.parse(ownerRepo), 30))
+  handle(IPC.githubCreateIssue, (_event, ownerRepo: unknown, title: unknown, body: unknown) =>
+    github.createIssue(ownerRepoSchema.parse(ownerRepo), titleSchema.parse(title ?? ''), bodySchema.parse(body ?? ''))
   )
 
   handle(IPC.projectStatus, () => project.status())
@@ -313,12 +321,12 @@ export function registerIpcHandlers(): void {
     meetings.save(meetingDraftSchema.parse(draft))
     return meetings.list()
   })
-  handle(IPC.meetingSummarize, async (_event, id: string) => {
-    await meetings.summarize(String(id))
+  handle(IPC.meetingSummarize, async (_event, id: unknown) => {
+    await meetings.summarize(idSchema.parse(id))
     return meetings.list()
   })
-  handle(IPC.meetingDelete, (_event, id: string) => {
-    meetings.remove(String(id))
+  handle(IPC.meetingDelete, (_event, id: unknown) => {
+    meetings.remove(idSchema.parse(id))
     return meetings.list()
   })
 
@@ -331,8 +339,8 @@ export function registerIpcHandlers(): void {
     workflows.remove(String(id))
     return workflows.list()
   })
-  handle(IPC.workflowRun, (_event, id: string, input: string) =>
-    workflows.run(String(id), String(input ?? '').slice(0, 40000))
+  handle(IPC.workflowRun, (_event, id: unknown, input: unknown) =>
+    workflows.run(idSchema.parse(id), z.string().max(40000).parse(input ?? ''))
   )
 
   handle(IPC.windowHideOverlay, () => {

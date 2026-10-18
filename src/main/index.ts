@@ -5,6 +5,7 @@ import { secrets } from './security/secrets'
 import { isAllowedPermission, isTrustedRendererUrl, setPackagedRenderer } from './security/origins'
 import { registerIpcHandlers } from './domains/ipc'
 import { registerShortcuts, unregisterShortcuts } from './domains/shortcuts'
+import { settingsDomain } from './domains/settings'
 import { createTray } from './domains/tray'
 import { createMainWindow, createOverlayWindow, showMainWindow } from './domains/windows'
 
@@ -47,6 +48,7 @@ if (!gotLock) {
   app.whenReady().then(() => {
     secrets.init()
     setPackagedRenderer(join(__dirname, '../renderer/index.html'))
+    settingsDomain.get() // applies the plaintext-secrets policy before any key is written
     applyContentSecurityPolicy()
     applyPermissionPolicy()
     registerIpcHandlers()

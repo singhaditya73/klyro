@@ -24,12 +24,34 @@ export function shouldSkipDirectory(name: string): boolean {
   return IGNORED_DIRECTORIES.has(name)
 }
 
+/**
+ * Files that commonly hold credentials or private keys. These are excluded from
+ * indexing so secrets never end up in prompts, exports, or the search index.
+ */
+const SECRET_FILE_PATTERNS: RegExp[] = [
+  /^\.env(\..+)?$/i,
+  /^\.envrc$/i,
+  /^\.npmrc$/i,
+  /^\.netrc$/i,
+  /^\.pgpass$/i,
+  /^\.git-credentials$/i,
+  /^id_(rsa|dsa|ecdsa|ed25519)(\.pub)?$/i,
+  /\.(pem|key|p12|pfx|jks|keystore|ppk)$/i,
+  /^(secrets?|credentials?)\.(json|ya?ml|toml|ini|txt)$/i,
+  /^(\.htpasswd)$/i
+]
+
+export function isSecretFile(name: string): boolean {
+  return SECRET_FILE_PATTERNS.some((pattern) => pattern.test(name))
+}
+
 /** Files with no extension but a known tooling name (Dockerfile, Makefile…). */
 const EXTENSIONLESS_NAMES = new Set(['dockerfile', 'makefile', 'cmakelists', 'gemfile', 'procfile', 'justfile'])
 
 export function isIndexableFile(relativePath: string, sizeBytes: number, maxBytes = 512 * 1024): boolean {
   if (sizeBytes <= 0 || sizeBytes > maxBytes) return false
   const name = relativePath.split('/').pop() ?? ''
+  if (isSecretFile(name)) return false
   const dot = name.lastIndexOf('.')
   if (dot <= 0) return EXTENSIONLESS_NAMES.has(name.toLowerCase())
   const extension = name.slice(dot + 1).toLowerCase()

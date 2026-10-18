@@ -6,6 +6,7 @@ import type {
   AppSettings,
   ChatStreamEvent,
   CodeAssistRequest,
+  DataScope,
   KlyroApi,
   MeetingDraft,
   MemoryDraft,
@@ -47,6 +48,9 @@ const api: KlyroApi = {
 
   checkPermissions: () => ipcRenderer.invoke(IPC.permissionsCheck),
   hideOverlay: () => ipcRenderer.invoke(IPC.windowHideOverlay),
+  securityStatus: () => ipcRenderer.invoke(IPC.securityStatus),
+  dataSummary: () => ipcRenderer.invoke(IPC.dataSummary),
+  dataClear: (scope: DataScope) => ipcRenderer.invoke(IPC.dataClear, scope),
 
   getAutomationCapabilities: () => ipcRenderer.invoke(IPC.agentCapabilities),
   runAgent: (request: AgentRunRequest) => ipcRenderer.invoke(IPC.agentRun, request),

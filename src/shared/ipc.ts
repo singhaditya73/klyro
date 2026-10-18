@@ -27,6 +27,10 @@ export const IPC = {
 
   permissionsCheck: 'permissions:check',
 
+  securityStatus: 'security:status',
+  dataSummary: 'data:summary',
+  dataClear: 'data:clear',
+
   agentCapabilities: 'agent:capabilities',
   agentRun: 'agent:run',
   agentCancel: 'agent:cancel',

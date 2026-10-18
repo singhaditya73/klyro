@@ -18,7 +18,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   memoryAutoExtract: false,
   memoryRecallCount: 5,
   knowledgeEnabled: true,
-  documentRecallCount: 4
+  documentRecallCount: 4,
+  allowUnencryptedSecrets: false
 }
 
 class SettingsDomain {
@@ -34,16 +35,29 @@ class SettingsDomain {
         healed = true
       }
     }
-    if (healed) return this.store.set({ ...current, providers })
-    return current
+    if (current.allowUnencryptedSecrets === undefined) {
+      // Older settings files predate the plaintext opt-in; default it to "no".
+      healed = true
+    }
+    const result = healed
+      ? this.store.set({
+          ...current,
+          providers,
+          allowUnencryptedSecrets: current.allowUnencryptedSecrets ?? false
+        })
+      : current
+    secrets.setPlaintextPolicy(result.allowUnencryptedSecrets)
+    return result
   }
 
   update(patch: Partial<AppSettings>): AppSettings {
-    return this.store.update((draft) => {
+    const next = this.store.update((draft) => {
       const { providers, ...rest } = patch
       Object.assign(draft, rest)
       if (providers) draft.providers = { ...draft.providers, ...providers }
     })
+    secrets.setPlaintextPolicy(next.allowUnencryptedSecrets)
+    return next
   }
 
   provider(id: ProviderId) {
