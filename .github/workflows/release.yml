@@ -27,6 +27,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run dist:linux
+      - name: List built artifacts
+        run: ls -la release
       - uses: actions/upload-artifact@v7
         with:
           name: klyro-linux
@@ -46,6 +48,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run dist:win
+      - name: List built artifacts
+        run: dir release
       - uses: actions/upload-artifact@v7
         with:
           name: klyro-windows
