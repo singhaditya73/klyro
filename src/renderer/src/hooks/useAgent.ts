@@ -4,6 +4,7 @@ import type { AgentAction, AgentStepRecord, AgentTaskRecord, AutomationCapabilit
 export interface AgentController {
   caps: AutomationCapabilities | null
   running: boolean
+  paused: boolean
   goal: string
   setGoal: (value: string) => void
   steps: AgentStepRecord[]
@@ -12,6 +13,8 @@ export interface AgentController {
   tasks: AgentTaskRecord[]
   start: () => Promise<void>
   stop: () => void
+  pause: () => void
+  resume: () => void
   decide: (approved: boolean) => void
   refreshCaps: () => Promise<void>
 }
@@ -19,6 +22,7 @@ export interface AgentController {
 export function useAgent(): AgentController {
   const [caps, setCaps] = useState<AutomationCapabilities | null>(null)
   const [running, setRunning] = useState(false)
+  const [paused, setPaused] = useState(false)
   const [goal, setGoal] = useState('')
   const [steps, setSteps] = useState<AgentStepRecord[]>([])
   const [pending, setPending] = useState<AgentController['pending']>(null)
@@ -39,6 +43,7 @@ export function useAgent(): AgentController {
     void (async () => {
       const status = await window.klyro.getAgentStatus()
       setRunning(status.running)
+      setPaused(status.paused)
       if (status.goal) setGoal(status.goal)
     })()
   }, [refreshCaps, refreshTasks])
@@ -59,7 +64,9 @@ export function useAgent(): AgentController {
               index: event.index,
               action: event.action,
               status: event.status,
-              detail: event.detail
+              detail: event.detail,
+              verified: event.verified,
+              screenChanged: event.screenChanged
             }
             const existing = next.findIndex((s) => s.index === event.index)
             if (existing >= 0) next[existing] = entry
@@ -67,23 +74,29 @@ export function useAgent(): AgentController {
             return next
           })
           break
+        case 'state':
+          setPaused(event.state === 'paused')
+          break
         case 'needsConfirmation':
           setPending({ runId: event.runId, index: event.index, action: event.action, reason: event.reason })
           break
         case 'done':
           setRunning(false)
+          setPaused(false)
           setPending(null)
           setOutcome({ kind: 'done', message: event.summary })
           void refreshTasks()
           break
         case 'cancelled':
           setRunning(false)
+          setPaused(false)
           setPending(null)
           setOutcome({ kind: 'cancelled', message: 'Task cancelled.' })
           void refreshTasks()
           break
         case 'error':
           setRunning(false)
+          setPaused(false)
           setPending(null)
           setOutcome({ kind: 'error', message: event.message })
           void refreshTasks()
@@ -110,6 +123,14 @@ export function useAgent(): AgentController {
     void window.klyro.cancelAgent()
   }, [])
 
+  const pause = useCallback((): void => {
+    void window.klyro.pauseAgent()
+  }, [])
+
+  const resume = useCallback((): void => {
+    void window.klyro.resumeAgent()
+  }, [])
+
   const decide = useCallback(
     (approved: boolean): void => {
       const current = pending
@@ -120,5 +141,21 @@ export function useAgent(): AgentController {
     [pending]
   )
 
-  return { caps, running, goal, setGoal, steps, pending, outcome, tasks, start, stop, decide, refreshCaps }
+  return {
+    caps,
+    running,
+    paused,
+    goal,
+    setGoal,
+    steps,
+    pending,
+    outcome,
+    tasks,
+    start,
+    stop,
+    pause,
+    resume,
+    decide,
+    refreshCaps
+  }
 }

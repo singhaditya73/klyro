@@ -72,7 +72,17 @@ export function AgentPanel({ agent, onClose }: Props) {
             Run task
           </button>
         )}
-        <span className="muted">{agent.running ? 'Working…' : 'Idle'}</span>
+        {agent.running && agent.paused ? (
+          <button className="btn" onClick={agent.resume}>
+            Resume
+          </button>
+        ) : null}
+        {agent.running && !agent.paused ? (
+          <button className="btn btn--ghost" onClick={agent.pause}>
+            Pause
+          </button>
+        ) : null}
+        <span className="muted">{agent.running ? (agent.paused ? 'Paused' : 'Working…') : 'Idle'}</span>
       </div>
 
       {agent.pending ? (

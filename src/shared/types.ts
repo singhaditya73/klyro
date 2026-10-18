@@ -126,6 +126,23 @@ export interface TranscribeResult {
 
 export type AgentSession = 'wayland' | 'x11' | 'macos' | 'windows' | 'unknown'
 
+/** Why a session cannot (fully) drive input. */
+export type AutomationBlockKind = 'ready' | 'executable-missing' | 'permission-denied' | 'unsupported'
+
+export interface AutomationCheck {
+  name: string
+  ok: boolean
+  detail: string
+}
+
+export interface AutomationRuntime {
+  /** The overall verdict for this session. */
+  kind: AutomationBlockKind
+  /** Backends that responded to a harmless probe (not merely present on PATH). */
+  verifiedBackends: string[]
+  checks: AutomationCheck[]
+}
+
 export interface AutomationCapabilities {
   platform: string
   session: AgentSession
@@ -134,6 +151,7 @@ export interface AutomationCapabilities {
   missing: string[]
   installHint: string
   limitations: string[]
+  runtime: AutomationRuntime
 }
 
 export type AgentActionType =
@@ -163,15 +181,58 @@ export interface AgentAction {
   reason?: string
 }
 
-export type AgentStepStatus = 'planned' | 'executing' | 'executed' | 'failed' | 'skipped'
+export type AgentStepStatus =
+  | 'planned'
+  | 'executing'
+  | 'executed'
+  | 'verified'
+  | 'unverified'
+  | 'ambiguous'
+  | 'failed'
+  | 'blocked'
+  | 'skipped'
+
+/** Lifecycle state of an agent task. Terminal: completed/failed/cancelled/interrupted. */
+export type AgentTaskState =
+  | 'queued'
+  | 'running'
+  | 'awaiting-approval'
+  | 'paused'
+  | 'cancelling'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'interrupted'
+
+/** Coarse error buckets so the UI and logs can act on failures. */
+export type AgentErrorCategory =
+  | 'automation-unavailable'
+  | 'input-backend'
+  | 'model'
+  | 'malformed-action'
+  | 'timeout'
+  | 'rate-limit'
+  | 'blocked-by-screen'
+  | 'cancelled'
+  | 'unknown'
 
 export type AgentEvent =
   | { type: 'start'; runId: string; goal: string }
-  | { type: 'step'; runId: string; index: number; action: AgentAction; status: AgentStepStatus; detail?: string }
+  | { type: 'state'; runId: string; state: AgentTaskState }
+  | {
+      type: 'step'
+      runId: string
+      index: number
+      action: AgentAction
+      status: AgentStepStatus
+      detail?: string
+      verified?: boolean
+      screenChanged?: boolean
+    }
   | { type: 'needsConfirmation'; runId: string; index: number; action: AgentAction; reason: string }
   | { type: 'done'; runId: string; summary: string }
   | { type: 'cancelled'; runId: string }
-  | { type: 'error'; runId: string; message: string }
+  | { type: 'error'; runId: string; message: string; category?: AgentErrorCategory }
 
 export interface AgentRunRequest {
   goal: string
@@ -182,6 +243,11 @@ export interface AgentStatus {
   running: boolean
   runId: string | null
   goal: string | null
+  state: AgentTaskState | 'idle'
+  paused: boolean
+  steps: number
+  modelCalls: number
+  elapsedMs: number
 }
 
 export interface AgentStepRecord {
@@ -189,17 +255,25 @@ export interface AgentStepRecord {
   action: AgentAction
   status: AgentStepStatus
   detail?: string
+  /** Whether the screen changed in a way consistent with the action. */
+  screenChanged?: boolean
+  /** Whether the step produced an observable, verified effect. */
+  verified?: boolean
+  /** How many times execution was attempted. */
+  attempts?: number
 }
 
-export type AgentOutcome = 'done' | 'cancelled' | 'error' | 'step-limit'
+export type AgentOutcome = 'done' | 'cancelled' | 'error' | 'step-limit' | 'timeout' | 'interrupted'
 
 export interface AgentTaskRecord {
   id: string
   goal: string
   startedAt: number
   finishedAt: number
+  state: AgentTaskState
   outcome: AgentOutcome
   summary: string
+  errorCategory?: AgentErrorCategory
   steps: AgentStepRecord[]
 }
 
@@ -401,6 +475,8 @@ export interface KlyroApi {
   getAutomationCapabilities(): Promise<AutomationCapabilities>
   runAgent(request: AgentRunRequest): Promise<void>
   cancelAgent(): Promise<void>
+  pauseAgent(): Promise<void>
+  resumeAgent(): Promise<void>
   confirmAgent(runId: string, approved: boolean): Promise<void>
   getAgentStatus(): Promise<AgentStatus>
   listAgentTasks(): Promise<AgentTaskRecord[]>

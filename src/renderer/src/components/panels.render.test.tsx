@@ -24,6 +24,7 @@ const { StudioPanel } = await import('./StudioPanel')
 const fakeAgent = {
   caps: null,
   running: false,
+  paused: false,
   goal: '',
   setGoal: () => undefined,
   steps: [],
@@ -32,6 +33,8 @@ const fakeAgent = {
   tasks: [],
   start: async () => undefined,
   stop: () => undefined,
+  pause: () => undefined,
+  resume: () => undefined,
   decide: () => undefined,
   refreshCaps: async () => undefined
 } satisfies AgentController

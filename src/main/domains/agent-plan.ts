@@ -1,28 +1,8 @@
 import type { AgentAction, AgentActionType } from '@shared/types'
+import { ACTION_TYPES } from './agent-policy'
 
-export const ACTION_TYPES: AgentActionType[] = [
-  'move',
-  'click',
-  'doubleClick',
-  'type',
-  'key',
-  'scroll',
-  'wait',
-  'screenshot',
-  'done',
-  'ask'
-]
-
-/** Actions that can change the state of the machine (and so may need confirming). */
-export function isConsequential(action: AgentAction): boolean {
-  if (action.requiresConfirmation) return true
-  if (action.type === 'click' || action.type === 'doubleClick' || action.type === 'type') return true
-  if (action.type === 'key') {
-    const keys = (action.keys ?? '').toLowerCase()
-    return /return|enter|super|cmd|meta|win|ctrl\+|alt\+|delete|backspace/.test(keys)
-  }
-  return false
-}
+export { ACTION_TYPES, classifyAction, isConsequential, validateAgentAction } from './agent-policy'
+export type { ActionValidation, RiskAssessment, RiskLevel } from './agent-policy'
 
 export function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}…` : text

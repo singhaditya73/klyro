@@ -3,6 +3,8 @@ import type { CaptureResult, CaptureSource } from '@shared/types'
 
 export interface AgentFrame {
   dataUrl: string
+  /** Raw BGRA pixels, for before/after verification. */
+  bitmap: Buffer
   imageWidth: number
   imageHeight: number
   screenWidth: number
@@ -57,6 +59,7 @@ export async function captureForAgent(): Promise<AgentFrame> {
   const size = source.thumbnail.getSize()
   return {
     dataUrl: source.thumbnail.toDataURL(),
+    bitmap: source.thumbnail.toBitmap(),
     imageWidth: size.width,
     imageHeight: size.height,
     screenWidth: display.size.width,

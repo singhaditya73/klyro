@@ -30,6 +30,8 @@ export const IPC = {
   agentCapabilities: 'agent:capabilities',
   agentRun: 'agent:run',
   agentCancel: 'agent:cancel',
+  agentPause: 'agent:pause',
+  agentResume: 'agent:resume',
   agentConfirm: 'agent:confirm',
   agentStatus: 'agent:status',
   agentTasks: 'agent:tasks',

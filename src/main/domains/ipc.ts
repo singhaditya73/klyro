@@ -235,8 +235,15 @@ export function registerIpcHandlers(): void {
   handle(IPC.agentCancel, () => {
     agentRunner.cancel()
   })
+  handle(IPC.agentPause, () => {
+    agentRunner.pause()
+  })
+  handle(IPC.agentResume, () => {
+    agentRunner.resume()
+  })
   handle(IPC.agentConfirm, (_event, runId: string, approved: boolean) => {
-    agentRunner.confirm(String(runId), Boolean(approved))
+    if (typeof runId !== 'string' || runId.length > 120) throw new Error('Invalid run id')
+    agentRunner.confirm(runId, approved === true)
   })
 
   handle(IPC.memoryList, () => memory.list())

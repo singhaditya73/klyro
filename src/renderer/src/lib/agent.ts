@@ -33,6 +33,10 @@ export const STATUS_ICON: Record<AgentStepStatus, string> = {
   planned: '○',
   executing: '◐',
   executed: '●',
+  verified: '✔',
+  unverified: '?',
+  ambiguous: '~',
   failed: '✗',
+  blocked: '⛔',
   skipped: '–'
 }
