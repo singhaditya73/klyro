@@ -1,4 +1,5 @@
 import type { GitHubAccount, GitHubIssue, GitHubRepo } from '@shared/types'
+import type { IntegrationClient, IntegrationTestResult } from './contract'
 import { logger } from '../../logger'
 import { secrets } from '../../security/secrets'
 
@@ -18,9 +19,13 @@ interface RawIssue {
 }
 
 /** GitHub REST integration. The token lives in the encrypted secret store. */
-class GitHubIntegration {
-  readonly id = 'github' as const
-  readonly label = 'GitHub'
+class GitHubIntegration implements IntegrationClient {
+  readonly descriptor = {
+    id: 'github' as const,
+    label: 'GitHub',
+    auth: 'token' as const,
+    summary: 'Create issues, search repositories, and link code to conversations'
+  }
 
   private account: GitHubAccount | null = null
 
@@ -131,6 +136,16 @@ class GitHubIntegration {
     return this.connected()
       ? { connected: true, detail: 'Token stored (encrypted)' }
       : { connected: false, detail: 'Add a personal access token with the "repo" scope' }
+  }
+
+  /** Proves the stored credential works with a cheap /user round-trip. */
+  async selfTest(): Promise<IntegrationTestResult> {
+    try {
+      const account = await this.whoami()
+      return { ok: true, detail: `Token works — connected as @${account.login}`, testedAt: new Date().toISOString() }
+    } catch (error) {
+      return { ok: false, detail: (error as Error).message, testedAt: new Date().toISOString() }
+    }
   }
 }
 

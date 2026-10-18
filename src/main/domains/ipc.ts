@@ -13,7 +13,7 @@ import { agentRunner } from './agent'
 import { automation } from './automation'
 import { documents } from './documents'
 import { code } from './code'
-import { integrationStatuses, github } from './integrations'
+import { integrationStatuses, github, integrationTest } from './integrations'
 import { meetings } from './meetings'
 import { maintenance } from './maintenance'
 import { memory } from './memory'
@@ -326,6 +326,9 @@ export function registerIpcHandlers(): void {
   })
 
   handle(IPC.integrationList, () => integrationStatuses())
+  handle(IPC.integrationTest, (_event, id: unknown) =>
+    integrationTest(z.enum(['github']).parse(idSchema.parse(id)))
+  )
   handle(IPC.githubSetToken, (_event, token: unknown) => {
     github.setToken(tokenSchema.parse(token ?? '').trim())
     return integrationStatuses()

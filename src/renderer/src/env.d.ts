@@ -62,6 +62,7 @@ interface KlyroApi {
   knowledgeSearch(query: string): Promise<any[]>
 
   integrationList(): Promise<any[]>
+  integrationTest(id: string): Promise<any[]>
   githubSetToken(token: string): Promise<any[]>
   githubClearToken(): Promise<any[]>
   githubAccount(): Promise<any>

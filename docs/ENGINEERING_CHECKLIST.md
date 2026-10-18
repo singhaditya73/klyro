@@ -76,7 +76,7 @@ Legend: ✅ done+tested · 🟡 implemented, not fully verified · ⛔ blocked (
 | E | E1 incremental indexing + exclusions + safe paths | ✅ verified |
 | E | E2 line-range citations + diff/apply with approval + revert | ✅ verified |
 | F | F1 meeting chunk dedup/retry + structured extraction | ✅ verified |
-| G | G1 common integration contract | ⬜ not started |
+| G | G1 common integration contract | ✅ verified |
 | G | G2 Google Calendar / Email / Slack / Drive | ⛔ blocked on OAuth credentials |
 | H | H1 provider error categories, retry, rate-limit handling | ✅ verified |
 | H | H2 model routing guardrails | ✅ verified |
@@ -188,7 +188,7 @@ Status column reflects **verified in this program**, not intent. Only mark ✅ a
 | Provider retry policy | 3 attempts (2 retries), 400 ms base, 4 s cap, `Retry-After` honoured when ≤ cap | `retry.test.ts`, `request.test.ts` |
 | Conversation page size | 80 messages (grows via "Load earlier") | `chat.ts`, `useChat.ts` |
 | Context window | 40 turns max, 4 most recent images | `chat.ts` |
-| Test suite | 295 tests / 33 files passing | `npm test` |
+| Test suite | 299 tests / 34 files passing | `npm test` |
 
 ### Phase I — storage hardening, pagination, temp cleanup (this commit)
 
@@ -211,6 +211,23 @@ Status column reflects **verified in this program**, not intent. Only mark ✅ a
   but never deleted.
 - Tests: `json-store.test.ts` (quarantine, temp cleanup, sweep) + existing suite.
   295 tests / 33 files passing, typecheck clean, build clean, smoke OK.
+
+### Phase G1 — common integration contract (this commit)
+
+- `integrations/contract.ts`: every integration implements one client shape —
+  a descriptor (`id`, `label`, `auth: 'token' | 'oauth'`, `summary`), a cheap
+  `status()` (no network), and `selfTest()` (a fast, read-only call that proves
+  the credential works and never leaks it).
+- `integrations/registry.ts` (+ tests): the single registry the IPC layer talks
+  to. `integrationStatuses()` merges connection state with the last self-test
+  result; `testIntegration(id)` runs a self-test and converts any throw into a
+  failed result instead of rejecting; unknown ids fail fast.
+- `github.ts` implements the contract: `/user` self-test ("Token works —
+  connected as @login" / the classified failure).
+- Bridge gains `integrationTest`; the Integrations view gets a **Test
+  connection** button and shows the last test outcome. Planned providers are
+  labelled "OAuth app required" (G2 remains blocked on OAuth credentials).
+- Tests: 299 / 34 files passing, typecheck clean, build clean, smoke OK.
 
 ## UI redesign addendum (interleaved scope, functionally verified)
 

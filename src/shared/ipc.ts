@@ -56,6 +56,7 @@ export const IPC = {
   knowledgeSearch: 'knowledge:search',
 
   integrationList: 'integration:list',
+  integrationTest: 'integration:test',
   githubSetToken: 'integration:github:setToken',
   githubClearToken: 'integration:github:clearToken',
   githubAccount: 'integration:github:account',

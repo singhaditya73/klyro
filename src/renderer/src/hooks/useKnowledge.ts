@@ -20,6 +20,7 @@ export interface KnowledgeController {
   clearDocuments: () => Promise<void>
   saveGitHubToken: (token: string) => Promise<void>
   clearGitHubToken: () => Promise<void>
+  testGitHubConnection: () => Promise<void>
   loadRepos: () => Promise<void>
   loadAccount: () => Promise<void>
 }
@@ -164,6 +165,15 @@ export function useKnowledge(): KnowledgeController {
     [guard]
   )
 
+  const testGitHubConnection = useCallback(
+    async (): Promise<void> => {
+      await guard(async () => {
+        setIntegrations(await window.klyro.integrationTest('github'))
+      })
+    },
+    [guard]
+  )
+
   const loadRepos = useCallback(async (): Promise<void> => {
     await guard(async () => {
       setRepos(await window.klyro.githubRepos())
@@ -195,6 +205,7 @@ export function useKnowledge(): KnowledgeController {
     clearDocuments,
     saveGitHubToken,
     clearGitHubToken,
+    testGitHubConnection,
     loadRepos,
     loadAccount
   }

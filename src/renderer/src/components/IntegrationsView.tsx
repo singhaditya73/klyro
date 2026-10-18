@@ -63,6 +63,15 @@ export function IntegrationsView({}: Props) {
             </div>
           )}
 
+          {github?.test && (
+            <div className={`notice ${github.test.ok ? 'notice--info' : 'notice--error'}`} style={{ marginBottom: 16 }}>
+              <span className="icon icon--sm notice__icon" aria-hidden="true">
+                {github.test.ok ? <CheckCircle /> : <AlertCircle />}
+              </span>
+              <span>Test connection: {github.test.detail}</span>
+            </div>
+          )}
+
           {knowledge.githubAccount ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div className="card">
@@ -75,6 +84,10 @@ export function IntegrationsView({}: Props) {
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+                    <button className="btn btn--ghost btn--sm" onClick={() => void knowledge.testGitHubConnection()}>
+                      <Plug className="icon icon--xs" aria-hidden="true" />
+                      <span>Test connection</span>
+                    </button>
                     <button className="btn btn--ghost btn--sm" onClick={() => void knowledge.loadRepos()}>
                       <Blocks className="icon icon--xs" aria-hidden="true" />
                       <span>Load repositories</span>
@@ -186,7 +199,7 @@ export function IntegrationsView({}: Props) {
                       </div>
                       <div>
                         <div style={{ fontWeight: 500 }}>{item.label}</div>
-                        <div className="muted" style={{ fontSize: 11 }}>Coming soon</div>
+                        <div className="muted" style={{ fontSize: 11 }}>OAuth app required</div>
                       </div>
                     </div>
                     <span className="pill pill--warn">Planned</span>
@@ -196,7 +209,7 @@ export function IntegrationsView({}: Props) {
               ))}
             </div>
             <p style={{ margin: '16px 0 0', fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
-              More integrations are planned. Let us know which ones you would like to see.
+              Planned integrations connect through OAuth once their app credentials are configured.
             </p>
           </div>
         </section>

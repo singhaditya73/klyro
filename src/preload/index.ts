@@ -86,6 +86,7 @@ const api: KlyroApi = {
   knowledgeSearch: (query: string) => ipcRenderer.invoke(IPC.knowledgeSearch, query),
 
   integrationList: () => ipcRenderer.invoke(IPC.integrationList),
+  integrationTest: (id: string) => ipcRenderer.invoke(IPC.integrationTest, id),
   githubSetToken: (token: string) => ipcRenderer.invoke(IPC.githubSetToken, token),
   githubClearToken: () => ipcRenderer.invoke(IPC.githubClearToken),
   githubAccount: () => ipcRenderer.invoke(IPC.githubAccount),

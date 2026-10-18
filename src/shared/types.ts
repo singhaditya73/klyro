@@ -361,11 +361,22 @@ export interface KnowledgeHit {
 
 export type IntegrationId = 'github'
 
+export interface IntegrationTestResult {
+  ok: boolean
+  detail: string
+  testedAt: string
+}
+
 export interface IntegrationStatus {
   id: IntegrationId
   label: string
+  /** `token` = user-provided credential; `oauth` = needs OAuth app credentials (G2). */
+  auth: 'token' | 'oauth'
+  summary: string
   connected: boolean
   detail: string
+  /** Last "Test connection" result, if one has been run this session. */
+  test: IntegrationTestResult | null
 }
 
 export interface GitHubAccount {
@@ -692,6 +703,7 @@ export interface KlyroApi {
   knowledgeSearch(query: string): Promise<KnowledgeHit[]>
 
   integrationList(): Promise<IntegrationStatus[]>
+  integrationTest(id: IntegrationId): Promise<IntegrationStatus[]>
   githubSetToken(token: string): Promise<IntegrationStatus[]>
   githubClearToken(): Promise<IntegrationStatus[]>
   githubAccount(): Promise<GitHubAccount>
