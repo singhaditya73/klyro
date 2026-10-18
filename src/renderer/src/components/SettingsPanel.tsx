@@ -10,7 +10,7 @@ import type {
   SecurityStatus
 } from '@shared/types'
 import { useModal } from '../hooks/useModal'
-import { Loader2, CheckCircle, AlertCircle, Shield, HardDrive, Trash2, Broom, Database, Key, Zap, X, ExternalLink } from 'lucide-react'
+import { Loader2, CheckCircle, AlertCircle, Shield, ShieldQuestion, HardDrive, Trash2, Broom, Database, Key, Zap, X, ExternalLink } from 'lucide-react'
 import KlyroMark from '../assets/logo/klyro-mark.svg'
 
 interface Props {
@@ -32,6 +32,7 @@ export function SettingsPanel({ onClose }: Props) {
   const [security, setSecurity] = useState<SecurityStatus | null>(null)
   const [data, setData] = useState<DataSummary | null>(null)
   const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({})
+  const [reportCount, setReportCount] = useState(0)
   const [testing, setTesting] = useState<Record<string, string>>({})
   const [keyError, setKeyError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -45,6 +46,7 @@ export function SettingsPanel({ onClose }: Props) {
         setAutomation(await window.klyro.getAutomationCapabilities())
         setSecurity(await window.klyro.securityStatus())
         setData(await window.klyro.dataSummary())
+        setReportCount((await window.klyro.diagnosticsList()).length)
       } catch (error) {
         setLoadError((error as Error).message)
       }
@@ -85,6 +87,15 @@ export function SettingsPanel({ onClose }: Props) {
 
   async function sweep(): Promise<void> {
     setData(await window.klyro.sweepStorage())
+  }
+
+  async function refreshReports(): Promise<void> {
+    setReportCount((await window.klyro.diagnosticsList()).length)
+  }
+
+  async function clearReports(): Promise<void> {
+    await window.klyro.diagnosticsClear()
+    setReportCount(0)
   }
 
   async function test(id: ProviderId): Promise<void> {
@@ -420,6 +431,37 @@ export function SettingsPanel({ onClose }: Props) {
                   <div className="notice notice--warning" style={{ marginTop: '12px' }}>
                     <AlertCircle className="icon icon--sm notice__icon" aria-hidden="true" />
                     {data.storage.quarantined.length} unreadable data file{data.storage.quarantined.length === 1 ? '' : 's'} kept beside your data (name contains &ldquo;.corrupt-&rdquo;). Klyro started fresh rather than overwriting them.
+                  </div>
+                )}
+              </div>
+
+              <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid var(--border-subtle)' }}>
+                <h4>
+                  <ShieldQuestion className="icon icon--sm" aria-hidden="true" />
+                  <span style={{ marginLeft: '8px' }}>Crash reports</span>
+                </h4>
+                <label className="field" style={{ marginTop: '12px', flexDirection: 'row', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    checked={settings.diagnosticsOptIn}
+                    onChange={(event) => {
+                      void patch({ diagnosticsOptIn: event.target.checked }).then(() => void refreshReports())
+                    }}
+                  />
+                  <span>Save crash reports on this device</span>
+                </label>
+                <div className="muted" style={{ marginTop: '8px', fontSize: '12px' }}>
+                  {settings.diagnosticsOptIn
+                    ? 'Reports are written locally to the Klyro data folder and are only sent anywhere if an endpoint is explicitly configured. They contain a redacted error and app version — never your API keys.'
+                    : 'Off (default). Crashes are logged but nothing is stored or sent.'}
+                </div>
+                {reportCount > 0 && (
+                  <div className="data-row">
+                    <span>Saved crash reports: {reportCount}</span>
+                    <button className="btn btn--ghost btn--sm" onClick={() => void clearReports()}>
+                      <Trash2 className="icon icon--xs" aria-hidden="true" />
+                      <span>Clear</span>
+                    </button>
                   </div>
                 )}
               </div>

@@ -37,6 +37,8 @@ interface KlyroApi {
   dataSummary(): Promise<any>
   dataClear(scope: string): Promise<any>
   sweepStorage(): Promise<any>
+  diagnosticsList(): Promise<any[]>
+  diagnosticsClear(): Promise<void>
 
   getAutomationCapabilities(): Promise<any>
   runAgent(request: any): Promise<void>

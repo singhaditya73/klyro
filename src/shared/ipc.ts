@@ -31,6 +31,8 @@ export const IPC = {
   dataSummary: 'data:summary',
   dataClear: 'data:clear',
   storageSweep: 'storage:sweep',
+  diagnosticsList: 'diagnostics:list',
+  diagnosticsClear: 'diagnostics:clear',
 
   agentCapabilities: 'agent:capabilities',
   agentRun: 'agent:run',

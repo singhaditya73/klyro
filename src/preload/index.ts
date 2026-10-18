@@ -55,6 +55,8 @@ const api: KlyroApi = {
   dataSummary: () => ipcRenderer.invoke(IPC.dataSummary),
   dataClear: (scope: DataScope) => ipcRenderer.invoke(IPC.dataClear, scope),
   sweepStorage: () => ipcRenderer.invoke(IPC.storageSweep),
+  diagnosticsList: () => ipcRenderer.invoke(IPC.diagnosticsList),
+  diagnosticsClear: () => ipcRenderer.invoke(IPC.diagnosticsClear),
 
   getAutomationCapabilities: () => ipcRenderer.invoke(IPC.agentCapabilities),
   runAgent: (request: AgentRunRequest) => ipcRenderer.invoke(IPC.agentRun, request),

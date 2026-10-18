@@ -82,7 +82,7 @@ Legend: ✅ done+tested · 🟡 implemented, not fully verified · ⛔ blocked (
 | H | H2 model routing guardrails | ✅ verified |
 | I | I1 storage hardening, pagination, temp cleanup | ✅ verified |
 | J | J1 release verification docs + signing/updates notes | ⬜ not started |
-| J | J2 opt-in crash/diagnostics reporting | ⬜ not started |
+| J | J2 opt-in crash/diagnostics reporting | ✅ verified |
 | J | J3 documentation refresh | ⬜ not started |
 
 Status column reflects **verified in this program**, not intent. Only mark ✅ after tests/commands actually passed on this machine.
@@ -188,7 +188,7 @@ Status column reflects **verified in this program**, not intent. Only mark ✅ a
 | Provider retry policy | 3 attempts (2 retries), 400 ms base, 4 s cap, `Retry-After` honoured when ≤ cap | `retry.test.ts`, `request.test.ts` |
 | Conversation page size | 80 messages (grows via "Load earlier") | `chat.ts`, `useChat.ts` |
 | Context window | 40 turns max, 4 most recent images | `chat.ts` |
-| Test suite | 299 tests / 34 files passing | `npm test` |
+| Test suite | 303 tests / 35 files passing | `npm test` |
 
 ### Phase I — storage hardening, pagination, temp cleanup (this commit)
 
@@ -228,6 +228,23 @@ Status column reflects **verified in this program**, not intent. Only mark ✅ a
   connection** button and shows the last test outcome. Planned providers are
   labelled "OAuth app required" (G2 remains blocked on OAuth credentials).
 - Tests: 299 / 34 files passing, typecheck clean, build clean, smoke OK.
+
+### Phase J2 — opt-in crash/diagnostics capture (this commit)
+
+- `diagnostics.ts` (+ tests): opt-in crash capture. **Off is the default**:
+  with reporting off, crashes are logged and shown in the UI but nothing is
+  stored and nothing is sent. When enabled, reports are written locally to
+  `userData/diagnostics/` (bounded at 20, oldest pruned) so the user can read
+  exactly what was kept. Delivery only happens if an explicit
+  `KLYRO_DIAGNOSTICS_URL` endpoint is configured; a failed delivery keeps the
+  report locally and is logged, never dropped silently.
+- All report text is scrubbed through the existing redactor, so a key echoed
+  in an error message or stack cannot reach the stored report.
+- Capture points: main-process `uncaughtException`/`unhandledRejection`,
+  `render-process-gone`, and preload errors.
+- IPC: `diagnostics:list` / `diagnostics:clear`; Settings gains a "Crash
+  reports" section with the opt-in toggle, honest copy in both states, and a
+  saved-report count with Clear.
 
 ## UI redesign addendum (interleaved scope, functionally verified)
 

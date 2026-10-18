@@ -13,6 +13,7 @@ import { agentRunner } from './agent'
 import { automation } from './automation'
 import { documents } from './documents'
 import { code } from './code'
+import { diagnostics } from '../diagnostics'
 import { integrationStatuses, github, integrationTest } from './integrations'
 import { meetings } from './meetings'
 import { maintenance } from './maintenance'
@@ -72,6 +73,7 @@ const settingsPatchSchema = z
     knowledgeEnabled: z.boolean().optional(),
     documentRecallCount: z.number().int().min(1).max(10).optional(),
     allowUnencryptedSecrets: z.boolean().optional(),
+    diagnosticsOptIn: z.boolean().optional(),
     providers: z
       .record(z.string(), z.object({ baseUrl: z.string().max(500), model: z.string().max(200) }))
       .optional()
@@ -261,6 +263,8 @@ export function registerIpcHandlers(): void {
   handle(IPC.dataSummary, () => privacy.summary())
   handle(IPC.dataClear, (_event, scope: unknown) => privacy.clear(dataScopeSchema.parse(scope) as DataScope))
   handle(IPC.storageSweep, (): DataSummary => ({ ...privacy.summary(), storage: maintenance.sweep() }))
+  handle(IPC.diagnosticsList, () => diagnostics.list())
+  handle(IPC.diagnosticsClear, () => diagnostics.clear())
 
   handle(IPC.agentCapabilities, () => automation.capabilities())
   handle(IPC.agentStatus, () => agentRunner.status())

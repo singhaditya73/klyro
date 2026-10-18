@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { BrowserWindow, app, session } from 'electron'
 import { logger } from './logger'
+import { diagnostics } from './diagnostics'
 import { secrets } from './security/secrets'
 import { isAllowedPermission, isTrustedRendererUrl, setPackagedRenderer } from './security/origins'
 import { registerIpcHandlers } from './domains/ipc'
@@ -47,6 +48,7 @@ if (!gotLock) {
   app.on('second-instance', () => showMainWindow())
 
   app.whenReady().then(() => {
+    diagnostics.init()
     secrets.init()
     setPackagedRenderer(join(__dirname, '../renderer/index.html'))
     settingsDomain.get() // applies the plaintext-secrets policy before any key is written

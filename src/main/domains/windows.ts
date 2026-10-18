@@ -1,6 +1,8 @@
 import { join } from 'node:path'
 import { BrowserWindow, screen, shell } from 'electron'
 import { isExternalHttpUrl, isTrustedRendererUrl } from '../security/origins'
+import { diagnostics } from '../diagnostics'
+import { logger } from '../logger'
 
 const OVERLAY_WIDTH = 640
 const OVERLAY_HEIGHT = 208
@@ -22,7 +24,6 @@ function attachNavigationGuards(win: BrowserWindow): void {
     if (isExternalHttpUrl(url)) void shell.openExternal(url)
     return { action: 'deny' }
   })
-
   win.webContents.on('will-navigate', (event, url) => {
     if (isTrustedRendererUrl(url)) return
     event.preventDefault()
@@ -31,6 +32,18 @@ function attachNavigationGuards(win: BrowserWindow): void {
 
   // Klyro never embeds third-party content.
   win.webContents.on('will-attach-webview', (event) => event.preventDefault())
+
+  // A crashed renderer is a crash report, not a silent blank window.
+  win.webContents.on('render-process-gone', (_event, details) => {
+    logger.error(`Renderer process gone (${details.reason})`, details)
+    diagnostics.capture('render-process-gone', {
+      message: `Renderer process gone: ${details.reason}${details.exitCode ? ` (exit ${details.exitCode})` : ''}`
+    })
+  })
+  win.webContents.on('preload-error', (_event, path, error) => {
+    logger.error(`Preload error in ${path}`, error)
+    diagnostics.capture('main-crash', { message: `preload error: ${error.message}` })
+  })
 }
 
 function loadRoute(win: BrowserWindow, route: string): void {

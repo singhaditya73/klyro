@@ -20,7 +20,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   memoryRecallCount: 5,
   knowledgeEnabled: true,
   documentRecallCount: 4,
-  allowUnencryptedSecrets: false
+  allowUnencryptedSecrets: false,
+  diagnosticsOptIn: false
 }
 
 class SettingsDomain {
@@ -40,11 +41,16 @@ class SettingsDomain {
       // Older settings files predate the plaintext opt-in; default it to "no".
       healed = true
     }
+    if (current.diagnosticsOptIn === undefined) {
+      // Older settings files predate the diagnostics opt-in; default it to off.
+      healed = true
+    }
     const result = healed
       ? this.store.set({
           ...current,
           providers,
-          allowUnencryptedSecrets: current.allowUnencryptedSecrets ?? false
+          allowUnencryptedSecrets: current.allowUnencryptedSecrets ?? false,
+          diagnosticsOptIn: current.diagnosticsOptIn ?? false
         })
       : current
     secrets.setPlaintextPolicy(result.allowUnencryptedSecrets)

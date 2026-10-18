@@ -30,6 +30,8 @@ export interface AppSettings {
   documentRecallCount: number
   /** Explicit opt-in to unencrypted credential storage when no keychain exists. */
   allowUnencryptedSecrets: boolean
+  /** Opt-in crash/diagnostics capture (local files; upload only via explicit endpoint). */
+  diagnosticsOptIn: boolean
 }
 
 /** Whether a model can read images; `unknown` is honest for local/custom endpoints. */
@@ -367,6 +369,18 @@ export interface IntegrationTestResult {
   testedAt: string
 }
 
+/** One stored crash/diagnostics report (Phase J2). Content is redacted. */
+export interface CrashReport {
+  id: string
+  at: string
+  kind: 'main-crash' | 'unhandled-rejection' | 'render-process-gone' | 'child-process-gone'
+  message: string
+  stack?: string
+  version: string
+  platform: string
+  arch: string
+  session: string | null
+}
 export interface IntegrationStatus {
   id: IntegrationId
   label: string
@@ -678,6 +692,8 @@ export interface KlyroApi {
   dataSummary(): Promise<DataSummary>
   dataClear(scope: DataScope): Promise<DataSummary>
   sweepStorage(): Promise<DataSummary>
+  diagnosticsList(): Promise<CrashReport[]>
+  diagnosticsClear(): Promise<void>
 
   getAutomationCapabilities(): Promise<AutomationCapabilities>
   runAgent(request: AgentRunRequest): Promise<void>
