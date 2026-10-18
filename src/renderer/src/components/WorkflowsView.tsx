@@ -1,12 +1,9 @@
 import { useState, useEffect } from 'react'
-import type { WorkflowRecord, WorkflowRun } from '@shared/types'
 import { Play, StopCircle, Trash2, Clock, ChevronDown, ChevronUp, FileText, CheckCircle, AlertCircle, Loader2, Zap } from 'lucide-react'
 import { useStudio } from '../hooks/useStudio'
 import KlyroMark from '../assets/logo/klyro-mark.svg'
 
 const h2Style: React.CSSProperties = { margin: '0 0 16px', fontSize: '16px', fontWeight: 600 }
-const h3Style: React.CSSProperties = { margin: '0 0 16px', fontSize: '14px', fontWeight: 600 }
-const h4Style: React.CSSProperties = { margin: '0 0 12px', fontSize: '13px', fontWeight: 600 }
 const sectionStyle: React.CSSProperties = { marginBottom: 40 }
 const gridStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }
 const cardStyle: React.CSSProperties = { display: 'flex', flexDirection: 'column', height: '100%' }
@@ -38,13 +35,13 @@ export function WorkflowsView() {
               rows={4}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Input for the workflow (used as {{input}}) \u2014 a repo, a question, notes, or a diff\u2026"
+              placeholder="Input for the workflow (used as {{input}}) — a repo, a question, notes, or a diff…"
               className="field"
               style={{ borderRadius: 'var(--radius-lg)', padding: '14px 16px', fontSize: '14px' }}
             />
           </div>
-          <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
-            The input is available as <code style={{ background: 'var(--surface-base)', padding: '2px 6px', borderRadius: '4px', fontSize: '11px' }}>{{input}}</code> in workflow steps.
+                  <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
+            The input is available as <code style={{ background: 'var(--surface-base)', padding: '2px 6px', borderRadius: '4px', fontSize: '11px' }}>{'{{input}}'}</code> in workflow steps.
           </p>
 
           {studio.workflowSteps.length > 0 && (
@@ -52,7 +49,7 @@ export function WorkflowsView() {
               {studio.workflowSteps.map((step) => (
                 <div key={step.name} className={'workflow-step' + (step.status === 'done' ? ' workflow-step--done' : step.status === 'failed' ? ' workflow-step--failed' : ' workflow-step--running')}>
                   <div className="workflow-step__icon" style={{ color: step.status === 'done' ? 'var(--success)' : step.status === 'failed' ? 'var(--danger)' : 'var(--warning)' }}>
-                    {step.status === 'done' ? <CheckCircle className="icon icon--sm" aria-hidden="true" /> : step.status === 'failed' ? <AlertCircle className="icon icon--sm" aria-hidden="true" /> : <span className="icon icon--sm" style={{ animation: 'blink 1s infinite' }} aria-hidden="true">\u25D0</span>}
+                    {step.status === 'done' ? <CheckCircle className="icon icon--sm" aria-hidden="true" /> : step.status === 'failed' ? <AlertCircle className="icon icon--sm" aria-hidden="true" /> : <span className="icon icon--sm" style={{ animation: 'blink 1s infinite' }} aria-hidden="true">◐</span>}
                   </div>
                   <div className="workflow-step__body">
                     <div className="workflow-step__title">{step.name}</div>
@@ -77,7 +74,7 @@ export function WorkflowsView() {
               <h3 style={{ margin: '0 0 12px', fontSize: '14px', fontWeight: 600 }}>Result</h3>
               <p style={{ margin: '0 0 16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
                 {studio.workflowResult.status === 'completed'
-                  ? 'Saved to a new chat \u2014 open the sidebar to continue the conversation.'
+                  ? 'Saved to a new chat — open the sidebar to continue the conversation.'
                   : `This run ${studio.workflowResult.status}. Steps that finished are shown below.`}
               </p>
               {studio.workflowResult.steps.map((step) => (
@@ -133,7 +130,7 @@ export function WorkflowsView() {
                       {studio.workflowRunning === workflow.id ? (
                         <>
                           <Loader2 className="icon icon--sm" style={{ animation: 'spin 1s linear infinite' }} aria-hidden="true" />
-                          <span>Running\u2026</span>
+                          <span>Running…</span>
                         </>
                       ) : (
                         <>
@@ -184,7 +181,7 @@ export function WorkflowsView() {
                         {run.steps.map((step) => (
                           <div key={step.name} className={'workflow-step' + (step.status === 'done' ? ' workflow-step--done' : step.status === 'failed' ? ' workflow-step--failed' : '')} style={{ padding: '8px 10px', background: 'var(--surface-base)', borderRadius: 'var(--radius-md)' }}>
                             <div className="workflow-step__icon" style={{ color: step.status === 'done' ? 'var(--success)' : step.status === 'failed' ? 'var(--danger)' : 'var(--text-muted)' }}>
-                              {step.status === 'done' ? <CheckCircle className="icon icon--xs" aria-hidden="true" /> : step.status === 'failed' ? <AlertCircle className="icon icon--xs" aria-hidden="true" /> : <span className="icon icon--xs" aria-hidden="true">\u25D0</span>}
+                              {step.status === 'done' ? <CheckCircle className="icon icon--xs" aria-hidden="true" /> : step.status === 'failed' ? <AlertCircle className="icon icon--xs" aria-hidden="true" /> : <span className="icon icon--xs" aria-hidden="true">◐</span>}
                             </div>
                             <div className="workflow-step__body">
                               <div className="workflow-step__title">{step.name}</div>

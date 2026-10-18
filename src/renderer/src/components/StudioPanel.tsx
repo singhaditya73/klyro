@@ -89,9 +89,9 @@ export function StudioPanel({ onClose }: Props) {
                     </div>
                   </div>
                   <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
-                    {studio.project.files} files \u00B7 {studio.project.chunks} chunks
-                    {studio.project.skipped ? ' \u00B7 ' + studio.project.skipped + ' skipped' : ''}
-                    {studio.project.indexedAt ? ' \u00B7 indexed ' + timeAgo(studio.project.indexedAt) : ''}
+                    {studio.project.files} files · {studio.project.chunks} chunks
+                    {studio.project.skipped ? ' · ' + studio.project.skipped + ' skipped' : ''}
+                    {studio.project.indexedAt ? ' · indexed ' + timeAgo(studio.project.indexedAt) : ''}
                   </div>
                   <div className="provider__actions" style={{ gap: 10 }}>
                     <button className="btn" onClick={() => void studio.indexProject()}>
@@ -106,7 +106,7 @@ export function StudioPanel({ onClose }: Props) {
                   <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>Indexed files ground code answers, workflow prompts, and normal chat.</div>
                   {studio.project.lastScan && (
                     <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-                      Last scan: {studio.project.lastScan.added} added \u00B7 {studio.project.lastScan.updated} updated \u00B7 {studio.project.lastScan.reused} unchanged \u00B7 {studio.project.lastScan.removed} removed
+                      Last scan: {studio.project.lastScan.added} added · {studio.project.lastScan.updated} updated · {studio.project.lastScan.reused} unchanged · {studio.project.lastScan.removed} removed
                     </div>
                   )}
                 </div>
@@ -116,12 +116,12 @@ export function StudioPanel({ onClose }: Props) {
                     {studio.indexing ? (
                       <>
                         <Loader2 className="icon icon--sm" style={{ animation: 'spin 1s linear infinite' }} aria-hidden="true" />
-                        <span>Indexing\u2026</span>
+                        <span>Indexing…</span>
                       </>
                     ) : (
                       <>
                         <Plus className="icon icon--sm" aria-hidden="true" />
-                        <span>Index a project folder\u2026</span>
+                        <span>Index a project folder…</span>
                       </>
                     )}
                   </button>
@@ -132,7 +132,7 @@ export function StudioPanel({ onClose }: Props) {
               <h3 style={{ ...h3Style, marginTop: 32 }}>Ask about code</h3>
               <label className="field" style={{ marginBottom: 12 }}>
                 <span className="field__label">Paste a snippet</span>
-                <textarea rows={8} value={snippet} onChange={(event) => setSnippet(event.target.value)} placeholder="Paste the function, file, or diff you want help with\u2026" spellCheck={false} className="field" />
+                <textarea rows={8} value={snippet} onChange={(event) => setSnippet(event.target.value)} placeholder="Paste the function, file, or diff you want help with…" spellCheck={false} className="field" />
               </label>
               <label className="field" style={{ marginBottom: 16 }}>
                 <span className="field__label">Optional question or context</span>
@@ -147,7 +147,7 @@ export function StudioPanel({ onClose }: Props) {
                 ))}
               </div>
 
-              {studio.codeBusy && <div className="muted" style={{ marginTop: 12 }}><Loader2 className="icon icon--sm" style={{ animation: 'spin 1s linear infinite', marginRight: 8 }} aria-hidden="true" />Thinking\u2026</div>}
+              {studio.codeBusy && <div className="muted" style={{ marginTop: 12 }}><Loader2 className="icon icon--sm" style={{ animation: 'spin 1s linear infinite', marginRight: 8 }} aria-hidden="true" />Thinking…</div>}
               {studio.codeCitations.length > 0 && (
                 <div className="muted" style={{ marginTop: 12, fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Search className="icon icon--xs" aria-hidden="true" />
@@ -166,14 +166,14 @@ export function StudioPanel({ onClose }: Props) {
               </label>
               <label className="field" style={{ marginBottom: 16 }}>
                 <span className="field__label">Proposed complete contents</span>
-                <textarea rows={8} value={editContent} onChange={(event) => setEditContent(event.target.value)} placeholder="Paste the full new contents of the file\u2026" spellCheck={false} className="field" />
+                <textarea rows={8} value={editContent} onChange={(event) => setEditContent(event.target.value)} placeholder="Paste the full new contents of the file…" spellCheck={false} className="field" />
               </label>
               <div className="provider__actions" style={{ gap: 10 }}>
                 <button className="btn" disabled={!editPath.trim() || !editContent.trim() || studio.patchBusy || !studio.project?.root} onClick={() => void studio.proposePatch(editPath.trim(), editContent)}>
                   {studio.patchBusy ? (
                     <>
                       <Loader2 className="icon icon--sm" style={{ animation: 'spin 1s linear infinite' }} aria-hidden="true" />
-                      <span>Working\u2026</span>
+                      <span>Working…</span>
                     </>
                   ) : (
                     <>
@@ -193,7 +193,7 @@ export function StudioPanel({ onClose }: Props) {
                       <div className="card__row" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
                         <span className={patch.status === 'applied' ? 'pill pill--ok' : 'pill'}> {patch.status} </span>
                         <strong>{patch.path}</strong>
-                        <span className="muted card__spacer" style={{ fontSize: 11 }}>+{patch.addedLines} / \u2212{patch.removedLines}</span>
+                        <span className="muted card__spacer" style={{ fontSize: 11 }}>+{patch.addedLines} / −{patch.removedLines}</span>
                       </div>
                       <pre className="code-out">{patch.diff}</pre>
                       <div className="provider__actions" style={{ marginTop: 12, gap: 8 }}>
@@ -321,7 +321,7 @@ export function StudioPanel({ onClose }: Props) {
             <section>
               <h3 style={h3Style}>Run a workflow</h3>
               <div className="field" style={{ marginBottom: 16 }}>
-                <span className="field__label">Input (used as {{input}} \u2014 a repo, a question, notes, or a diff)</span>
+                <span className="field__label">Input (used as {'{{input}}'} — a repo, a question, notes, or a diff)</span>
                 <textarea rows={4} value={studio.workflowInput} onChange={(event) => studio.setWorkflowInput(event.target.value)} className="field" />
               </div>
 
@@ -330,7 +330,7 @@ export function StudioPanel({ onClose }: Props) {
                   {studio.workflowSteps.map((step) => (
                     <div key={step.name} className={'workflow-step' + (step.status === 'done' ? ' workflow-step--done' : step.status === 'failed' ? ' workflow-step--failed' : ' workflow-step--running')}>
                       <div className="workflow-step__icon" style={{ color: step.status === 'done' ? 'var(--success)' : step.status === 'failed' ? 'var(--danger)' : 'var(--warning)' }}>
-                        {step.status === 'done' ? <CheckCircle className="icon icon--sm" aria-hidden="true" /> : step.status === 'failed' ? <AlertCircle className="icon icon--sm" aria-hidden="true" /> : <span className="icon icon--sm" style={{ animation: 'blink 1s infinite' }} aria-hidden="true">\u25D0</span>}
+                        {step.status === 'done' ? <CheckCircle className="icon icon--sm" aria-hidden="true" /> : step.status === 'failed' ? <AlertCircle className="icon icon--sm" aria-hidden="true" /> : <span className="icon icon--sm" style={{ animation: 'blink 1s infinite' }} aria-hidden="true">◐</span>}
                       </div>
                       <div className="workflow-step__body">
                         <div className="workflow-step__title">{step.name}</div>
@@ -355,7 +355,7 @@ export function StudioPanel({ onClose }: Props) {
                   <h4 style={h4Style}>Result</h4>
                   <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--text-secondary)' }}>
                     {studio.workflowResult.status === 'completed'
-                      ? 'Saved to a new chat \u2014 open the sidebar to continue the conversation.'
+                      ? 'Saved to a new chat — open the sidebar to continue the conversation.'
                       : 'This run ' + studio.workflowResult.status + '. Steps that finished are shown below.'}
                   </p>
                   {studio.workflowResult.steps.map((step) => (
@@ -397,7 +397,7 @@ export function StudioPanel({ onClose }: Props) {
                           {studio.workflowRunning === workflow.id ? (
                             <>
                               <Loader2 className="icon icon--sm" style={{ animation: 'spin 1s linear infinite' }} aria-hidden="true" />
-                              <span>Running\u2026</span>
+                              <span>Running…</span>
                             </>
                           ) : (
                             <>
@@ -445,7 +445,7 @@ export function StudioPanel({ onClose }: Props) {
                               {run.steps.map((step) => (
                                 <div key={step.name} className={'workflow-step' + (step.status === 'done' ? ' workflow-step--done' : step.status === 'failed' ? ' workflow-step--failed' : '')} style={{ padding: '8px 10px', background: 'var(--surface-base)', borderRadius: 'var(--radius-md)' }}>
                                   <div className="workflow-step__icon" style={{ color: step.status === 'done' ? 'var(--success)' : step.status === 'failed' ? 'var(--danger)' : 'var(--text-muted)' }}>
-                                    {step.status === 'done' ? <CheckCircle className="icon icon--xs" aria-hidden="true" /> : step.status === 'failed' ? <AlertCircle className="icon icon--xs" aria-hidden="true" /> : <span className="icon icon--xs" aria-hidden="true">\u25D0</span>}
+                                    {step.status === 'done' ? <CheckCircle className="icon icon--xs" aria-hidden="true" /> : step.status === 'failed' ? <AlertCircle className="icon icon--xs" aria-hidden="true" /> : <span className="icon icon--xs" aria-hidden="true">◐</span>}
                                   </div>
                                   <div className="workflow-step__body">
                                     <div className="workflow-step__title">{step.name}</div>

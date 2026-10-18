@@ -212,6 +212,39 @@ Status column reflects **verified in this program**, not intent. Only mark ✅ a
 - Tests: `json-store.test.ts` (quarantine, temp cleanup, sweep) + existing suite.
   295 tests / 33 files passing, typecheck clean, build clean, smoke OK.
 
+## UI redesign addendum (interleaved scope, functionally verified)
+
+The premium graphite/charcoal redesign (graphite surfaces, Lucide icons, Klyro
+logo assets, 7-workspace navigation with lazy-loaded panels) is tracked here
+even though a visual redesign was not part of the original program.
+
+Runtime verification (clicking every sidebar item in the built app via CDP):
+
+| Sidebar item | Verified behaviour |
+| --- | --- |
+| Agent | `.agent-panel` side panel opens (lazy chunk loads) |
+| Memory | Knowledge `.modal__panel` opens |
+| Settings | Settings `.modal__panel` opens (also via Ctrl+,) |
+| Workflows | Workspace view swaps to `WorkflowsView` |
+| Integrations | Workspace view swaps to `IntegrationsView` |
+| Chat / Home | Workspace view swaps |
+
+Fixes that made the panels open:
+- `App.tsx` previously called `togglePanel(panel)` **then** `closeAllPanels()`,
+  instantly closing the panel the user just opened. Panel opening is now
+  "close others first, then open" (`openPanel` helper).
+- `AgentPanel`/`KnowledgePanel` are overlay/side panels by design
+  (`app--agent` third grid column, `.modal` dialog); they must not be rendered
+  as inline workspace children. The duplicated inline renders were removed;
+  the overlay `<Suspense>` boundary is their single render site.
+- Raw `\uXXXX` escape sequences in JSX text/attributes across redesigned
+  components now render their real glyphs (JSX does not process escapes).
+- Typecheck restored clean (literal `{{input}}` JSX expressions and unused
+  imports in `WorkflowsView`/`StudioPanel`).
+
+Still not externally verifiable here: panel visuals on real screens with
+system fonts, and Wayland screen capture (blocked on `xdg-desktop-portal`).
+
 ## Commands
 
 ```bash

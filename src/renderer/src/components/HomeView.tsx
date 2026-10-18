@@ -246,7 +246,7 @@ function HomeComposer({ onSend }: { onSend: (content: string, attachments: Attac
       <textarea
         className="composer__textarea"
         value={text}
-        placeholder="Ask Klyro anything\u2026   (Enter to send \u00B7 Shift+Enter for new line)"
+        placeholder="Ask Klyro anything…   (Enter to send · Shift+Enter for new line)"
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submit(); } }}
         rows={3}
@@ -265,7 +265,7 @@ function HomeComposer({ onSend }: { onSend: (content: string, attachments: Attac
         >
           {recording ? (
             <>
-              <span className="icon icon--sm" style={{ animation: 'blink 1s infinite' }} aria-hidden="true">\u25CF</span>
+              <span className="icon icon--sm" style={{ animation: 'blink 1s infinite' }} aria-hidden="true">●</span>
               <span>Stop recording</span>
             </>
           ) : (

@@ -107,7 +107,7 @@ export function ScreenAssistantView({}: Props) {
               <>
                 <strong>Screen capture permission required</strong>
                 <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  Grant screen recording permission in System Settings \u2192 Privacy & Security \u2192 Screen Recording.
+                  Grant screen recording permission in System Settings → Privacy & Security → Screen Recording.
                 </p>
               </>
             )}
@@ -184,8 +184,8 @@ export function ScreenAssistantView({}: Props) {
               >
                 {streaming ? (
                   <>
-                    <span className="icon icon--sm" style={{ animation: 'blink 1s infinite' }} aria-hidden="true">\u25CF</span>
-                    <span>Analyzing\u2026</span>
+                    <span className="icon icon--sm" style={{ animation: 'blink 1s infinite' }} aria-hidden="true">●</span>
+                    <span>Analyzing…</span>
                   </>
                 ) : (
                   <>

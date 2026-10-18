@@ -9,6 +9,12 @@ import { Menu } from 'lucide-react'
 
 type WorkspaceView = 'home' | 'chat' | 'screen' | 'agent' | 'workflows' | 'memory' | 'integrations'
 
+// Sidebar views that correspond to an overlay/side panel rather than a full workspace
+const PANEL_VIEWS: Partial<Record<WorkspaceView, string>> = {
+  agent: 'agent',
+  memory: 'knowledge',
+}
+
 export default function App() {
   const chat = useChat()
   const agent = useAgent()
@@ -32,6 +38,7 @@ export default function App() {
     studio: false,
   })
 
+  // Full-workspace views swap `activeView`; agent/memory/settings/studio open as panels
   const closeAllPanels = useCallback(() => {
     setOpenPanels({ settings: false, agent: false, knowledge: false, studio: false })
   }, [])
@@ -40,12 +47,22 @@ export default function App() {
     setOpenPanels(prev => ({ ...prev, [panel]: !prev[panel] }))
   }, [])
 
-  const handleSidebarAction = useCallback((view: WorkspaceView, panel?: string) => {
-    setActiveView(view)
-    if (panel) togglePanel(panel)
+  // Open exactly one panel: close any open panel first, then open the requested one.
+  const openPanel = useCallback((panel: string) => {
     closeAllPanels()
+    setOpenPanels(prev => ({ ...prev, [panel]: true }))
+  }, [closeAllPanels])
+
+  const handleSidebarAction = useCallback((view: WorkspaceView, panel?: string) => {
     setSidebarOpen(false)
-  }, [togglePanel, closeAllPanels])
+    const panelKey = panel ?? PANEL_VIEWS[view]
+    if (panelKey) {
+      openPanel(panelKey)
+      return
+    }
+    closeAllPanels()
+    setActiveView(view)
+  }, [openPanel, closeAllPanels])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -60,7 +77,7 @@ export default function App() {
       }
       if ((e.metaKey || e.ctrlKey) && e.key === ',') {
         e.preventDefault()
-        togglePanel('settings')
+        openPanel('settings')
       }
       if (e.key === 'Escape') {
         if (sidebarOpen) setSidebarOpen(false)
@@ -69,7 +86,7 @@ export default function App() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [sidebarOpen, chat, handleSidebarAction, togglePanel, closeAllPanels])
+  }, [sidebarOpen, chat, handleSidebarAction, openPanel, closeAllPanels])
 
   const renderWorkspace = () => {
     switch (activeView) {
@@ -89,14 +106,19 @@ export default function App() {
         )
       case 'screen':
         return <ScreenAssistantView />
-      case 'agent':
-        return <AgentPanel agent={agent} onClose={() => togglePanel('agent')} />
+      // 'agent' and 'memory' render as side panels/overlays above the active workspace
       case 'workflows':
-        return <WorkflowsView />
-      case 'memory':
-        return <KnowledgePanel onClose={() => togglePanel('knowledge')} />
+        return (
+          <Suspense fallback={null}>
+            <WorkflowsView />
+          </Suspense>
+        )
       case 'integrations':
-        return <IntegrationsView />
+        return (
+          <Suspense fallback={null}>
+            <IntegrationsView />
+          </Suspense>
+        )
       default:
         return <HomeView onNewChat={chat.newConversation} onOpenView={handleSidebarAction} />
     }
@@ -132,11 +154,11 @@ export default function App() {
         onOpenHome={() => handleSidebarAction('home')}
         onOpenChat={() => handleSidebarAction('chat')}
         onOpenScreen={() => handleSidebarAction('screen')}
-        onOpenAgent={() => handleSidebarAction('agent', 'agent')}
+        onOpenAgent={() => handleSidebarAction('agent')}
         onOpenWorkflows={() => handleSidebarAction('workflows')}
-        onOpenMemory={() => handleSidebarAction('memory', 'knowledge')}
+        onOpenMemory={() => handleSidebarAction('memory')}
         onOpenIntegrations={() => handleSidebarAction('integrations')}
-        onOpenSettings={() => togglePanel('settings')}
+        onOpenSettings={() => openPanel('settings')}
         activeView={activeView}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}

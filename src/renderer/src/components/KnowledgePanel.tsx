@@ -49,7 +49,7 @@ export function KnowledgePanel({ onClose }: Props) {
       setIssueTitle('')
       setIssueBody('')
     } catch (error) {
-      setIssueNotice('\u2717 ' + (error as Error).message)
+      setIssueNotice('✗ ' + (error as Error).message)
     }
   }
 
@@ -150,7 +150,7 @@ export function KnowledgePanel({ onClose }: Props) {
                   {knowledge.importing ? (
                     <>
                       <Loader2 className="icon icon--sm" style={{ animation: 'spin 1s linear infinite' }} aria-hidden="true" />
-                      <span>Remembering\u2026</span>
+                      <span>Remembering…</span>
                     </>
                   ) : (
                     <>
@@ -222,12 +222,12 @@ export function KnowledgePanel({ onClose }: Props) {
                   {knowledge.importing ? (
                     <>
                       <Loader2 className="icon icon--sm" style={{ animation: 'spin 1s linear infinite' }} aria-hidden="true" />
-                      <span>Importing\u2026</span>
+                      <span>Importing…</span>
                     </>
                   ) : (
                     <>
                       <Plus className="icon icon--sm" aria-hidden="true" />
-                      <span>Add documents\u2026</span>
+                      <span>Add documents…</span>
                     </>
                   )}
                 </button>
@@ -372,12 +372,12 @@ export function KnowledgePanel({ onClose }: Props) {
                       <Key className="icon icon--md" style={{ color: 'var(--text-muted)' }} aria-hidden="true" />
                       <div>
                         <div style={{ fontWeight: 500 }}>Personal access token required</div>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Create a token with <code>repo</code> scope at GitHub Settings \u2192 Developer settings \u2192 Personal access tokens</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Create a token with <code>repo</code> scope at GitHub Settings → Developer settings → Personal access tokens</div>
                       </div>
                     </div>
                     <input
                       type="password"
-                      placeholder="Paste personal access token (repo scope)\u2026"
+                      placeholder="Paste personal access token (repo scope)…"
                       value={token}
                       onChange={(event) => setToken(event.target.value)}
                       className="field"
