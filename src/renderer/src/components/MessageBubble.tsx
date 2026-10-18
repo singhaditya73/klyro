@@ -1,4 +1,6 @@
 import type { ChatMessage } from '@shared/types'
+import { Copy, Check } from 'lucide-react'
+import { useState } from 'react'
 
 export interface MessageContext {
   memories: number
@@ -6,28 +8,49 @@ export interface MessageContext {
 }
 
 export function MessageBubble({ message, context }: { message: ChatMessage; context?: MessageContext }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(message.content)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   return (
     <div className={`message message--${message.role}${message.error ? ' message--error' : ''}`}>
-      <div className="message__role">
-        {message.role === 'user' ? 'You' : 'Klyro'}
-        {message.role === 'assistant' && message.model ? <span className="message__model"> · {message.model}</span> : null}
-        {context && (context.memories > 0 || context.documents > 0) ? (
+      <div className="message__header">
+        <span className="message__role">{message.role === 'user' ? 'You' : 'Klyro'}</span>
+        {message.role === 'assistant' && message.model && (
+          <span className="message__model">&#183; {message.model}</span>
+        )}
+        {context && (context.memories > 0 || context.documents > 0) && (
           <span className="message__context">
             {' '}
-            · grounded in {context.memories} memor{context.memories === 1 ? 'y' : 'ies'}
+            &#183; grounded in {context.memories} memor{context.memories === 1 ? 'y' : 'ies'}
             {context.documents > 0 ? ` + ${context.documents} document excerpt${context.documents === 1 ? '' : 's'}` : ''}
           </span>
-        ) : null}
+        )}
+        {!message.error && message.content && (
+          <button
+            className="btn btn--icon btn--icon-sm btn--ghost"
+            onClick={handleCopy}
+            aria-label={copied ? 'Copied' : 'Copy message'}
+            title={copied ? 'Copied' : 'Copy'}
+            style={{ marginLeft: 'auto', opacity: 0.5 }}
+          >
+            {copied ? <Check className="icon icon--xs" style={{ color: 'var(--success)' }} aria-hidden="true" /> : <Copy className="icon icon--xs" aria-hidden="true" />}
+          </button>
+        )}
       </div>
-      {message.attachments && message.attachments.length > 0 ? (
+      {message.attachments && message.attachments.length > 0 && (
         <div className="message__attachments">
           {message.attachments.map((attachment, index) => (
             <img key={index} src={attachment.dataUrl} alt={attachment.label ?? 'attachment'} />
           ))}
         </div>
-      ) : null}
+      )}
       <div className="message__body">
-        {message.content || (message.role === 'assistant' ? <span className="muted">…</span> : '')}
+        {message.content || (message.role === 'assistant' ? <span className="muted">&#8230;</span> : '')}
       </div>
     </div>
   )

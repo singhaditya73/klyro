@@ -597,6 +597,7 @@ export interface WorkflowRunStepState {
   status: 'pending' | 'running' | 'done' | 'failed' | 'skipped'
   output?: string
   error?: string
+  detail?: string
   attempts: number
   startedAt?: number
   finishedAt?: number

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 100" role="img" aria-labelledby="title">
+  <title id="title">Klyro — light background logo</title>
+  <g transform="translate(4 15) scale(1.05)" fill="#191919">
+    <path d="M15.2 38.8V27.2c0-1.2.5-2.4 1.4-3.3L30.7 9.8c.9-.9 2.1-1.4 3.4-1.4h14.1c1.9 0 2.9 2.3 1.5 3.7L16.9 45.1c-.6.6-1.7.2-1.7-.7V38.8Z"/>
+    <path d="M29.4 35.8 38 27.2c.8-.8 2.1-.8 2.9 0l14.4 14.4c.8.8.8 2.1 0 2.9l-5.7 5.7c-.4.4-.9.6-1.5.6H39c-.6 0-1.1-.2-1.5-.6L29.4 39c-.9-.9-.9-2.3 0-3.2Z"/>
+  </g>
+  <text x="82" y="57" fill="#191919" font-family="Geist, Inter, Arial, sans-serif" font-size="48" font-weight="550" letter-spacing="-1.8">Klyro</text>
+  <text x="84" y="82" fill="#626262" font-family="Geist, Inter, Arial, sans-serif" font-size="14" font-weight="400">Your AI. Your entire computer.</text>
+</svg>
