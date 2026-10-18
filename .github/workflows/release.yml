@@ -1,0 +1,73 @@
+name: Release
+
+# Tag a commit to publish installers, e.g. `git tag v0.2.0 && git push origin v0.2.0`.
+# Windows installers must be built on Windows: electron-builder needs Wine to run
+# NSIS from Linux, which hosted runners do not provide.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build and publish
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    name: Linux (AppImage, deb)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run dist:linux
+      - uses: actions/upload-artifact@v4
+        with:
+          name: klyro-linux
+          path: |
+            release/*.AppImage
+            release/*.deb
+          if-no-files-found: error
+
+  windows:
+    name: Windows (nsis installer)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run dist:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: klyro-windows
+          path: release/*.exe
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Attach artifacts to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          ls -la artifacts
+          gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1 \
+            || gh release create "$TAG" --repo "$REPO" --title "Klyro $TAG" --generate-notes
+          gh release upload "$TAG" --repo "$REPO" --clobber artifacts/*
