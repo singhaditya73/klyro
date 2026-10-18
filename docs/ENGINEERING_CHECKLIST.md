@@ -78,8 +78,8 @@ Legend: ✅ done+tested · 🟡 implemented, not fully verified · ⛔ blocked (
 | F | F1 meeting chunk dedup/retry + structured extraction | ✅ verified |
 | G | G1 common integration contract | ⬜ not started |
 | G | G2 Google Calendar / Email / Slack / Drive | ⛔ blocked on OAuth credentials |
-| H | H1 provider error categories, retry, rate-limit handling | ⬜ not started |
-| H | H2 model routing guardrails | ⬜ not started |
+| H | H1 provider error categories, retry, rate-limit handling | ✅ verified |
+| H | H2 model routing guardrails | ✅ verified |
 | I | I1 storage hardening, pagination, temp cleanup | ⬜ not started |
 | J | J1 release verification docs + signing/updates notes | ⬜ not started |
 | J | J2 opt-in crash/diagnostics reporting | ⬜ not started |
@@ -139,6 +139,44 @@ Status column reflects **verified in this program**, not intent. Only mark ✅ a
   its `.klyro-tmp` file if the rename fails.
 - Tests: 223 passing, typecheck clean, build clean, smoke OK.
 
+### Phase H — provider robustness (this commit)
+
+- `providers/errors.ts` (+ tests): one taxonomy for why a call failed (`auth`,
+  `quota`, `rate_limit`, `timeout`, `network`, `server`, `bad_request`,
+  `not_found`, `cancelled`, `unsupported`, `unknown`) with a `retryable` flag and
+  the server's `Retry-After` hint. Messages name the provider and say what to fix
+  ("OpenAI rejected the API key (401). Check the key in Settings."). Provider text
+  is redacted before it is shown or logged, so a key echoed in an error body can
+  never reach the UI or the log.
+- `providers/retry.ts` (+ tests): bounded exponential backoff with jitter that
+  retries only what could improve. A short `Retry-After` is honoured; an
+  unreasonably long one is reported instead of parking the user. Waits are
+  abort-aware.
+- `providers/request.ts` (+ tests): the single place every adapter makes its
+  request. Retries therefore cover only request establishment — never a stream the
+  user has already seen — and the "test connection" buttons report the same
+  classified detail a real call would.
+- All four adapters (`openai`, `anthropic`, `gemini`, `ollama`) go through it and
+  classify mid-stream failures too (a dropped connection becomes "Could not reach
+  …", not a raw `TypeError`).
+- `providers/routing.ts` (+ tests): resolves provider/model/key/endpoint in one
+  place with shipped-default fallback, refuses a hosted provider with no key, keeps
+  transcription on Whisper-capable providers, and fails fast (`assertVisionCapable`)
+  when the agent's model cannot read images. Used by chat, code, memory, meetings,
+  workflows, the agent and transcription.
+- `chat.ts` (+ new tests): a stalled stream is now reported as a timeout instead of
+  being mistaken for the user pressing Stop; a partial answer keeps the reason it
+  was cut off; the Stop control is registered before the first event, so an
+  immediate stop is never ignored.
+- `agent.ts`: retry decisions come from the taxonomy (a bad key fails once instead
+  of burning three model calls), and a stalled planner call fails the *call* — with
+  a request-scoped abort — so the run retries instead of hanging forever.
+- `util/idle-timeout.ts`: the stall error is delivered before the request is
+  aborted, because the abort itself can otherwise win the race (+ regression test).
+- UI (no redesign): the provider card warns when the active model cannot run the
+  agent.
+- Tests: 287 passing, typecheck clean, build clean, smoke OK.
+
 ### Metrics (measured, not estimated)
 | Measurement | Value | Where |
 | --- | --- | --- |
@@ -147,6 +185,8 @@ Status column reflects **verified in this program**, not intent. Only mark ✅ a
 | Paraphrase-query recall@5 | 0 — the measured reason embeddings/hybrid search were not added | `retrieval-eval.test.ts` |
 | Injected context per answer | < 400 chars avg on the fixture corpus | `retrieval-eval.test.ts` |
 | Retrieval latency | < 25 ms/query on the fixture corpus | `retrieval-eval.test.ts` |
+| Provider retry policy | 3 attempts (2 retries), 400 ms base, 4 s cap, `Retry-After` honoured when ≤ cap | `retry.test.ts`, `request.test.ts` |
+| Test suite | 287 tests / 32 files passing | `npm test` |
 
 ## Commands
 
