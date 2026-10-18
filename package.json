@@ -1,7 +1,7 @@
 {
   "name": "klyro",
   "version": "0.2.1",
-  "description": "Klyro \u2014 Your AI. Your entire computer. Understand. Remember. Act.",
+  "description": "Klyro — Your AI. Your entire computer. Understand. Remember. Act.",
   "homepage": "https://github.com/singhaditya73/klyro#readme",
   "repository": {
     "type": "git",
@@ -24,7 +24,7 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "test": "vitest run",
     "test:watch": "vitest",
-    "icons": "python3 scripts/make-icons.py",
+    "icons": "node scripts/make-icons.mjs",
     "smoke": "npm run build && electron scripts/smoke.cjs",
     "pack": "npm run build && electron-builder --dir",
     "pack:linux": "npm run build && electron-builder --linux --dir",
@@ -39,6 +39,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

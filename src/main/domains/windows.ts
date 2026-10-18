@@ -1,5 +1,6 @@
 import { join } from 'node:path'
-import { BrowserWindow, screen, shell } from 'electron'
+import { BrowserWindow, screen, shell, nativeImage } from 'electron'
+import { KLYRO_ICON_DATA_URL } from '../assets'
 import { isExternalHttpUrl, isTrustedRendererUrl } from '../security/origins'
 import { diagnostics } from '../diagnostics'
 import { logger } from '../logger'
@@ -76,6 +77,7 @@ export function createMainWindow(): BrowserWindow {
     minHeight: 520,
     show: false,
     title: 'Klyro',
+    icon: nativeImage.createFromDataURL(KLYRO_ICON_DATA_URL),
     backgroundColor: '#0b0d12',
     webPreferences: baseWebPreferences()
   })
