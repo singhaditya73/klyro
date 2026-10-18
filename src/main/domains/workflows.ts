@@ -183,7 +183,7 @@ interface WorkflowTool {
   run: (context: ToolContext) => Promise<string>
 }
 
-function formatIssues(target: string, issues: GitHubIssue[]): string {
+function formatIssues(issues: GitHubIssue[]): string {
   if (issues.length === 0) return '(no open issues)'
   return issues
     .map(
@@ -225,7 +225,16 @@ const WORKFLOW_TOOLS: Record<WorkflowStepKind, WorkflowTool> = {
       )) {
         text += delta
       }
-      return text.trim()
+      text = text.trim()
+
+      conversations.addMessage(context.conversationId, {
+        id: randomUUID(),
+        role: 'assistant',
+        content: text,
+        createdAt: Date.now(),
+        model: config.model
+      })
+      return text
     }
   },
   githubIssues: {
@@ -237,7 +246,7 @@ const WORKFLOW_TOOLS: Record<WorkflowStepKind, WorkflowTool> = {
       const target = context.rendered.trim()
       if (!target) throw new Error('This step needs a repository, but the input was empty.')
       const issues = await github.issues(target, 25)
-      const digest = formatIssues(target, issues)
+      const digest = formatIssues(issues)
       const wrapped = wrapUntrusted(`github issues for ${target}`, digest)
       context.note(context.step.name, `Fetched from github.com/${target}:\n${wrapped}`)
       return wrapped

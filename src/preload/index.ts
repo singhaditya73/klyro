@@ -104,6 +104,8 @@ const api: KlyroApi = {
   workflowCreate: (draft: WorkflowDraft) => ipcRenderer.invoke(IPC.workflowCreate, draft),
   workflowDelete: (id: string) => ipcRenderer.invoke(IPC.workflowDelete, id),
   workflowRun: (id: string, input: string) => ipcRenderer.invoke(IPC.workflowRun, id, input),
+  workflowRuns: () => ipcRenderer.invoke(IPC.workflowRuns),
+  workflowCancel: (runId: string) => ipcRenderer.invoke(IPC.workflowCancel, runId),
   onWorkflowEvent: (listener: (event: WorkflowEvent) => void) => {
     const wrapped = (_event: unknown, payload: WorkflowEvent): void => listener(payload)
     ipcRenderer.on(IPC.workflowEvent, wrapped)

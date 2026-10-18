@@ -5,7 +5,9 @@ import type {
   MeetingRecord,
   MeetingSegment,
   ProjectStatus,
-  WorkflowRecord
+  WorkflowRecord,
+  WorkflowRun,
+  WorkflowRunStatus
 } from '@shared/types'
 
 export interface StudioController {
@@ -36,8 +38,10 @@ export interface StudioController {
   setWorkflowInput: (value: string) => void
   workflowRunning: string | null
   workflowSteps: { name: string; status: 'running' | 'done' | 'failed'; detail?: string }[]
-  workflowResult: { conversationId: string; steps: { name: string; output: string; ok: boolean }[] } | null
+  workflowResult: { conversationId: string; status: WorkflowRunStatus; steps: { name: string; output: string; ok: boolean }[] } | null
+  workflowRuns: WorkflowRun[]
   runWorkflow: (id: string) => Promise<void>
+  cancelWorkflow: () => Promise<void>
   deleteWorkflow: (id: string) => Promise<void>
 
   error: string | null
@@ -70,6 +74,8 @@ export function useStudio(): StudioController {
   const [workflowRunning, setWorkflowRunning] = useState<string | null>(null)
   const [workflowSteps, setWorkflowSteps] = useState<StudioController['workflowSteps']>([])
   const [workflowResult, setWorkflowResult] = useState<StudioController['workflowResult']>(null)
+  const [workflowRuns, setWorkflowRuns] = useState<WorkflowRun[]>([])
+  const [activeRunId, setActiveRunId] = useState('')
 
   const [error, setError] = useState<string | null>(null)
 
@@ -79,11 +85,21 @@ export function useStudio(): StudioController {
   const queueRef = useRef<Promise<void>>(Promise.resolve())
   const timerRef = useRef<number | null>(null)
 
+  const refreshRuns = useCallback(async (): Promise<void> => {
+    try {
+      setWorkflowRuns(await window.klyro.workflowRuns())
+    } catch {
+      // Run history is a convenience; failing to load it must not break the panel.
+      setWorkflowRuns([])
+    }
+  }, [])
+
   const refresh = useCallback(async (): Promise<void> => {
     setProject(await window.klyro.projectStatus())
     setMeetings(await window.klyro.meetingList())
     setWorkflows(await window.klyro.workflowList())
-  }, [])
+    await refreshRuns()
+  }, [refreshRuns])
 
   useEffect(() => {
     void refresh()
@@ -95,6 +111,7 @@ export function useStudio(): StudioController {
         case 'start':
           setWorkflowSteps([])
           setWorkflowResult(null)
+          setActiveRunId(event.runId)
           break
         case 'step':
           setWorkflowSteps((prev) => {
@@ -267,15 +284,24 @@ export function useStudio(): StudioController {
       setWorkflowResult(null)
       try {
         const result = await window.klyro.workflowRun(id, workflowInput)
-        setWorkflowResult({ conversationId: result.conversationId, steps: result.steps })
+        setWorkflowResult({ conversationId: result.conversationId, status: result.status, steps: result.steps })
       } catch (caught) {
         setError((caught as Error).message)
       } finally {
         setWorkflowRunning(null)
+        void refreshRuns()
       }
     },
-    [workflowInput]
+    [workflowInput, refreshRuns]
   )
+
+  const cancelWorkflow = useCallback(async (): Promise<void> => {
+    try {
+      await window.klyro.workflowCancel(activeRunId)
+    } catch (caught) {
+      setError((caught as Error).message)
+    }
+  }, [activeRunId])
 
   const deleteWorkflow = useCallback(async (id: string): Promise<void> => {
     try {
@@ -312,7 +338,9 @@ export function useStudio(): StudioController {
     workflowRunning,
     workflowSteps,
     workflowResult,
+    workflowRuns,
     runWorkflow,
+    cancelWorkflow,
     deleteWorkflow,
     error
   }

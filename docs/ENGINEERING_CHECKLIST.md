@@ -55,35 +55,67 @@ Legend: ✅ done+tested · 🟡 implemented, not fully verified · ⛔ blocked (
 
 | Phase | Item | Status |
 | --- | --- | --- |
-| A | A1 strict versioned action schema + post-action verification | ✅ |
-| A | A2 bounded failure recovery with backoff | ✅ |
-| A | A3 task lifecycle, limits, pause/resume, crash recovery | ✅ |
-| A | A4 central main-process risk policy + approval revalidation | ✅ |
-| A | A5 capability probe, Wayland/X11 + per-backend diagnostics | ✅ |
-| A | A6 mocked-backend integration tests | ✅ |
-| B | B1 IPC boundary validation hardening | ✅ |
-| B | B2 honest secure-storage fallback + redaction | ✅ |
-| B | B3 prompt-injection labeling + adversarial fixtures | ✅ |
-| B | B4 privacy/retention controls + indexing exclusions | ✅ |
-| C | C1 retrieval evaluation suite | ✅ |
-| C | C2 retrieval improvements + source citations | ✅ |
-| C | C3 hybrid embedding retrieval | ⬜ deferred (eval did not justify it) |
-| C | C4 memory quality (conflicts, provenance, corrections) | ✅ |
-| D | D1 versioned workflow model + validation | ✅ |
-| D | D2 durable execution lifecycle | ✅ |
-| D | D3 typed reusable workflow tools | ✅ |
-| D | D4 multi-step evaluation with mocked services | ✅ |
-| E | E1 incremental indexing + exclusions + safe paths | ✅ |
-| E | E2 line-range citations + diff/apply with approval + revert | ✅ |
-| F | F1 meeting chunk dedup/retry + structured extraction | ✅ |
-| G | G1 common integration contract | ✅ |
+| A | A1 strict versioned action schema + post-action verification | ✅ verified |
+| A | A2 bounded failure recovery with backoff | ✅ verified |
+| A | A3 task lifecycle, limits, pause/resume, crash recovery | ✅ verified |
+| A | A4 central main-process risk policy + approval revalidation | ✅ verified |
+| A | A5 capability probe, Wayland/X11 + per-backend diagnostics | ✅ verified |
+| A | A6 mocked-backend integration tests | ✅ verified |
+| B | B1 IPC boundary validation hardening | ✅ verified |
+| B | B2 honest secure-storage fallback + redaction | ✅ verified |
+| B | B3 prompt-injection labeling + adversarial fixtures | ✅ verified |
+| B | B4 privacy/retention controls + indexing exclusions | ✅ verified |
+| C | C1 retrieval evaluation suite | ✅ verified |
+| C | C2 retrieval improvements + source citations | ✅ verified |
+| C | C3 hybrid embedding retrieval | ⬜ deferred (eval did not justify it — see Metrics) |
+| C | C4 memory quality (conflicts, provenance, corrections) | ✅ verified |
+| D | D1 versioned workflow model + validation | ✅ verified |
+| D | D2 durable execution lifecycle | ✅ verified |
+| D | D3 typed reusable workflow tools | ✅ verified |
+| D | D4 multi-step evaluation with mocked services | ✅ verified |
+| E | E1 incremental indexing + exclusions + safe paths | 🟡 exclusions exist (B4); indexing is still a full re-scan |
+| E | E2 line-range citations + diff/apply with approval + revert | 🟡 citations done (C2); diff/apply not started |
+| F | F1 meeting chunk dedup/retry + structured extraction | ⬜ not started |
+| G | G1 common integration contract | ⬜ not started |
 | G | G2 Google Calendar / Email / Slack / Drive | ⛔ blocked on OAuth credentials |
-| H | H1 provider error categories, retry, rate-limit handling | ✅ |
-| H | H2 model routing guardrails | ✅ |
-| I | I1 storage hardening, pagination, temp cleanup | ✅ |
-| J | J1 release verification docs + signing/updates notes | ✅ |
-| J | J2 opt-in crash/diagnostics reporting | ✅ |
-| J | J3 documentation refresh | ✅ |
+| H | H1 provider error categories, retry, rate-limit handling | ⬜ not started |
+| H | H2 model routing guardrails | ⬜ not started |
+| I | I1 storage hardening, pagination, temp cleanup | ⬜ not started |
+| J | J1 release verification docs + signing/updates notes | ⬜ not started |
+| J | J2 opt-in crash/diagnostics reporting | ⬜ not started |
+| J | J3 documentation refresh | ⬜ not started |
+
+Status column reflects **verified in this program**, not intent. Only mark ✅ after tests/commands actually passed on this machine.
+
+## Phase log
+
+### Phase C — retrieval evaluation, citations, memory quality (`e989343`)
+
+- `src/main/knowledge/eval.ts`: harness computing recall@k, MRR, injected-context characters and per-query latency over a labelled fixture corpus.
+- `src/main/knowledge/retrieval-eval.test.ts`: asserts recall@5 ≥ 0.9 and MRR ≥ 0.7 on keyword queries; asserts the paraphrase family currently scores 0 (the measured justification for deferring C3).
+- `chunkDocument` now reports byte offsets and source line numbers; `documents.ts` stores chunk offsets (`{text,start,end,line}`) and migrates legacy `string[]` chunks on read.
+- `KnowledgeHit` gained `line`/`path`; document recall/search label hits `name:line`; `context.ts` and `code.ts` cite them; `CodeAssistResult.citations` is surfaced in the Studio panel.
+- `memory.ts`: `origin` provenance, polarity-based conflict detection (`conflicts()`), auto-extracted facts can no longer contradict known facts, hedged/speculative statements are never persisted, extraction skipped for trivial exchanges.
+- Tests: 163 passing, typecheck clean, build clean.
+
+### Phase D — durable workflow engine (this commit)
+
+- `workflow-spec.ts` (pure): schema version, `validateWorkflow` (per-kind required fields, bounded retries/timeouts, unique output keys, no forward/unknown `{{steps.x}}` references), `resolveSteps` (stable ids, defaults, unique outputs), `normalizeWorkflow` (upgrade legacy definitions on read), `describeStep`.
+- `workflows.ts`: tool registry keyed by step kind — `prompt`, `githubIssues`, `githubCreateIssue` (flagged consequential), `projectSearch`, `knowledge`, `meetingSummary`; per-step timeout (default 120 s) and bounded retries with backoff; `onFailure: stop | continue`; durable run records (`WorkflowRun`, per-step status/attempts/timestamps) persisted to `workflows.json` and capped at 50; cancelled runs mark pending steps `skipped`; runs left `running` by a crash are marked `interrupted` on startup; `runs()` and `cancel(runId)` exposed over IPC.
+- Built-ins upgraded to v2 and given real ids/outputs; new `builtin:meeting-follow-ups`; `builtin:explain-area` now grounds itself in the indexed project.
+- `src/main/util/with-timeout.ts` (+ tests): rejects on deadline and asks the work to abort.
+- UI (no redesign): "Stop run", truthful run status in the result, and a compact "Recent runs" list.
+- Tests: 187 passing, typecheck clean, build clean.
+
+### Metrics (measured, not estimated)
+
+| Measurement | Value | Where |
+| --- | --- | --- |
+| Keyword-query retrieval recall@5 | ≥ 0.9 (asserted) | `retrieval-eval.test.ts` |
+| Keyword-query MRR | ≥ 0.7 (asserted) | `retrieval-eval.test.ts` |
+| Paraphrase-query recall@5 | 0 — the measured reason embeddings/hybrid search were not added | `retrieval-eval.test.ts` |
+| Injected context per answer | < 400 chars avg on the fixture corpus | `retrieval-eval.test.ts` |
+| Retrieval latency | < 25 ms/query on the fixture corpus | `retrieval-eval.test.ts` |
 
 ## Commands
 

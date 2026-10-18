@@ -76,6 +76,8 @@ export const IPC = {
   workflowCreate: 'workflow:create',
   workflowDelete: 'workflow:delete',
   workflowRun: 'workflow:run',
+  workflowRuns: 'workflow:runs',
+  workflowCancel: 'workflow:cancel',
   workflowEvent: 'workflow:event',
 
   windowHideOverlay: 'window:hideOverlay',

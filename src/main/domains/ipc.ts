@@ -121,15 +121,34 @@ const meetingDraftSchema = z.object({
   segments: z.array(z.object({ at: z.number(), text: z.string().max(4000) })).max(4000)
 })
 
+const workflowStepOptions = {
+  id: z.string().max(60).optional(),
+  name: z.string().min(1).max(80),
+  onFailure: z.enum(['stop', 'continue']).optional(),
+  retries: z.number().int().min(0).max(3).optional(),
+  timeoutMs: z.number().int().min(1000).max(600_000).optional(),
+  output: z.string().max(60).optional()
+}
+
 const workflowStepSchema = z.union([
-  z.object({ kind: z.literal('prompt'), name: z.string().min(1).max(80), template: z.string().min(1).max(8000) }),
-  z.object({ kind: z.literal('githubIssues'), name: z.string().min(1).max(80), repo: z.string().max(300) })
+  z.object({ ...workflowStepOptions, kind: z.literal('prompt'), template: z.string().min(1).max(8000) }),
+  z.object({ ...workflowStepOptions, kind: z.literal('githubIssues'), repo: z.string().max(300) }),
+  z.object({
+    ...workflowStepOptions,
+    kind: z.literal('githubCreateIssue'),
+    repo: z.string().max(300),
+    title: z.string().max(200),
+    body: z.string().max(20000)
+  }),
+  z.object({ ...workflowStepOptions, kind: z.literal('projectSearch'), query: z.string().max(500) }),
+  z.object({ ...workflowStepOptions, kind: z.literal('knowledge'), query: z.string().max(500) }),
+  z.object({ ...workflowStepOptions, kind: z.literal('meetingSummary'), meetingId: z.string().max(80) })
 ])
 
 const workflowDraftSchema = z.object({
   name: z.string().min(1).max(120),
   description: z.string().max(300).optional(),
-  steps: z.array(workflowStepSchema).min(1).max(10)
+  steps: z.array(workflowStepSchema).min(1).max(12)
 })
 
 export function registerIpcHandlers(): void {
@@ -342,6 +361,8 @@ export function registerIpcHandlers(): void {
   handle(IPC.workflowRun, (_event, id: unknown, input: unknown) =>
     workflows.run(idSchema.parse(id), z.string().max(40000).parse(input ?? ''))
   )
+  handle(IPC.workflowRuns, () => workflows.runs())
+  handle(IPC.workflowCancel, (_event, runId: unknown) => workflows.cancel(idSchema.parse(runId)))
 
   handle(IPC.windowHideOverlay, () => {
     const win = getOverlayWindow()

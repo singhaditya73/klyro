@@ -172,7 +172,9 @@ export function validateWorkflow(draft: Pick<WorkflowDraft, 'name' | 'steps'>, k
       errors.push(`${label}: timeout must be between ${MIN_STEP_TIMEOUT_MS / 1000}s and ${MAX_STEP_TIMEOUT_MS / 1000}s.`)
     }
     if (step.kind === 'githubIssues' || step.kind === 'githubCreateIssue') {
-      if (step.repo?.trim() && !/^[\w.-]+\/[\w.-]+$/.test(step.repo.trim())) {
+      // A repository may come from the run input, so only check literal values.
+      const literal = step.repo?.trim() ?? ''
+      if (literal && templateReferences(literal).length === 0 && !/^[\w.-]+\/[\w.-]+$/.test(literal)) {
         errors.push(`${label}: repository must look like "owner/name".`)
       }
     }

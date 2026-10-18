@@ -305,11 +305,21 @@ export function StudioPanel({ onClose }: Props) {
                 </div>
               ))}
 
+              {studio.workflowRunning !== null ? (
+                <div className="provider__actions">
+                  <button className="btn" onClick={() => void studio.cancelWorkflow()}>
+                    Stop run
+                  </button>
+                </div>
+              ) : null}
+
               {studio.workflowResult ? (
                 <>
                   <h3>Result</h3>
                   <div className="muted">
-                    Saved to a new chat — open the sidebar to continue the conversation.
+                    {studio.workflowResult.status === 'completed'
+                      ? 'Saved to a new chat — open the sidebar to continue the conversation.'
+                      : `This run ${studio.workflowResult.status}. Steps that finished are shown below.`}
                   </div>
                   {studio.workflowResult.steps.map((step) => (
                     <div key={step.name} className="card">
@@ -318,6 +328,28 @@ export function StudioPanel({ onClose }: Props) {
                         <strong>{step.name}</strong>
                       </div>
                       <pre className="code-out">{step.output}</pre>
+                    </div>
+                  ))}
+                </>
+              ) : null}
+
+              {studio.workflowRuns.length > 0 ? (
+                <>
+                  <h3>Recent runs</h3>
+                  <div className="muted">
+                    Runs are recorded on this device so an interrupted run is never left silently in progress.
+                  </div>
+                  {studio.workflowRuns.slice(0, 5).map((run) => (
+                    <div key={run.id} className="card">
+                      <div className="card__row">
+                        <span className={`pill${run.status === 'completed' ? ' pill--ok' : ''}`}>{run.status}</span>
+                        <strong>{run.workflowName}</strong>
+                        <span className="muted card__spacer">
+                          {new Date(run.finishedAt || run.startedAt).toLocaleString()} · {run.steps.filter((step) => step.status === 'done').length}/
+                          {run.steps.length} steps
+                        </span>
+                      </div>
+                      {run.error ? <div className="card__text muted">{run.error}</div> : null}
                     </div>
                   ))}
                 </>
