@@ -79,6 +79,23 @@ export interface Conversation {
   messages: ChatMessage[]
 }
 
+/**
+ * A window onto a conversation. Long histories are paged from the end, so opening
+ * a chat with thousands of messages stays fast in both processes.
+ */
+export interface ConversationWindow {
+  conversation: Conversation
+  /** Messages in the conversation, including any that are not in this window. */
+  totalMessages: number
+  /** True when older messages exist above the window. */
+  hasMore: boolean
+}
+
+export interface ConversationQuery {
+  /** How many of the newest messages to return. */
+  limit?: number
+}
+
 export interface ConversationSummary {
   id: string
   title: string
@@ -482,6 +499,18 @@ export interface SecurityStatus {
 
 export type DataScope = 'conversations' | 'memory' | 'documents' | 'project' | 'meetings' | 'agentTasks'
 
+export interface StorageReport {
+  dataBytes: number
+  dataFiles: number
+  backupBytes: number
+  backupFiles: number
+  totalBytes: number
+  /** Data files that could not be parsed and were set aside, never deleted. */
+  quarantined: string[]
+  /** Filled in when a sweep has just run. */
+  lastSweep?: { removedTempFiles: number; removedBackups: number; freedBytes: number; at: number }
+}
+
 export interface DataSummary {
   conversations: number
   memories: number
@@ -493,6 +522,8 @@ export interface DataSummary {
   activeProvider: ProviderId
   /** True when the active provider keeps requests on this machine. */
   activeProviderIsLocal: boolean
+  /** What Klyro is using on disk, so "clear" decisions are informed. */
+  storage: StorageReport
 }
 
 /* ---------- Workflows ---------- */
@@ -614,7 +645,7 @@ export interface KlyroApi {
   onChatStream(listener: (event: ChatStreamEvent) => void): () => void
 
   listConversations(): Promise<ConversationSummary[]>
-  getConversation(id: string): Promise<Conversation | null>
+  getConversation(id: string, query?: ConversationQuery): Promise<ConversationWindow | null>
   createConversation(): Promise<Conversation>
   renameConversation(id: string, title: string): Promise<void>
   deleteConversation(id: string): Promise<void>
@@ -629,6 +660,7 @@ export interface KlyroApi {
   securityStatus(): Promise<SecurityStatus>
   dataSummary(): Promise<DataSummary>
   dataClear(scope: DataScope): Promise<DataSummary>
+  sweepStorage(): Promise<DataSummary>
 
   getAutomationCapabilities(): Promise<AutomationCapabilities>
   runAgent(request: AgentRunRequest): Promise<void>

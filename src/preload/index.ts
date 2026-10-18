@@ -6,6 +6,7 @@ import type {
   AppSettings,
   ChatStreamEvent,
   CodeAssistRequest,
+  ConversationQuery,
   DataScope,
   KlyroApi,
   MeetingDraft,
@@ -37,7 +38,8 @@ const api: KlyroApi = {
   },
 
   listConversations: () => ipcRenderer.invoke(IPC.conversationList),
-  getConversation: (id: string) => ipcRenderer.invoke(IPC.conversationGet, id),
+  getConversation: (id: string, query?: ConversationQuery) =>
+    ipcRenderer.invoke(IPC.conversationGet, id, query),
   createConversation: () => ipcRenderer.invoke(IPC.conversationCreate),
   renameConversation: (id: string, title: string) => ipcRenderer.invoke(IPC.conversationRename, id, title),
   deleteConversation: (id: string) => ipcRenderer.invoke(IPC.conversationDelete, id),
@@ -52,6 +54,7 @@ const api: KlyroApi = {
   securityStatus: () => ipcRenderer.invoke(IPC.securityStatus),
   dataSummary: () => ipcRenderer.invoke(IPC.dataSummary),
   dataClear: (scope: DataScope) => ipcRenderer.invoke(IPC.dataClear, scope),
+  sweepStorage: () => ipcRenderer.invoke(IPC.storageSweep),
 
   getAutomationCapabilities: () => ipcRenderer.invoke(IPC.agentCapabilities),
   runAgent: (request: AgentRunRequest) => ipcRenderer.invoke(IPC.agentRun, request),

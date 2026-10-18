@@ -80,7 +80,7 @@ Legend: ✅ done+tested · 🟡 implemented, not fully verified · ⛔ blocked (
 | G | G2 Google Calendar / Email / Slack / Drive | ⛔ blocked on OAuth credentials |
 | H | H1 provider error categories, retry, rate-limit handling | ✅ verified |
 | H | H2 model routing guardrails | ✅ verified |
-| I | I1 storage hardening, pagination, temp cleanup | ⬜ not started |
+| I | I1 storage hardening, pagination, temp cleanup | ✅ verified |
 | J | J1 release verification docs + signing/updates notes | ⬜ not started |
 | J | J2 opt-in crash/diagnostics reporting | ⬜ not started |
 | J | J3 documentation refresh | ⬜ not started |
@@ -186,7 +186,31 @@ Status column reflects **verified in this program**, not intent. Only mark ✅ a
 | Injected context per answer | < 400 chars avg on the fixture corpus | `retrieval-eval.test.ts` |
 | Retrieval latency | < 25 ms/query on the fixture corpus | `retrieval-eval.test.ts` |
 | Provider retry policy | 3 attempts (2 retries), 400 ms base, 4 s cap, `Retry-After` honoured when ≤ cap | `retry.test.ts`, `request.test.ts` |
-| Test suite | 287 tests / 32 files passing | `npm test` |
+| Conversation page size | 80 messages (grows via "Load earlier") | `chat.ts`, `useChat.ts` |
+| Context window | 40 turns max, 4 most recent images | `chat.ts` |
+| Test suite | 295 tests / 33 files passing | `npm test` |
+
+### Phase I — storage hardening, pagination, temp cleanup (this commit)
+
+- `json-store.ts`: unreadable data files are **quarantined** (renamed with a
+  `.corrupt-` timestamp suffix) instead of being silently overwritten, so the
+  user keeps a recoverable copy. A stray `.tmp` file left by a crashed write is
+  detected and removed at startup.
+- `storage.ts` + `maintenance.ts`: `measureStorage()` reports data size, file
+  count, and patch-backup size. `sweepStorage()` runs once at startup and can be
+  triggered from Settings → "Clean up"; it removes unfinished `.tmp` writes and
+  any patch backups no applied patch can still revert to.
+- Settings panel shows **storage breakdown** (data + edit backups) and the result
+  of the last sweep, plus a notice for any quarantined files.
+- Conversation history is now **paged** (`getConversation(id, { limit })`) — the
+  newest 80 messages load by default, with a "Load earlier" button to grow the
+  window. The renderer requests only what it needs, so opening a 5 000-message
+  chat stays fast. The model context is also capped (40 newest turns, 4 most
+  recent images), preventing unbounded cost growth.
+- `patch-backups` directory is swept for orphans; quarantined files are listed
+  but never deleted.
+- Tests: `json-store.test.ts` (quarantine, temp cleanup, sweep) + existing suite.
+  295 tests / 33 files passing, typecheck clean, build clean, smoke OK.
 
 ## Commands
 

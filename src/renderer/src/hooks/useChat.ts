@@ -8,13 +8,19 @@ export interface ChatController {
   streamingId: string | null
   contexts: Record<string, { memories: number; documents: number }>
   search: string
+  /** True when older messages exist above what is loaded. */
+  hasMore: boolean
   setSearch: (value: string) => void
   openConversation: (id: string) => Promise<void>
+  loadEarlier: () => Promise<void>
   newConversation: () => Promise<void>
   deleteConversation: (id: string) => Promise<void>
   send: (content: string, attachments: Attachment[]) => Promise<void>
   stop: () => void
 }
+
+/** Messages loaded at a time; "Load earlier" grows the window. */
+const PAGE = 80
 
 export function useChat(): ChatController {
   const [summaries, setSummaries] = useState<ConversationSummary[]>([])
@@ -23,33 +29,53 @@ export function useChat(): ChatController {
   const [streamingId, setStreamingId] = useState<string | null>(null)
   const [contexts, setContexts] = useState<Record<string, { memories: number; documents: number }>>({})
   const [search, setSearch] = useState('')
+  const [hasMore, setHasMore] = useState(false)
   const activeIdRef = useRef<string | null>(null)
+  // How much of the open conversation is loaded, so refreshes do not shrink it.
+  const windowRef = useRef(PAGE)
 
   const refreshList = useCallback(async (query = ''): Promise<void> => {
     setSummaries(query ? await window.klyro.searchConversations(query) : await window.klyro.listConversations())
   }, [])
 
   const openConversation = useCallback(async (id: string): Promise<void> => {
-    const conversation = await window.klyro.getConversation(id)
-    if (!conversation) return
-    activeIdRef.current = conversation.id
-    setActiveId(conversation.id)
-    setMessages(conversation.messages)
+    windowRef.current = PAGE
+    const page = await window.klyro.getConversation(id, { limit: PAGE })
+    if (!page) return
+    activeIdRef.current = page.conversation.id
+    setActiveId(page.conversation.id)
+    setMessages(page.conversation.messages)
+    setHasMore(page.hasMore)
+  }, [])
+
+  /** Pull in the next slice of older messages, keeping the ones already shown. */
+  const loadEarlier = useCallback(async (): Promise<void> => {
+    const id = activeIdRef.current
+    if (!id) return
+    windowRef.current += PAGE
+    const page = await window.klyro.getConversation(id, { limit: windowRef.current })
+    if (!page) return
+    setMessages(page.conversation.messages)
+    setHasMore(page.hasMore)
   }, [])
 
   const newConversation = useCallback(async (): Promise<void> => {
     const conversation = await window.klyro.createConversation()
+    windowRef.current = PAGE
     activeIdRef.current = conversation.id
     setActiveId(conversation.id)
     setMessages([])
+    setHasMore(false)
     await refreshList()
   }, [refreshList])
 
   const refreshActive = useCallback(async (): Promise<void> => {
     const id = activeIdRef.current
     if (!id) return
-    const conversation = await window.klyro.getConversation(id)
-    if (conversation) setMessages(conversation.messages)
+    const page = await window.klyro.getConversation(id, { limit: windowRef.current })
+    if (!page) return
+    setMessages(page.conversation.messages)
+    setHasMore(page.hasMore)
   }, [])
 
   useEffect(() => {
@@ -159,8 +185,10 @@ export function useChat(): ChatController {
     streamingId,
     contexts,
     search,
+    hasMore,
     setSearch,
     openConversation,
+    loadEarlier,
     newConversation,
     deleteConversation,
     send,

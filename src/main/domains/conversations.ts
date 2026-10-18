@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto'
-import type { ChatMessage, Conversation, ConversationSummary } from '@shared/types'
+import type { ChatMessage, Conversation, ConversationQuery, ConversationSummary, ConversationWindow } from '@shared/types'
 import { JsonStore } from '../store/json-store'
 
 interface ConversationsFile {
   conversations: Conversation[]
 }
+
+/** How much of a conversation is sent to the renderer in one go. */
+export const CONVERSATION_PAGE = 80
 
 function toSummary(conversation: Conversation): ConversationSummary {
   const last = conversation.messages[conversation.messages.length - 1]
@@ -26,6 +29,26 @@ class ConversationsDomain {
 
   get(id: string): Conversation | null {
     return this.store.get().conversations.find((c) => c.id === id) ?? null
+  }
+
+  /**
+   * The newest `limit` messages of a conversation. Paging from the end means the
+   * window never drifts when new messages arrive while the user is reading.
+   */
+  window(id: string, query: ConversationQuery = {}): ConversationWindow | null {
+    const conversation = this.get(id)
+    if (!conversation) return null
+
+    const requested = Math.floor(query.limit ?? CONVERSATION_PAGE)
+    const limit = Math.min(Math.max(requested, 1), 1000)
+    const total = conversation.messages.length
+    const messages = total > limit ? conversation.messages.slice(total - limit) : conversation.messages
+
+    return {
+      conversation: { ...conversation, messages },
+      totalMessages: total,
+      hasMore: total > messages.length
+    }
   }
 
   create(): Conversation {

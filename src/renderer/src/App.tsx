@@ -43,6 +43,8 @@ export default function App() {
         messages={chat.messages}
         streamingId={chat.streamingId}
         contexts={chat.contexts}
+        hasMore={chat.hasMore}
+        onLoadEarlier={chat.loadEarlier}
         onSend={chat.send}
         onStop={chat.stop}
       />

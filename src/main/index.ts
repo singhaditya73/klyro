@@ -8,6 +8,7 @@ import { registerShortcuts, unregisterShortcuts } from './domains/shortcuts'
 import { settingsDomain } from './domains/settings'
 import { createTray } from './domains/tray'
 import { createMainWindow, createOverlayWindow, showMainWindow } from './domains/windows'
+import { maintenance } from './domains/maintenance'
 
 app.setName('Klyro')
 
@@ -49,6 +50,8 @@ if (!gotLock) {
     secrets.init()
     setPackagedRenderer(join(__dirname, '../renderer/index.html'))
     settingsDomain.get() // applies the plaintext-secrets policy before any key is written
+    // Remove leftovers from a previous run before anything writes again.
+    maintenance.sweep()
     applyContentSecurityPolicy()
     applyPermissionPolicy()
     registerIpcHandlers()

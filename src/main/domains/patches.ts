@@ -217,6 +217,17 @@ class PatchDomain {
   clear(): void {
     this.store.set({ patches: [] })
   }
+
+  /**
+   * Backups that an applied patch can still restore. Anything else on disk is an
+   * orphan (the patch was reverted, discarded, or aged out of the list).
+   */
+  referencedBackups(): string[] {
+    return this.store
+      .get()
+      .patches.filter((patch) => patch.status === 'applied' && patch.backupPath)
+      .map((patch) => patch.backupPath as string)
+  }
 }
 
 export const patches = new PatchDomain()

@@ -30,6 +30,7 @@ export const IPC = {
   securityStatus: 'security:status',
   dataSummary: 'data:summary',
   dataClear: 'data:clear',
+  storageSweep: 'storage:sweep',
 
   agentCapabilities: 'agent:capabilities',
   agentRun: 'agent:run',

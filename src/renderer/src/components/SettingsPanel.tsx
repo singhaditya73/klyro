@@ -15,6 +15,12 @@ interface Props {
   onClose: () => void
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
 export function SettingsPanel({ onClose }: Props) {
   const panelRef = useModal(onClose)
   const [settings, setSettings] = useState<AppSettings | null>(null)
@@ -73,6 +79,10 @@ export function SettingsPanel({ onClose }: Props) {
 
   async function clearScope(scope: DataScope): Promise<void> {
     setData(await window.klyro.dataClear(scope))
+  }
+
+  async function sweep(): Promise<void> {
+    setData(await window.klyro.sweepStorage())
   }
 
   async function test(id: ProviderId): Promise<void> {
@@ -424,6 +434,33 @@ export function SettingsPanel({ onClose }: Props) {
                 Saved credentials: {data.credentials}. Credentials are removed from Providers above. Screenshots are
                 captured on demand and never written to disk.
               </div>
+
+              <h4>Storage on this device</h4>
+              <div className="data-row">
+                <span>
+                  Klyro data: {formatBytes(data.storage.dataBytes)} ({data.storage.dataFiles} files)
+                  {data.storage.backupFiles > 0
+                    ? ` · edit backups: ${formatBytes(data.storage.backupBytes)}`
+                    : ''}
+                </span>
+                <button className="btn btn--ghost" onClick={() => void sweep()}>
+                  Clean up
+                </button>
+              </div>
+              {data.storage.lastSweep ? (
+                <div className="muted">
+                  Removed {data.storage.lastSweep.removedTempFiles} unfinished write(s) and{' '}
+                  {data.storage.lastSweep.removedBackups} stale backup(s), freeing{' '}
+                  {formatBytes(data.storage.lastSweep.freedBytes)}.
+                </div>
+              ) : null}
+              {data.storage.quarantined.length > 0 ? (
+                <div className="muted">
+                  {data.storage.quarantined.length} unreadable data file
+                  {data.storage.quarantined.length === 1 ? '' : 's'} kept beside your data (name contains
+                  “.corrupt-”). Klyro started fresh rather than overwriting them.
+                </div>
+              ) : null}
             </div>
           ) : null}
         </section>

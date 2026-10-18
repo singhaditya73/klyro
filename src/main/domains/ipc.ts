@@ -2,7 +2,7 @@ import { app, ipcMain } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import { z } from 'zod'
 import { IPC } from '@shared/ipc'
-import type { AppSettings, DataScope, PatchRequest, ProviderId, SendChatRequest, SecurityStatus, WorkflowDraft } from '@shared/types'
+import type { AppSettings, DataScope, DataSummary, PatchRequest, ProviderId, SendChatRequest, SecurityStatus, WorkflowDraft } from '@shared/types'
 import { logger } from '../logger'
 import { getProvider } from '../providers'
 import { PROVIDER_IDS } from '../providers/defaults'
@@ -15,6 +15,7 @@ import { documents } from './documents'
 import { code } from './code'
 import { integrationStatuses, github } from './integrations'
 import { meetings } from './meetings'
+import { maintenance } from './maintenance'
 import { memory } from './memory'
 import { privacy } from './privacy'
 import { patches } from './patches'
@@ -53,6 +54,7 @@ const titleSchema = z.string().max(200)
 const bodySchema = z.string().max(20000)
 const tokenSchema = z.string().max(500)
 const dataScopeSchema = z.enum(['conversations', 'memory', 'documents', 'project', 'meetings', 'agentTasks'])
+const conversationQuerySchema = z.object({ limit: z.number().int().positive().max(1000).optional() }).strict()
 
 const settingsPatchSchema = z
   .object({
@@ -216,7 +218,9 @@ export function registerIpcHandlers(): void {
   })
 
   handle(IPC.conversationList, () => conversations.list())
-  handle(IPC.conversationGet, (_event, id: unknown) => conversations.get(idSchema.parse(id)))
+  handle(IPC.conversationGet, (_event, id: unknown, query: unknown) =>
+    conversations.window(idSchema.parse(id), conversationQuerySchema.parse(query ?? {}))
+  )
   handle(IPC.conversationCreate, () => conversations.create())
   handle(IPC.conversationRename, (_event, id: unknown, title: unknown) => {
     conversations.rename(idSchema.parse(id), z.string().max(120).parse(title))
@@ -256,6 +260,7 @@ export function registerIpcHandlers(): void {
 
   handle(IPC.dataSummary, () => privacy.summary())
   handle(IPC.dataClear, (_event, scope: unknown) => privacy.clear(dataScopeSchema.parse(scope) as DataScope))
+  handle(IPC.storageSweep, (): DataSummary => ({ ...privacy.summary(), storage: maintenance.sweep() }))
 
   handle(IPC.agentCapabilities, () => automation.capabilities())
   handle(IPC.agentStatus, () => agentRunner.status())

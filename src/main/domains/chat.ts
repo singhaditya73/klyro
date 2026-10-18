@@ -33,15 +33,37 @@ function styleSuffix(style: ResponseStyle): string {
   }
 }
 
+/**
+ * How much history is sent to the model. Without a bound, a long conversation
+ * grows every request (and its cost) forever; the newest turns are the ones that
+ * matter for the next answer.
+ */
+export const MAX_CONTEXT_TURNS = 40
+/** Images are the most expensive part of a request, so only the recent few go. */
+export const MAX_CONTEXT_IMAGES = 4
+
 function buildTurns(conversation: Conversation): ChatTurn[] {
-  return conversation.messages
+  const usable = conversation.messages
     .filter((m) => m.role === 'user' || m.role === 'assistant')
     .filter((m) => m.content.trim().length > 0 || (m.attachments?.length ?? 0) > 0)
-    .map((m) => ({
-      role: m.role as 'user' | 'assistant',
-      text: m.content,
-      images: (m.attachments ?? []).map((a) => ({ dataUrl: a.dataUrl, mime: a.mime }))
-    }))
+
+  const recent = usable.slice(-MAX_CONTEXT_TURNS)
+
+  // Walk backwards so the image budget is spent on the most recent screenshots.
+  const withImages = new Set<string>()
+  let budget = MAX_CONTEXT_IMAGES
+  for (let index = recent.length - 1; index >= 0; index -= 1) {
+    const count = recent[index].attachments?.length ?? 0
+    if (count === 0 || count > budget) continue
+    budget -= count
+    withImages.add(recent[index].id)
+  }
+
+  return recent.map((m) => ({
+    role: m.role as 'user' | 'assistant',
+    text: m.content,
+    images: withImages.has(m.id) ? (m.attachments ?? []).map((a) => ({ dataUrl: a.dataUrl, mime: a.mime })) : []
+  }))
 }
 
 export async function sendChat(request: SendChatRequest): Promise<void> {

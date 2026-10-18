@@ -3,6 +3,7 @@ import { secrets } from '../security/secrets'
 import { agentRunner } from './agent'
 import { conversations } from './conversations'
 import { documents } from './documents'
+import { maintenance } from './maintenance'
 import { meetings } from './meetings'
 import { memory } from './memory'
 import { project } from './project'
@@ -38,7 +39,8 @@ class PrivacyDomain {
       agentTasks: agentRunner.tasks().length,
       credentials: secrets.count(),
       activeProvider: providerId,
-      activeProviderIsLocal: local
+      activeProviderIsLocal: local,
+      storage: maintenance.report()
     }
   }
 
