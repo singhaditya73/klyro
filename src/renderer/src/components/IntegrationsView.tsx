@@ -1,13 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Blocks, GitBranch, Plug, CheckCircle, AlertCircle, ExternalLink, ChevronDown, ChevronUp, Trash2, Key, Mail, MessageSquare, FileText } from 'lucide-react'
 import { useKnowledge } from '../hooks/useKnowledge'
 import KlyroMark from '../assets/logo/klyro-mark.svg'
 
-interface Props {
-  onOpenView?: (view: string) => void
-}
+interface Props {}
 
-export function IntegrationsView({ onOpenView }: Props) {
+export function IntegrationsView({}: Props) {
   const knowledge = useKnowledge()
   const [githubToken, setGithubToken] = useState('')
   const [repo, setRepo] = useState('')

@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { Attachment, ChatMessage } from '@shared/types'
 import { Composer } from './Composer'
 import { MessageBubble, type MessageContext } from './MessageBubble'
-import { Loader2, ChevronUp } from 'lucide-react'
+import { ChevronUp } from 'lucide-react'
 
 interface Props {
   messages: ChatMessage[]

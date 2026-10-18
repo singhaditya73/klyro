@@ -38,5 +38,6 @@ export const STATUS_ICON: Record<AgentStepStatus, string> = {
   ambiguous: '~',
   failed: '✗',
   blocked: '⛔',
-  skipped: '–'
+  skipped: '–',
+  pending: '◑'
 }

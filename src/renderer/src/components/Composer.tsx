@@ -1,6 +1,6 @@
-import { useRef, useEffect, useState } from 'react'
-import type { Attachment, ChatMessage } from '@shared/types'
-import { Mic, Monitor, X, Send, StopCircle, Loader2 } from 'lucide-react'
+import { useRef, useState } from 'react'
+import type { Attachment } from '@shared/types'
+import { Mic, Monitor, X, Send, StopCircle } from 'lucide-react'
 
 interface Props {
   busy: boolean

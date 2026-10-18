@@ -2,7 +2,8 @@ import type { AgentController } from '../hooks/useAgent'
 import { describeAction, STATUS_ICON } from '../lib/agent'
 import { timeAgo } from '../lib/format'
 import { useModal } from '../hooks/useModal'
-import { X, Play, Pause, StopCircle, Loader2, AlertCircle, CheckCircle, Clock, ChevronDown, ChevronUp, Maximize2 } from 'lucide-react'
+import { useState } from 'react'
+import { X, Play, Pause, StopCircle, Loader2, AlertCircle, CheckCircle, Clock, ChevronDown, ChevronUp } from 'lucide-react'
 import KlyroMark from '../assets/logo/klyro-mark.svg'
 
 interface Props {

@@ -10,7 +10,7 @@ import type {
   SecurityStatus
 } from '@shared/types'
 import { useModal } from '../hooks/useModal'
-import { Loader2, CheckCircle, AlertCircle, Shield, HardDrive, Trash2, Broom, Database, Key, Zap, X } from 'lucide-react'
+import { Loader2, CheckCircle, AlertCircle, Shield, HardDrive, Trash2, Broom, Database, Key, Zap, X, ExternalLink } from 'lucide-react'
 import KlyroMark from '../assets/logo/klyro-mark.svg'
 
 interface Props {

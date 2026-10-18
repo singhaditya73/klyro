@@ -1,13 +1,11 @@
 import { useState, useEffect } from 'react'
 import type { CaptureSource, Attachment, SendChatRequest } from '@shared/types'
-import { Monitor, ArrowRight, X } from 'lucide-react'
+import { Monitor, ArrowRight, X, AlertCircle } from 'lucide-react'
 import KlyroMark from '../assets/logo/klyro-mark.svg'
 
-interface Props {
-  onOpenView?: (view: string) => void
-}
+interface Props {}
 
-export function ScreenAssistantView({ onOpenView }: Props) {
+export function ScreenAssistantView({}: Props) {
   const [sources, setSources] = useState<CaptureSource[] | null>(null)
   const [selectedSource, setSelectedSource] = useState<string | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
@@ -220,4 +218,3 @@ export function ScreenAssistantView({ onOpenView }: Props) {
   )
 }
 
-import { AlertCircle, Monitor, ArrowRight, X } from 'lucide-react'

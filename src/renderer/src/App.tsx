@@ -5,12 +5,7 @@ import { useChat } from './hooks/useChat'
 import { useAgent } from './hooks/useAgent'
 import { HomeView } from './components/HomeView'
 import { ScreenAssistantView } from './components/ScreenAssistantView'
-import { AgentPanel } from './components/AgentPanel'
-import { KnowledgePanel } from './components/KnowledgePanel'
-import { SettingsPanel } from './components/SettingsPanel'
-import { StudioPanel } from './components/StudioPanel'
-import { WorkflowsView } from './components/WorkflowsView'
-import { IntegrationsView } from './components/IntegrationsView'
+import { Menu } from 'lucide-react'
 
 type WorkspaceView = 'home' | 'chat' | 'screen' | 'agent' | 'workflows' | 'memory' | 'integrations'
 
@@ -22,10 +17,12 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // Panels loaded on demand
-  const SettingsPanelLazy = lazy(() => import('./components/SettingsPanel').then((module) => ({ default: module.SettingsPanel })))
-  const AgentPanelLazy = lazy(() => import('./components/AgentPanel').then((module) => ({ default: module.AgentPanel })))
-  const KnowledgePanelLazy = lazy(() => import('./components/KnowledgePanel').then((module) => ({ default: module.KnowledgePanel })))
-  const StudioPanelLazy = lazy(() => import('./components/StudioPanel').then((module) => ({ default: module.StudioPanel })))
+  const SettingsPanel = lazy(() => import('./components/SettingsPanel').then((module) => ({ default: module.SettingsPanel })))
+  const AgentPanel = lazy(() => import('./components/AgentPanel').then((module) => ({ default: module.AgentPanel })))
+  const KnowledgePanel = lazy(() => import('./components/KnowledgePanel').then((module) => ({ default: module.KnowledgePanel })))
+  const StudioPanel = lazy(() => import('./components/StudioPanel').then((module) => ({ default: module.StudioPanel })))
+  const WorkflowsView = lazy(() => import('./components/WorkflowsView').then((module) => ({ default: module.WorkflowsView })))
+  const IntegrationsView = lazy(() => import('./components/IntegrationsView').then((module) => ({ default: module.IntegrationsView })))
 
   // Keep track of open panels
   const [openPanels, setOpenPanels] = useState<Record<string, boolean>>({
@@ -152,10 +149,10 @@ export default function App() {
       </main>
 
       <Suspense fallback={null}>
-        {openPanels.settings && <SettingsPanelLazy onClose={() => togglePanel('settings')} />}
-        {openPanels.agent && <AgentPanelLazy agent={agent} onClose={() => togglePanel('agent')} />}
-        {openPanels.knowledge && <KnowledgePanelLazy onClose={() => togglePanel('knowledge')} />}
-        {openPanels.studio && <StudioPanelLazy onClose={() => togglePanel('studio')} />}
+        {openPanels.settings && <SettingsPanel onClose={() => togglePanel('settings')} />}
+        {openPanels.agent && <AgentPanel agent={agent} onClose={() => togglePanel('agent')} />}
+        {openPanels.knowledge && <KnowledgePanel onClose={() => togglePanel('knowledge')} />}
+        {openPanels.studio && <StudioPanel onClose={() => togglePanel('studio')} />}
       </Suspense>
     </div>
   )

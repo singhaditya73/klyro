@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import type { Attachment } from '@shared/types'
+import { useState } from 'react'
+import type { Attachment, WorkspaceView } from '@shared/types'
 import {
   Monitor,
   Bot,
@@ -13,16 +13,14 @@ import {
 } from 'lucide-react'
 import { timeAgo } from '../lib/format'
 import KlyroLogo from '../assets/logo/klyro-logo-dark.svg'
-import KlyroMark from '../assets/logo/klyro-mark.svg'
 import { useChat } from '../hooks/useChat'
 
 interface Props {
   onNewChat: () => Promise<void>
-  onOpenView: (view: string) => void
+  onOpenView: (view: WorkspaceView) => void
 }
 
 const workspaceStyle: React.CSSProperties = { flex: 1, display: 'flex', flexDirection: 'column' }
-const headerStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 12 }
 const contentStyle: React.CSSProperties = { flex: 1, overflow: 'auto', padding: '32px 20px', display: 'flex', flexDirection: 'column', maxWidth: '960px', margin: '0 auto', width: '100%' }
 const welcomeStyle: React.CSSProperties = { maxWidth: '720px', margin: '0 auto 40px', textAlign: 'center' }
 const h1Style: React.CSSProperties = { margin: '0 0 12px', fontSize: '32px', fontWeight: 600, letterSpacing: '-0.03em', color: 'var(--text-primary)' }
@@ -34,7 +32,6 @@ const recentSectionStyle: React.CSSProperties = { maxWidth: '960px', margin: '0 
 const flexBetweenStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between' }
 const listStyle: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: '8px' }
 const cardStyle: React.CSSProperties = { cursor: 'pointer', transition: 'border-color var(--transition-fast), background var(--transition-fast)' }
-const cardRowStyle: React.CSSProperties = { alignItems: 'flexStart', flexWrap: 'wrap' }
 
 function getTimeOfDay(): string {
   const hour = new Date().getHours()
@@ -73,7 +70,7 @@ export function HomeView({ onNewChat, onOpenView }: Props) {
         </section>
 
         <section style={composerStyle}>
-          <HomeComposer onSend={handleHomeSend} onOpenView={onOpenView} />
+          <HomeComposer onSend={chat.send} />
         </section>
 
         <section style={sectionStyle}>
@@ -158,7 +155,7 @@ export function HomeView({ onNewChat, onOpenView }: Props) {
   )
 }
 
-function HomeComposer({ onSend, onOpenView }: { onSend: (content: string, attachments: Attachment[]) => Promise<void>; onOpenView: (view: string) => void }) {
+function HomeComposer({ onSend }: { onSend: (content: string, attachments: Attachment[]) => Promise<void> }) {
   const [text, setText] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [sources, setSources] = useState<any[] | null>(null)

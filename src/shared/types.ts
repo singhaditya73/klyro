@@ -212,6 +212,9 @@ export type AgentStepStatus =
   | 'verified'
   | 'unverified'
   | 'ambiguous'
+  | 'blocked'
+  | 'skipped'
+  | 'pending'
   | 'failed'
   | 'blocked'
   | 'skipped'
@@ -498,6 +501,8 @@ export interface SecurityStatus {
 }
 
 export type DataScope = 'conversations' | 'memory' | 'documents' | 'project' | 'meetings' | 'agentTasks'
+
+export type WorkspaceView = 'home' | 'chat' | 'screen' | 'agent' | 'workflows' | 'memory' | 'integrations'
 
 export interface StorageReport {
   dataBytes: number
