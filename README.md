@@ -21,10 +21,12 @@ partial, or planned.
 ```
 src/
   main/            Electron main process (Node)
-    knowledge/     Pure retrieval: tokenising, chunking, BM25, similarity
+    knowledge/     Pure retrieval: tokenising, chunking, BM25, similarity,
+                   code-file rules and template rendering
     domains/       Feature domains: windows, settings, chat, screen,
                    shortcuts, tray, permissions, conversations, automation, agent,
-                   memory, documents, context, integrations/
+                   memory, documents, context, project, code, meetings, workflows,
+                   integrations/
     providers/     Model provider abstraction (OpenAI-compatible, Anthropic,
                    Gemini, Ollama/local)
     store/         Atomic JSON persistence
@@ -97,6 +99,29 @@ stored locally, never uploaded except as part of the prompt you send.
 - **Integrations** — connect **GitHub** with a personal access token (stored
   encrypted) to see your repositories and issues, or file an issue without
   leaving Klyro.
+
+## Studio
+
+**Coding mode** — index a project folder once and Klyro answers code questions
+with your own files as reference. Paste a snippet or diff and pick *Explain*,
+*Find bugs*, *Write tests*, *Refactor*, or *Document*.
+
+**Meetings** — record from the microphone; the transcript is written and
+timestamped as you go and saved locally. *Summarize* produces a short summary plus
+extracted action items.
+
+**Workflows** — multi-step sequences that run inside a real chat, so follow-ups
+work normally. Steps are prompts (`{{input}}` / `{{prev}}`) or GitHub fetches, and
+each step feeds the next. Four are built in: *Standup from GitHub issues*,
+*Explain an area of the codebase*, *Turn notes into action items*, and *Review a
+diff*.
+
+## Security
+
+`contextIsolation` on, `nodeIntegration` off, sandboxed renderer, origin-validated
+IPC, API keys and integration tokens encrypted at rest, a strict CSP in
+production, and a permission policy that only grants microphone access to Klyro's
+own renderer.
 
 ## License
 

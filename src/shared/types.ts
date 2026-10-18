@@ -228,6 +228,7 @@ export interface DocumentRecord {
   id: string
   name: string
   kind: string
+  group: 'manual' | 'workspace'
   sourcePath: string | null
   size: number
   addedAt: number
@@ -281,6 +282,93 @@ export interface GitHubIssue {
   author: string
   isPullRequest: boolean
 }
+
+/* ---------- Coding mode ---------- */
+
+export type CodeActionKind = 'explain' | 'bugs' | 'tests' | 'refactor' | 'docs'
+
+export interface ProjectStatus {
+  root: string | null
+  files: number
+  chunks: number
+  indexedAt: number | null
+  skipped: number
+}
+
+export interface CodeAssistRequest {
+  kind: CodeActionKind
+  code: string
+  language?: string
+  question?: string
+}
+
+export interface CodeAssistResult {
+  text: string
+}
+
+/* ---------- Meetings ---------- */
+
+export interface MeetingSegment {
+  at: number
+  text: string
+}
+
+export interface MeetingRecord {
+  id: string
+  title: string
+  startedAt: number
+  endedAt: number
+  segments: MeetingSegment[]
+  summary: string | null
+  actions: string[]
+  createdAt: number
+}
+
+export interface MeetingDraft {
+  title: string
+  startedAt: number
+  endedAt: number
+  segments: MeetingSegment[]
+}
+
+/* ---------- Workflows ---------- */
+
+export type WorkflowStep =
+  | { kind: 'prompt'; name: string; template: string }
+  | { kind: 'githubIssues'; name: string; repo: string }
+
+export interface WorkflowRecord {
+  id: string
+  name: string
+  description: string
+  builtin: boolean
+  steps: WorkflowStep[]
+  createdAt: number
+}
+
+export interface WorkflowDraft {
+  name: string
+  description?: string
+  steps: WorkflowStep[]
+}
+
+export interface WorkflowStepResult {
+  name: string
+  output: string
+  ok: boolean
+}
+
+export interface WorkflowRunResult {
+  runId: string
+  conversationId: string
+  steps: WorkflowStepResult[]
+}
+
+export type WorkflowEvent =
+  | { type: 'start'; runId: string; workflowId: string; name: string }
+  | { type: 'step'; runId: string; index: number; name: string; status: 'running' | 'done' | 'failed'; detail?: string }
+  | { type: 'done'; runId: string; conversationId: string }
+  | { type: 'error'; runId: string; message: string }
 
 /** The API exposed on `window.klyro` by the preload bridge. */
 export interface KlyroApi {
@@ -338,4 +426,20 @@ export interface KlyroApi {
   githubRepos(): Promise<GitHubRepo[]>
   githubIssues(ownerRepo: string): Promise<GitHubIssue[]>
   githubCreateIssue(ownerRepo: string, title: string, body: string): Promise<GitHubIssue>
+
+  projectStatus(): Promise<ProjectStatus>
+  projectIndex(): Promise<ProjectStatus>
+  projectClear(): Promise<ProjectStatus>
+  codeAssist(request: CodeAssistRequest): Promise<CodeAssistResult>
+
+  meetingList(): Promise<MeetingRecord[]>
+  meetingSave(draft: MeetingDraft): Promise<MeetingRecord[]>
+  meetingSummarize(id: string): Promise<MeetingRecord[]>
+  meetingDelete(id: string): Promise<MeetingRecord[]>
+
+  workflowList(): Promise<WorkflowRecord[]>
+  workflowCreate(draft: WorkflowDraft): Promise<WorkflowRecord[]>
+  workflowDelete(id: string): Promise<WorkflowRecord[]>
+  workflowRun(id: string, input: string): Promise<WorkflowRunResult>
+  onWorkflowEvent(listener: (event: WorkflowEvent) => void): () => void
 }

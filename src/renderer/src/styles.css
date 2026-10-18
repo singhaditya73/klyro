@@ -441,6 +441,55 @@ select {
   font-weight: 400;
 }
 
+/* ---------- Studio ---------- */
+.modal__panel--wide {
+  width: min(900px, 100%);
+}
+.code-out {
+  margin: 8px 0 0;
+  padding: 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 340px;
+  overflow: auto;
+}
+.transcript {
+  margin-top: 10px;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+.transcript__line {
+  display: flex;
+  gap: 10px;
+}
+.transcript__time {
+  color: var(--accent-strong);
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 48px;
+}
+.actions {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  font-size: 13px;
+  color: var(--text);
+}
+.actions li {
+  margin-bottom: 2px;
+}
+
 /* ---------- Chat ---------- */
 .chat {
   display: flex;

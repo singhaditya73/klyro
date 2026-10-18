@@ -24,6 +24,18 @@ function applyContentSecurityPolicy(): void {
   })
 }
 
+/** Only our own renderer may use the microphone; everything else is denied. */
+function applyPermissionPolicy(): void {
+  const devUrl = process.env.ELECTRON_RENDERER_URL ?? ''
+  const isTrusted = (url: string): boolean => url.startsWith('file://') || (devUrl !== '' && url.startsWith(devUrl))
+  const isMedia = (permission: string): boolean => permission === 'media' || permission === 'audioCapture'
+
+  session.defaultSession.setPermissionRequestHandler((contents, permission, callback) => {
+    callback(isTrusted(contents.getURL()) && isMedia(permission))
+  })
+  session.defaultSession.setPermissionCheckHandler((_contents, permission) => isMedia(permission))
+}
+
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
@@ -33,6 +45,7 @@ if (!gotLock) {
   app.whenReady().then(() => {
     secrets.init()
     applyContentSecurityPolicy()
+    applyPermissionPolicy()
     registerIpcHandlers()
     createMainWindow()
     createOverlayWindow()

@@ -12,6 +12,7 @@ interface StoredDocument {
   id: string
   name: string
   kind: string
+  group: 'manual' | 'workspace'
   sourcePath: string | null
   size: number
   addedAt: number
@@ -143,8 +144,8 @@ class DocumentDomain {
     return { text, kind: extension }
   }
 
-  async importFromPath(filePath: string): Promise<DocumentRecord> {
-    const name = basename(filePath)
+  async importFromPath(filePath: string, group: 'manual' | 'workspace' = 'manual', nameOverride?: string): Promise<DocumentRecord> {
+    const name = nameOverride ?? basename(filePath)
     const { text, kind } = await this.extract(filePath)
     const chunks = chunkText(text, CHUNK_CHARS)
     if (chunks.length === 0) throw new Error('No readable text found')
@@ -158,6 +159,7 @@ class DocumentDomain {
       id: randomUUID(),
       name,
       kind,
+      group,
       sourcePath: filePath,
       size: text.length,
       addedAt: Date.now(),
@@ -196,12 +198,13 @@ class DocumentDomain {
     return { imported, skipped }
   }
 
-  importText(name: string, text: string, sourcePath: string | null = null): DocumentRecord {
+  importText(name: string, text: string, sourcePath: string | null = null, group: 'manual' | 'workspace' = 'manual'): DocumentRecord {
     const chunks = chunkText(text, CHUNK_CHARS)
     const document: StoredDocument = {
       id: randomUUID(),
       name,
       kind: 'text',
+      group,
       sourcePath,
       size: text.length,
       addedAt: Date.now(),
@@ -219,6 +222,21 @@ class DocumentDomain {
       draft.documents = draft.documents.filter((document) => document.id !== id)
       draft.totalChars = draft.documents.reduce((sum, d) => sum + d.size, 0)
     })
+  }
+
+  clearGroup(group: 'manual' | 'workspace'): void {
+    this.store.update((draft) => {
+      draft.documents = draft.documents.filter((document) => document.group !== group)
+      draft.totalChars = draft.documents.reduce((sum, d) => sum + d.size, 0)
+    })
+  }
+
+  statsFor(group: 'manual' | 'workspace'): { files: number; chunks: number } {
+    const matched = this.store.get().documents.filter((document) => document.group === group)
+    return {
+      files: matched.length,
+      chunks: matched.reduce((sum, document) => sum + document.chunks.length, 0)
+    }
   }
 
   clear(): void {
@@ -240,10 +258,13 @@ class DocumentDomain {
   }
 
   /** Chunks most relevant to a query, for grounding a chat turn. */
-  recall(query: string, limit: number): { name: string; text: string }[] {
-    const corpus = this.store.get().documents.flatMap((document) =>
-      document.chunks.map((text, index) => ({ id: `${document.id}:${index}`, text, name: document.name }))
-    )
+  recall(query: string, limit: number, group?: 'manual' | 'workspace'): { name: string; text: string }[] {
+    const corpus = this.store
+      .get()
+      .documents.filter((document) => !group || document.group === group)
+      .flatMap((document) =>
+        document.chunks.map((text, index) => ({ id: `${document.id}:${index}`, text, name: document.name }))
+      )
     const byId = new Map(corpus.map((entry) => [entry.id, entry]))
     return bm25Search(query, corpus, limit).flatMap((hit) => {
       const entry = byId.get(hit.id)

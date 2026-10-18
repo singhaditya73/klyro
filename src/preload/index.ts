@@ -5,10 +5,14 @@ import type {
   AgentRunRequest,
   AppSettings,
   ChatStreamEvent,
+  CodeAssistRequest,
   KlyroApi,
+  MeetingDraft,
   MemoryDraft,
   ProviderId,
-  SendChatRequest
+  SendChatRequest,
+  WorkflowDraft,
+  WorkflowEvent
 } from '@shared/types'
 
 const api: KlyroApi = {
@@ -78,7 +82,29 @@ const api: KlyroApi = {
   githubRepos: () => ipcRenderer.invoke(IPC.githubRepos),
   githubIssues: (ownerRepo: string) => ipcRenderer.invoke(IPC.githubIssues, ownerRepo),
   githubCreateIssue: (ownerRepo: string, title: string, body: string) =>
-    ipcRenderer.invoke(IPC.githubCreateIssue, ownerRepo, title, body)
+    ipcRenderer.invoke(IPC.githubCreateIssue, ownerRepo, title, body),
+
+  projectStatus: () => ipcRenderer.invoke(IPC.projectStatus),
+  projectIndex: () => ipcRenderer.invoke(IPC.projectIndex),
+  projectClear: () => ipcRenderer.invoke(IPC.projectClear),
+  codeAssist: (request: CodeAssistRequest) => ipcRenderer.invoke(IPC.codeAssist, request),
+
+  meetingList: () => ipcRenderer.invoke(IPC.meetingList),
+  meetingSave: (draft: MeetingDraft) => ipcRenderer.invoke(IPC.meetingSave, draft),
+  meetingSummarize: (id: string) => ipcRenderer.invoke(IPC.meetingSummarize, id),
+  meetingDelete: (id: string) => ipcRenderer.invoke(IPC.meetingDelete, id),
+
+  workflowList: () => ipcRenderer.invoke(IPC.workflowList),
+  workflowCreate: (draft: WorkflowDraft) => ipcRenderer.invoke(IPC.workflowCreate, draft),
+  workflowDelete: (id: string) => ipcRenderer.invoke(IPC.workflowDelete, id),
+  workflowRun: (id: string, input: string) => ipcRenderer.invoke(IPC.workflowRun, id, input),
+  onWorkflowEvent: (listener: (event: WorkflowEvent) => void) => {
+    const wrapped = (_event: unknown, payload: WorkflowEvent): void => listener(payload)
+    ipcRenderer.on(IPC.workflowEvent, wrapped)
+    return () => {
+      ipcRenderer.off(IPC.workflowEvent, wrapped)
+    }
+  }
 }
 
 contextBridge.exposeInMainWorld('klyro', api)

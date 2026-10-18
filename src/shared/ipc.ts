@@ -56,6 +56,22 @@ export const IPC = {
   githubIssues: 'integration:github:issues',
   githubCreateIssue: 'integration:github:createIssue',
 
+  projectStatus: 'project:status',
+  projectIndex: 'project:index',
+  projectClear: 'project:clear',
+  codeAssist: 'code:assist',
+
+  meetingList: 'meeting:list',
+  meetingSave: 'meeting:save',
+  meetingSummarize: 'meeting:summarize',
+  meetingDelete: 'meeting:delete',
+
+  workflowList: 'workflow:list',
+  workflowCreate: 'workflow:create',
+  workflowDelete: 'workflow:delete',
+  workflowRun: 'workflow:run',
+  workflowEvent: 'workflow:event',
+
   windowHideOverlay: 'window:hideOverlay',
   windowToggleOverlay: 'window:toggleOverlay'
 } as const

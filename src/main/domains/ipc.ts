@@ -2,7 +2,7 @@ import { app, ipcMain } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import { z } from 'zod'
 import { IPC } from '@shared/ipc'
-import type { AppSettings, ProviderId, SendChatRequest } from '@shared/types'
+import type { AppSettings, ProviderId, SendChatRequest, WorkflowDraft } from '@shared/types'
 import { logger } from '../logger'
 import { getProvider } from '../providers'
 import { PROVIDER_IDS } from '../providers/defaults'
@@ -11,8 +11,12 @@ import { sendChat, abortChat } from './chat'
 import { agentRunner } from './agent'
 import { automation } from './automation'
 import { documents } from './documents'
+import { code } from './code'
 import { integrationStatuses, github } from './integrations'
+import { meetings } from './meetings'
 import { memory } from './memory'
+import { project } from './project'
+import { workflows } from './workflows'
 import { transcribeAudio } from './audio'
 import { conversations } from './conversations'
 import { checkPermissions } from './permissions'
@@ -108,6 +112,31 @@ const memoryDraftSchema = z.object({
 const memoryPatchSchema = memoryDraftSchema.partial().strict()
 
 const ownerRepoSchema = z.string().min(3).max(200)
+
+const codeAssistSchema = z.object({
+  kind: z.enum(['explain', 'bugs', 'tests', 'refactor', 'docs']),
+  code: z.string().min(1).max(40000),
+  language: z.string().max(40).optional(),
+  question: z.string().max(2000).optional()
+})
+
+const meetingDraftSchema = z.object({
+  title: z.string().max(200),
+  startedAt: z.number(),
+  endedAt: z.number(),
+  segments: z.array(z.object({ at: z.number(), text: z.string().max(4000) })).max(4000)
+})
+
+const workflowStepSchema = z.union([
+  z.object({ kind: z.literal('prompt'), name: z.string().min(1).max(80), template: z.string().min(1).max(8000) }),
+  z.object({ kind: z.literal('githubIssues'), name: z.string().min(1).max(80), repo: z.string().max(300) })
+])
+
+const workflowDraftSchema = z.object({
+  name: z.string().min(1).max(120),
+  description: z.string().max(300).optional(),
+  steps: z.array(workflowStepSchema).min(1).max(10)
+})
 
 export function registerIpcHandlers(): void {
   handle(IPC.appInfo, () => ({
@@ -265,6 +294,38 @@ export function registerIpcHandlers(): void {
       String(title ?? '').slice(0, 200),
       String(body ?? '').slice(0, 20000)
     )
+  )
+
+  handle(IPC.projectStatus, () => project.status())
+  handle(IPC.projectIndex, () => project.index())
+  handle(IPC.projectClear, () => project.clear())
+  handle(IPC.codeAssist, (_event, request: unknown) => code.assist(codeAssistSchema.parse(request)))
+
+  handle(IPC.meetingList, () => meetings.list())
+  handle(IPC.meetingSave, (_event, draft: unknown) => {
+    meetings.save(meetingDraftSchema.parse(draft))
+    return meetings.list()
+  })
+  handle(IPC.meetingSummarize, async (_event, id: string) => {
+    await meetings.summarize(String(id))
+    return meetings.list()
+  })
+  handle(IPC.meetingDelete, (_event, id: string) => {
+    meetings.remove(String(id))
+    return meetings.list()
+  })
+
+  handle(IPC.workflowList, () => workflows.list())
+  handle(IPC.workflowCreate, (_event, draft: unknown) => {
+    workflows.create(workflowDraftSchema.parse(draft) as WorkflowDraft)
+    return workflows.list()
+  })
+  handle(IPC.workflowDelete, (_event, id: string) => {
+    workflows.remove(String(id))
+    return workflows.list()
+  })
+  handle(IPC.workflowRun, (_event, id: string, input: string) =>
+    workflows.run(String(id), String(input ?? '').slice(0, 40000))
   )
 
   handle(IPC.windowHideOverlay, () => {

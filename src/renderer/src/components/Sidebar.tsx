@@ -12,6 +12,7 @@ interface Props {
   agentRunning: boolean
   onOpenAgent: () => void
   onOpenKnowledge: () => void
+  onOpenStudio: () => void
   onOpenSettings: () => void
 }
 
@@ -67,6 +68,9 @@ export function Sidebar(props: Props) {
       </button>
       <button className="btn sidebar__agent" onClick={props.onOpenKnowledge}>
         🧠 Knowledge
+      </button>
+      <button className="btn sidebar__agent" onClick={props.onOpenStudio}>
+        🛠️ Studio
       </button>
       <button className="btn sidebar__settings" onClick={props.onOpenSettings}>
         ⚙️ Settings
