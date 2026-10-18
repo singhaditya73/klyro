@@ -11,6 +11,7 @@ interface Props {
   deleteConversation: (id: string) => Promise<void>
   agentRunning: boolean
   onOpenAgent: () => void
+  onOpenKnowledge: () => void
   onOpenSettings: () => void
 }
 
@@ -63,6 +64,9 @@ export function Sidebar(props: Props) {
 
       <button className="btn sidebar__agent" onClick={props.onOpenAgent}>
         {props.agentRunning ? '◐ Agent running…' : '🖥️ Agent'}
+      </button>
+      <button className="btn sidebar__agent" onClick={props.onOpenKnowledge}>
+        🧠 Knowledge
       </button>
       <button className="btn sidebar__settings" onClick={props.onOpenSettings}>
         ⚙️ Settings

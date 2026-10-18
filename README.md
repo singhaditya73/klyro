@@ -21,8 +21,10 @@ partial, or planned.
 ```
 src/
   main/            Electron main process (Node)
+    knowledge/     Pure retrieval: tokenising, chunking, BM25, similarity
     domains/       Feature domains: windows, settings, chat, screen,
-                   shortcuts, tray, permissions, conversations, automation, agent
+                   shortcuts, tray, permissions, conversations, automation, agent,
+                   memory, documents, context, integrations/
     providers/     Model provider abstraction (OpenAI-compatible, Anthropic,
                    Gemini, Ollama/local)
     store/         Atomic JSON persistence
@@ -77,6 +79,24 @@ is available and shows the command to install one:
 | Linux (typing only) | `wtype` |
 | macOS | `osascript` + `cliclick` (mouse), Accessibility permission |
 | Windows | built in (PowerShell) |
+
+## Memory & knowledge
+
+Klyro grounds answers in things you tell it and documents you give it — all
+stored locally, never uploaded except as part of the prompt you send.
+
+- **Memory** — open **Knowledge → Memory** to save facts, tag and pin them. Before
+  each turn the most relevant memories are retrieved (BM25) and added to the
+  prompt; near-duplicates are suppressed automatically. Enable *Learn durable
+  facts from conversations* in Settings to have Klyro distil memories for you.
+- **Documents** — **Knowledge → Documents → Add documents…** imports text,
+  Markdown, code, CSV/JSON, HTML, and PDF/Office files. PDFs need `pdftotext`
+  (poppler-utils) and Office files need `unzip`; Klyro says which file it skipped
+  and why. Relevant excerpts are retrieved and cited in the prompt.
+- **Search everything** — one box ranks across memories and document chunks.
+- **Integrations** — connect **GitHub** with a personal access token (stored
+  encrypted) to see your repositories and issues, or file an issue without
+  leaving Klyro.
 
 ## License
 

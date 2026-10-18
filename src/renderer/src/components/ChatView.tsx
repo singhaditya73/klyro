@@ -1,16 +1,17 @@
 import { useEffect, useRef } from 'react'
 import type { Attachment, ChatMessage } from '@shared/types'
 import { Composer } from './Composer'
-import { MessageBubble } from './MessageBubble'
+import { MessageBubble, type MessageContext } from './MessageBubble'
 
 interface Props {
   messages: ChatMessage[]
   streamingId: string | null
+  contexts: Record<string, MessageContext>
   onSend: (content: string, attachments: Attachment[]) => void | Promise<void>
   onStop: () => void
 }
 
-export function ChatView({ messages, streamingId, onSend, onStop }: Props) {
+export function ChatView({ messages, streamingId, contexts, onSend, onStop }: Props) {
   const endRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -28,7 +29,9 @@ export function ChatView({ messages, streamingId, onSend, onStop }: Props) {
             <p className="muted">Ask a question, share your screen, or use your voice.</p>
           </div>
         ) : (
-          messages.map((message) => <MessageBubble key={message.id} message={message} />)
+          messages.map((message) => (
+            <MessageBubble key={message.id} message={message} context={contexts[message.id]} />
+          ))
         )}
         <div ref={endRef} />
       </div>

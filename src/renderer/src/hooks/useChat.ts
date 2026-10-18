@@ -6,6 +6,7 @@ export interface ChatController {
   activeId: string | null
   messages: ChatMessage[]
   streamingId: string | null
+  contexts: Record<string, { memories: number; documents: number }>
   search: string
   setSearch: (value: string) => void
   openConversation: (id: string) => Promise<void>
@@ -20,6 +21,7 @@ export function useChat(): ChatController {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [streamingId, setStreamingId] = useState<string | null>(null)
+  const [contexts, setContexts] = useState<Record<string, { memories: number; documents: number }>>({})
   const [search, setSearch] = useState('')
   const activeIdRef = useRef<string | null>(null)
 
@@ -100,6 +102,9 @@ export function useChat(): ChatController {
                 ]
           )
           break
+        case 'context':
+          setContexts((prev) => ({ ...prev, [event.messageId]: { memories: event.memories, documents: event.documents } }))
+          break
         case 'delta':
           setMessages((prev) =>
             prev.map((m) => (m.id === event.messageId ? { ...m, content: m.content + event.text } : m))
@@ -152,6 +157,7 @@ export function useChat(): ChatController {
     activeId,
     messages,
     streamingId,
+    contexts,
     search,
     setSearch,
     openConversation,

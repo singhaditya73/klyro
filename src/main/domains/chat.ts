@@ -6,6 +6,8 @@ import { logger } from '../logger'
 import { getProvider } from '../providers'
 import type { ChatTurn } from '../providers/types'
 import { conversations } from './conversations'
+import { buildKnowledgeContext } from './context'
+import { memory } from './memory'
 import { settingsDomain } from './settings'
 
 let controller: AbortController | null = null
@@ -75,6 +77,10 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
   })
 
   const turns = buildTurns(conversations.get(conversationId) ?? conversation)
+  const knowledge = buildKnowledgeContext(request.content)
+  if (knowledge.memories || knowledge.documents) {
+    emit({ type: 'context', messageId: assistantId, memories: knowledge.memories, documents: knowledge.documents })
+  }
   const abort = new AbortController()
   controller = abort
   let text = ''
@@ -84,7 +90,9 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
       model: providerSettings.model,
       baseUrl: providerSettings.baseUrl,
       apiKey,
-      system: settings.systemPrompt + styleSuffix(settings.responseStyle),
+      system: [settings.systemPrompt + styleSuffix(settings.responseStyle), knowledge.block]
+        .filter(Boolean)
+        .join('\n\n'),
       turns,
       signal: abort.signal
     })) {
@@ -93,6 +101,11 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
     }
     conversations.updateMessage(conversationId, assistantId, { content: text })
     emit({ type: 'done', messageId: assistantId })
+    if (settings.memoryAutoExtract && text.trim() && request.content.trim()) {
+      void memory
+        .extractFromExchange(request.content, text)
+        .catch((error) => logger.warn('Memory extraction failed', (error as Error).message))
+    }
   } catch (error) {
     const aborted = abort.signal.aborted
     if (aborted) {

@@ -23,6 +23,11 @@ export interface AppSettings {
   toggleShortcut: string
   agentConfirmConsequential: boolean
   agentMaxSteps: number
+  memoryEnabled: boolean
+  memoryAutoExtract: boolean
+  memoryRecallCount: number
+  knowledgeEnabled: boolean
+  documentRecallCount: number
 }
 
 export interface ProviderStatus {
@@ -83,6 +88,7 @@ export interface SendChatRequest {
 
 export type ChatStreamEvent =
   | { type: 'start'; conversationId: string; messageId: string; model: string; provider: ProviderId }
+  | { type: 'context'; messageId: string; memories: number; documents: number }
   | { type: 'delta'; messageId: string; text: string }
   | { type: 'done'; messageId: string }
   | { type: 'error'; messageId: string; message: string }
@@ -197,6 +203,85 @@ export interface AgentTaskRecord {
   steps: AgentStepRecord[]
 }
 
+/* ---------- Knowledge: memory, documents, integrations ---------- */
+
+export type MemorySource = 'user' | 'auto' | 'agent'
+
+export interface MemoryRecord {
+  id: string
+  text: string
+  tags: string[]
+  source: MemorySource
+  pinned: boolean
+  createdAt: number
+  updatedAt: number
+}
+
+export interface MemoryDraft {
+  text: string
+  tags?: string[]
+  source?: MemorySource
+  pinned?: boolean
+}
+
+export interface DocumentRecord {
+  id: string
+  name: string
+  kind: string
+  sourcePath: string | null
+  size: number
+  addedAt: number
+  chunkCount: number
+  excerpt: string
+}
+
+export interface ImportResult {
+  imported: DocumentRecord[]
+  skipped: { name: string; reason: string }[]
+}
+
+export interface KnowledgeHit {
+  kind: 'memory' | 'document'
+  id: string
+  title: string
+  snippet: string
+  score: number
+}
+
+export type IntegrationId = 'github'
+
+export interface IntegrationStatus {
+  id: IntegrationId
+  label: string
+  connected: boolean
+  detail: string
+}
+
+export interface GitHubAccount {
+  login: string
+  name: string | null
+  avatarUrl: string
+}
+
+export interface GitHubRepo {
+  fullName: string
+  description: string | null
+  isPrivate: boolean
+  updatedAt: string
+  openIssues: number
+}
+
+export interface GitHubIssue {
+  number: number
+  title: string
+  state: string
+  url: string
+  labels: string[]
+  createdAt: string
+  author: string
+  isPullRequest: boolean
+}
+
 /** The API exposed on `window.klyro` by the preload bridge. */
 export interface KlyroApi {
   getAppInfo(): Promise<AppInfo>
@@ -232,4 +317,25 @@ export interface KlyroApi {
   getAgentStatus(): Promise<AgentStatus>
   listAgentTasks(): Promise<AgentTaskRecord[]>
   onAgentEvent(listener: (event: AgentEvent) => void): () => void
+
+  memoryList(): Promise<MemoryRecord[]>
+  memoryAdd(draft: MemoryDraft): Promise<MemoryRecord[]>
+  memoryUpdate(id: string, patch: Partial<MemoryDraft>): Promise<MemoryRecord[]>
+  memoryDelete(id: string): Promise<MemoryRecord[]>
+  memoryClear(): Promise<MemoryRecord[]>
+
+  documentList(): Promise<DocumentRecord[]>
+  documentImport(): Promise<ImportResult>
+  documentDelete(id: string): Promise<DocumentRecord[]>
+  documentClear(): Promise<DocumentRecord[]>
+
+  knowledgeSearch(query: string): Promise<KnowledgeHit[]>
+
+  integrationList(): Promise<IntegrationStatus[]>
+  githubSetToken(token: string): Promise<IntegrationStatus[]>
+  githubClearToken(): Promise<IntegrationStatus[]>
+  githubAccount(): Promise<GitHubAccount>
+  githubRepos(): Promise<GitHubRepo[]>
+  githubIssues(ownerRepo: string): Promise<GitHubIssue[]>
+  githubCreateIssue(ownerRepo: string, title: string, body: string): Promise<GitHubIssue>
 }

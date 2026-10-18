@@ -363,6 +363,84 @@ select {
   border-color: var(--danger);
 }
 
+/* ---------- Knowledge ---------- */
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 10px 20px 0;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  border: none;
+  background: none;
+  color: var(--muted);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.tab:hover {
+  color: var(--text);
+}
+.tab--active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+.hits {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.hit {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  font-size: 13px;
+}
+.hit__body {
+  flex: 1;
+}
+.hit__title {
+  font-weight: 600;
+}
+.hit__snippet {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 2px;
+}
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.card__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.card__spacer {
+  margin-left: auto;
+}
+.card__text {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.message__context {
+  color: var(--muted);
+  font-weight: 400;
+}
+
 /* ---------- Chat ---------- */
 .chat {
   display: flex;

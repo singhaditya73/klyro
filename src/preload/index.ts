@@ -6,6 +6,7 @@ import type {
   AppSettings,
   ChatStreamEvent,
   KlyroApi,
+  MemoryDraft,
   ProviderId,
   SendChatRequest
 } from '@shared/types'
@@ -55,7 +56,29 @@ const api: KlyroApi = {
     return () => {
       ipcRenderer.off(IPC.agentEvent, wrapped)
     }
-  }
+  },
+
+  memoryList: () => ipcRenderer.invoke(IPC.memoryList),
+  memoryAdd: (draft: MemoryDraft) => ipcRenderer.invoke(IPC.memoryAdd, draft),
+  memoryUpdate: (id: string, patch: Partial<MemoryDraft>) => ipcRenderer.invoke(IPC.memoryUpdate, id, patch),
+  memoryDelete: (id: string) => ipcRenderer.invoke(IPC.memoryDelete, id),
+  memoryClear: () => ipcRenderer.invoke(IPC.memoryClear),
+
+  documentList: () => ipcRenderer.invoke(IPC.documentList),
+  documentImport: () => ipcRenderer.invoke(IPC.documentImport),
+  documentDelete: (id: string) => ipcRenderer.invoke(IPC.documentDelete, id),
+  documentClear: () => ipcRenderer.invoke(IPC.documentClear),
+
+  knowledgeSearch: (query: string) => ipcRenderer.invoke(IPC.knowledgeSearch, query),
+
+  integrationList: () => ipcRenderer.invoke(IPC.integrationList),
+  githubSetToken: (token: string) => ipcRenderer.invoke(IPC.githubSetToken, token),
+  githubClearToken: () => ipcRenderer.invoke(IPC.githubClearToken),
+  githubAccount: () => ipcRenderer.invoke(IPC.githubAccount),
+  githubRepos: () => ipcRenderer.invoke(IPC.githubRepos),
+  githubIssues: (ownerRepo: string) => ipcRenderer.invoke(IPC.githubIssues, ownerRepo),
+  githubCreateIssue: (ownerRepo: string, title: string, body: string) =>
+    ipcRenderer.invoke(IPC.githubCreateIssue, ownerRepo, title, body)
 }
 
 contextBridge.exposeInMainWorld('klyro', api)

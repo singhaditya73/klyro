@@ -10,6 +10,9 @@ import { secrets } from '../security/secrets'
 import { sendChat, abortChat } from './chat'
 import { agentRunner } from './agent'
 import { automation } from './automation'
+import { documents } from './documents'
+import { integrationStatuses, github } from './integrations'
+import { memory } from './memory'
 import { transcribeAudio } from './audio'
 import { conversations } from './conversations'
 import { checkPermissions } from './permissions'
@@ -63,6 +66,11 @@ const settingsPatchSchema = z
     toggleShortcut: z.string().max(64).optional(),
     agentConfirmConsequential: z.boolean().optional(),
     agentMaxSteps: z.number().int().min(1).max(30).optional(),
+    memoryEnabled: z.boolean().optional(),
+    memoryAutoExtract: z.boolean().optional(),
+    memoryRecallCount: z.number().int().min(1).max(20).optional(),
+    knowledgeEnabled: z.boolean().optional(),
+    documentRecallCount: z.number().int().min(1).max(10).optional(),
     providers: z
       .record(z.string(), z.object({ baseUrl: z.string().max(500), model: z.string().max(200) }))
       .optional()
@@ -89,6 +97,17 @@ const agentRunSchema = z.object({
   goal: z.string().min(1).max(4000),
   maxSteps: z.number().int().min(1).max(30).optional()
 })
+
+const memoryDraftSchema = z.object({
+  text: z.string().min(1).max(4000),
+  tags: z.array(z.string().max(40)).max(12).optional(),
+  source: z.enum(['user', 'auto', 'agent']).optional(),
+  pinned: z.boolean().optional()
+})
+
+const memoryPatchSchema = memoryDraftSchema.partial().strict()
+
+const ownerRepoSchema = z.string().min(3).max(200)
 
 export function registerIpcHandlers(): void {
   handle(IPC.appInfo, () => ({
@@ -190,6 +209,63 @@ export function registerIpcHandlers(): void {
   handle(IPC.agentConfirm, (_event, runId: string, approved: boolean) => {
     agentRunner.confirm(String(runId), Boolean(approved))
   })
+
+  handle(IPC.memoryList, () => memory.list())
+  handle(IPC.memoryAdd, (_event, draft: unknown) => {
+    memory.add(memoryDraftSchema.parse(draft))
+    return memory.list()
+  })
+  handle(IPC.memoryUpdate, (_event, id: string, patch: unknown) => {
+    memory.update(String(id), memoryPatchSchema.parse(patch))
+    return memory.list()
+  })
+  handle(IPC.memoryDelete, (_event, id: string) => {
+    memory.remove(String(id))
+    return memory.list()
+  })
+  handle(IPC.memoryClear, () => {
+    memory.clear()
+    return memory.list()
+  })
+
+  handle(IPC.documentList, () => documents.list())
+  handle(IPC.documentImport, () => documents.importFromDialog())
+  handle(IPC.documentDelete, (_event, id: string) => {
+    documents.remove(String(id))
+    return documents.list()
+  })
+  handle(IPC.documentClear, () => {
+    documents.clear()
+    return documents.list()
+  })
+
+  handle(IPC.knowledgeSearch, (_event, query: string) => {
+    const value = String(query ?? '').slice(0, 500)
+    if (!value.trim()) return []
+    return [...memory.search(value), ...documents.search(value)].sort((a, b) => b.score - a.score).slice(0, 40)
+  })
+
+  handle(IPC.integrationList, () => integrationStatuses())
+  handle(IPC.githubSetToken, (_event, token: string) => {
+    const value = String(token ?? '').trim()
+    if (value.length > 500) throw new Error('Token is too long')
+    github.setToken(value)
+    return integrationStatuses()
+  })
+  handle(IPC.githubClearToken, () => {
+    github.clearToken()
+    return integrationStatuses()
+  })
+  handle(IPC.githubAccount, () => github.whoami())
+  handle(IPC.githubRepos, () => github.repos(30))
+  handle(IPC.githubIssues, (_event, ownerRepo: string) => github.issues(ownerRepoSchema.parse(ownerRepo), 30))
+  handle(IPC.githubCreateIssue, (_event, ownerRepo: string, title: string, body: string) =>
+    github.createIssue(
+      ownerRepoSchema.parse(ownerRepo),
+      String(title ?? '').slice(0, 200),
+      String(body ?? '').slice(0, 20000)
+    )
+  )
 
   handle(IPC.windowHideOverlay, () => {
     const win = getOverlayWindow()

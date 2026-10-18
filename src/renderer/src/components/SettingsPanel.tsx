@@ -262,6 +262,60 @@ export function SettingsPanel({ onClose }: Props) {
               </div>
             ) : null}
           </section>
+
+          <section>
+            <h3>Memory &amp; knowledge</h3>
+            <p className="muted">
+              Everything here is stored locally on this device. Memories and document excerpts relevant to your
+              question are added to the prompt automatically.
+            </p>
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={settings.memoryEnabled}
+                onChange={(event) => void patch({ memoryEnabled: event.target.checked })}
+              />
+              Use remembered facts to ground answers
+            </label>
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={settings.memoryAutoExtract}
+                onChange={(event) => void patch({ memoryAutoExtract: event.target.checked })}
+              />
+              Learn durable facts from conversations automatically
+            </label>
+            <div className="provider__grid">
+              <label>
+                Memories per answer
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={settings.memoryRecallCount}
+                  onChange={(event) => void patch({ memoryRecallCount: Number(event.target.value) || 1 })}
+                />
+              </label>
+              <label>
+                Document excerpts per answer
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={settings.documentRecallCount}
+                  onChange={(event) => void patch({ documentRecallCount: Number(event.target.value) || 1 })}
+                />
+              </label>
+            </div>
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={settings.knowledgeEnabled}
+                onChange={(event) => void patch({ knowledgeEnabled: event.target.checked })}
+              />
+              Use local documents to ground answers
+            </label>
+          </section>
         </div>
       </div>
     </div>

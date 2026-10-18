@@ -13,7 +13,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
   launchAtLogin: false,
   toggleShortcut: 'CommandOrControl+Shift+Space',
   agentConfirmConsequential: true,
-  agentMaxSteps: 12
+  agentMaxSteps: 12,
+  memoryEnabled: true,
+  memoryAutoExtract: false,
+  memoryRecallCount: 5,
+  knowledgeEnabled: true,
+  documentRecallCount: 4
 }
 
 class SettingsDomain {

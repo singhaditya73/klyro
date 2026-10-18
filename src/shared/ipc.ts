@@ -35,6 +35,27 @@ export const IPC = {
   agentTasks: 'agent:tasks',
   agentEvent: 'agent:event',
 
+  memoryList: 'memory:list',
+  memoryAdd: 'memory:add',
+  memoryUpdate: 'memory:update',
+  memoryDelete: 'memory:delete',
+  memoryClear: 'memory:clear',
+
+  documentList: 'document:list',
+  documentImport: 'document:import',
+  documentDelete: 'document:delete',
+  documentClear: 'document:clear',
+
+  knowledgeSearch: 'knowledge:search',
+
+  integrationList: 'integration:list',
+  githubSetToken: 'integration:github:setToken',
+  githubClearToken: 'integration:github:clearToken',
+  githubAccount: 'integration:github:account',
+  githubRepos: 'integration:github:repos',
+  githubIssues: 'integration:github:issues',
+  githubCreateIssue: 'integration:github:createIssue',
+
   windowHideOverlay: 'window:hideOverlay',
   windowToggleOverlay: 'window:toggleOverlay'
 } as const
