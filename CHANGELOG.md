@@ -2,6 +2,32 @@
 
 All notable changes to Klyro are recorded here. Versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+Post-0.2.0 engineering completion program (details in `docs/ENGINEERING_CHECKLIST.md`).
+
+### Fixed
+
+- Sidebar panels (Agent, Memory, Settings) did not open after the redesign:
+  panel opening now closes other panels first instead of open-then-close, the
+  lazy Agent/Knowledge panels render at their single overlay site with a
+  Suspense boundary, and raw `\uXXXX` escapes in JSX text render their real
+  glyphs. Verified by a scripted click-through of every sidebar item in the
+  running app.
+
+### Added
+
+- **Common integration contract (G1)** — one client shape (descriptor, cheap
+  status, `selfTest()`) plus a registry; GitHub implements it with a live
+  credential check, exposed as a "Test connection" button in the Integrations
+  view.
+- **Opt-in crash reporting (J2)** — off by default; when enabled, redacted
+  reports are stored locally (max 20) and viewable/clearable in Settings, and
+  are only uploaded if `KLYRO_DIAGNOSTICS_URL` is explicitly configured.
+- Packaging: `package.json` now carries `homepage`/`repository`, fixing the
+  deb build; Linux AppImage + deb verified locally (see
+  `docs/RELEASE_VERIFICATION.md`).
+
 ## [0.2.0] — 2026-10-18
 
 Feature-complete for the planned A–E roadmap: shell, autonomous agent, memory and
