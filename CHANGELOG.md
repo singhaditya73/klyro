@@ -4,6 +4,35 @@ All notable changes to Klyro are recorded here. Versions follow [SemVer](https:/
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-10-19
+
+Groq first-class support plus provider-UX and workflow fixes.
+
+### Added
+- **Groq provider** with its own Settings card (label, encrypted key storage,
+  connection test, editable model/base URL). Default model is the current
+  production `openai/gpt-oss-120b`; speech-to-text uses `whisper-large-v3`.
+
+### Fixed
+- Provider "Test connection" spinner never stopped after a result: pending
+  state and result state were the same field. Results now render as a proper
+  success/error notice and the button re-enables.
+- Saving an API key gave no visible confirmation (the draft is intentionally
+  never read back). Cards now show an explicit "Key saved in the encrypted
+  secret store" confirmation plus the persistent "Key saved" pill, disable
+  "Save key" while the draft is empty, and explain the not-yet-saved state.
+- A dead model name now says what to type instead: on a 404 the adapter asks
+  the endpoint's own `/models` and appends the actually-available ids to the
+  error ("Available models here: …").
+- Speech-to-text sent `whisper-1` unconditionally; each compatible provider
+  now carries the id it really serves (Groq needs `whisper-large-v3`), and
+  Groq is accepted as a transcription provider.
+- Clicking "New chat" while already on an empty conversation reused to pile
+  up empty sessions; it now stays in the current fresh chat.
+- Workspaces with reduced-width content columns (Workflows, Screen,
+  Integrations) left dead space hugging the left edge on wide windows; the
+  content column is centered now.
+
 ## [0.2.1] — 2026-10-19
 
 Post-0.2.0 engineering completion program (details in `docs/ENGINEERING_CHECKLIST.md`)

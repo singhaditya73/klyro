@@ -28,7 +28,9 @@ const TEXT_ONLY_PATTERNS: Partial<Record<ProviderId, RegExp>> = {
   // gpt-4 and its dated snapshots are text-only; gpt-4o / gpt-4-turbo / gpt-4.1 see.
   openai: /^(gpt-3\.5|gpt-4(-\d{4})?$|gpt-4-turbo-preview|davinci|babbage|text-|o1-mini|o3-mini)/i,
   anthropic: /^claude-2/i,
-  gemini: /(^gemini-1\.0-pro|embedding|^text-)/i
+  gemini: /(^gemini-1\.0-pro|embedding|^text-)/i,
+  // Groq's gpt-oss and llama-4 line serves text (and tool use) but no vision yet.
+  groq: /(groq\/compound|^playai|^whisper|^guard|^orpheus)/i
 }
 
 /** Models known to accept images, per provider. */
@@ -36,6 +38,7 @@ const VISION_PATTERNS: Record<ProviderId, RegExp> = {
   openai: /(gpt-4o|gpt-4\.1|gpt-5|gpt-4-turbo|chatgpt-4o|^o[134])/i,
   anthropic: /^claude-(3|4|sonnet|opus|haiku)/i,
   gemini: /^gemini-/i,
+  groq: /(vision|llava)/i,
   ollama: /(llava|vision|moondream|minicpm|bakllava|qwen.*vl|gemma3)/i,
   // A custom endpoint could be anything; do not guess.
   'openai-compatible': /(vision|llava|gpt-4o|gpt-4\.1|gemini|claude)/i
@@ -89,7 +92,7 @@ export function resolveRoute({ settings, apiKey, purpose = 'chat' }: RouteInput)
       provider: providerId
     })
   }
-  if (purpose === 'transcription' && providerId !== 'openai' && providerId !== 'openai-compatible') {
+  if (purpose === 'transcription' && providerId !== 'openai' && providerId !== 'groq' && providerId !== 'openai-compatible') {
     throw new ProviderError(
       `Speech-to-text needs an OpenAI-compatible provider (currently "${meta.label}"). Switch provider in Settings, or point the OpenAI-compatible endpoint at a local Whisper server.`,
       { kind: 'unsupported', provider: providerId }

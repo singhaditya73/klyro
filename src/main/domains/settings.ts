@@ -87,6 +87,7 @@ class SettingsDomain {
         id,
         label: PROVIDER_META[id].label,
         requiresKey: PROVIDER_META[id].requiresKey,
+        keyLabel: PROVIDER_META[id].keyLabel,
         hasKey: secrets.has(id),
         model,
         baseUrl: current.providers[id]?.baseUrl ?? '',

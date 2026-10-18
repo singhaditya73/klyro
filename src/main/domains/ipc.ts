@@ -47,7 +47,7 @@ function handle<A extends unknown[], R>(
   })
 }
 
-const providerIdSchema = z.enum(['openai', 'anthropic', 'gemini', 'ollama', 'openai-compatible'])
+const providerIdSchema = z.enum(['openai', 'anthropic', 'gemini', 'groq', 'ollama', 'openai-compatible'])
 
 const idSchema = z.string().min(1).max(120)
 const querySchema = z.string().max(500)

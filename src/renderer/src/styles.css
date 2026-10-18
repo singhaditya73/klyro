@@ -456,7 +456,9 @@ a { color: inherit; text-decoration: none; }
 }
 .workspace-header__actions { display: flex; align-items: center; gap: 8px; }
 
-/* Standard content column; workspaces may override --content-max locally. */
+/* Standard content column; workspaces may override --content-max locally.
+   align-self centers the column horizontally in shorter (max-width) views so
+   wide windows never leave dead space hugging one side. */
 .workspace-content {
   flex: 1;
   overflow: auto;
@@ -464,6 +466,7 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   flex-direction: column;
   align-items: center;
+  align-self: center;
   width: 100%;
 }
 .workspace-content > * { width: 100%; max-width: var(--content-max); }

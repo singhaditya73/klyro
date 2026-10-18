@@ -7,6 +7,7 @@ import { ollama } from './ollama'
 
 const registry: Record<ProviderId, Provider> = {
   openai: openAICompatible,
+  groq: { ...openAICompatible, id: 'groq' },
   'openai-compatible': { ...openAICompatible, id: 'openai-compatible' },
   anthropic,
   gemini,

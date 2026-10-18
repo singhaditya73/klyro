@@ -3,7 +3,7 @@
  * Keep this file free of Node/Electron/DOM imports.
  */
 
-export type ProviderId = 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'openai-compatible'
+export type ProviderId = 'openai' | 'anthropic' | 'gemini' | 'groq' | 'ollama' | 'openai-compatible'
 
 export type ResponseStyle = 'concise' | 'balanced' | 'detailed'
 export type ThemeMode = 'system' | 'dark' | 'light'
@@ -11,6 +11,11 @@ export type ThemeMode = 'system' | 'dark' | 'light'
 export interface ProviderSettings {
   baseUrl: string
   model: string
+  /**
+   * Speech-to-text model for providers whose audio endpoint is OpenAI-shaped.
+   * Empty = the provider cannot transcribe.
+   */
+  transcribeModel?: string
 }
 
 export interface AppSettings {
@@ -41,6 +46,8 @@ export interface ProviderStatus {
   id: ProviderId
   label: string
   requiresKey: boolean
+  /** Hint for the key field ("OpenAI API key", "Groq API key (gsk_…)"). */
+  keyLabel: string
   hasKey: boolean
   model: string
   baseUrl: string

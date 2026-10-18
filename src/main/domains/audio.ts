@@ -1,5 +1,5 @@
 import { getProvider } from '../providers'
-import { DEFAULT_TRANSCRIBE_MODEL } from '../providers/defaults'
+import { DEFAULT_PROVIDERS, DEFAULT_TRANSCRIBE_MODEL } from '../providers/defaults'
 import { resolveRoute } from '../providers/routing'
 import { settingsDomain } from './settings'
 
@@ -27,7 +27,9 @@ export async function transcribeAudio(audio: ArrayBuffer, mimeType: string): Pro
   return provider.transcribe({
     baseUrl: route.baseUrl,
     apiKey: route.apiKey,
-    model: DEFAULT_TRANSCRIBE_MODEL,
+    // Groq expects whisper-large-v3, OpenAI whisper-1 — each provider carries
+    // the correct id so the same /audio/transcriptions path serves both.
+    model: DEFAULT_PROVIDERS[providerId].transcribeModel ?? DEFAULT_TRANSCRIBE_MODEL,
     audio,
     mimeType
   })

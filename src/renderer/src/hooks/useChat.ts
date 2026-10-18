@@ -60,6 +60,13 @@ export function useChat(): ChatController {
   }, [])
 
   const newConversation = useCallback(async (): Promise<void> => {
+    // If the current conversation is still empty (nothing sent yet), keep it.
+    // Creating a fresh one on every click would pile up empty sessions.
+    if (activeIdRef.current) {
+      const list = await window.klyro.listConversations()
+      const current = list.find((c) => c.id === activeIdRef.current)
+      if (current && current.messageCount === 0) return
+    }
     const conversation = await window.klyro.createConversation()
     windowRef.current = PAGE
     activeIdRef.current = conversation.id

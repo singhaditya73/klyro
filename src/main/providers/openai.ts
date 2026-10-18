@@ -5,6 +5,40 @@ import { openResponse, responseDetail } from './request'
 
 const PROVIDER = 'openai'
 
+/**
+ * A 404 on chat almost always means a wrong model name or a wrong base URL.
+ * The classiest way to help: ask the same endpoint which models it actually
+ * serves and put the list in front of the user. Best effort — any failure in
+ * this enrichment returns the original error untouched.
+ */
+async function enrichNotFound(error: unknown, options: ChatOptions): Promise<unknown> {
+  const known = error instanceof Error && /(?:not found|404)/i.test(error.message)
+  if (!known || !options.baseUrl) return error
+  try {
+    const res = await fetch(`${trimSlash(options.baseUrl)}/models`, {
+      headers: options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}
+    })
+    if (!res.ok) return error
+    const json = (await res.json()) as { data?: Array<{ id?: string }> }
+    const ids = (json.data ?? [])
+      .map((entry) => entry.id)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0)
+    if (ids.length === 0) return error
+    const wanted = (options.model ?? '').trim()
+    const served = ids.includes(wanted)
+    const preview = ids.slice(0, 8).join(', ')
+    const more = ids.length > 8 ? ` … and ${ids.length - 8} more (see the endpoint's /models)` : ''
+    const detail = served
+      ? `The endpoint does serve "${wanted}", so the 404 is about something else.`
+      : `"${wanted}" is not one of this endpoint's models.`
+    return new Error(
+      `${error.message} ${detail} Available models here: ${preview}${more}`
+    )
+  } catch {
+    return error
+  }
+}
+
 function toOpenAIMessage(turn: ChatTurn): unknown {
   if (!turn.images?.length) return { role: turn.role, content: turn.text }
   return {
@@ -50,7 +84,7 @@ export const openAICompatible: Provider = {
       }
     } catch (error) {
       // A stream that dies mid-answer lands here; classify it for the caller.
-      throw classifyThrown(error, { provider: PROVIDER })
+      throw await enrichNotFound(classifyThrown(error, { provider: PROVIDER }), options)
     }
   },
 

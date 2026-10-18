@@ -33,7 +33,9 @@ export function SettingsPanel({ onClose }: Props) {
   const [data, setData] = useState<DataSummary | null>(null)
   const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({})
   const [reportCount, setReportCount] = useState(0)
-  const [testing, setTesting] = useState<Record<string, string>>({})
+  const [testing, setTesting] = useState<Record<string, boolean>>({})
+  const [testResults, setTestResults] = useState<Record<string, { ok: boolean; text: string }>>({})
+  const [justSaved, setJustSaved] = useState<string | null>(null)
   const [keyError, setKeyError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [version, setVersion] = useState<string | null>(null)
@@ -72,6 +74,12 @@ export function SettingsPanel({ onClose }: Props) {
     try {
       setProviders(await window.klyro.setApiKey(id, draft))
       setKeyDrafts((prev) => ({ ...prev, [id]: '' }))
+      // The draft is wiped and never re-rendered (the key is not read back from
+      // the secret store), so confirm plainly that the save happened.
+      setJustSaved(id)
+      window.setTimeout(() => {
+        setJustSaved((current) => (current === id ? null : current))
+      }, 4000)
       setSecurity(await window.klyro.securityStatus())
     } catch (error) {
       setKeyError((error as Error).message)
@@ -101,17 +109,19 @@ export function SettingsPanel({ onClose }: Props) {
   }
 
   async function test(id: ProviderId): Promise<void> {
-    setTesting((prev) => ({ ...prev, [id]: 'Testing&hellip;' }))
+    setTesting((prev) => ({ ...prev, [id]: true }))
+    setTestResults((prev) => ({ ...prev, [id]: undefined as never }))
     try {
       const result = await window.klyro.testProvider(id)
-      setTesting((prev) => ({
+      setTestResults((prev) => ({
         ...prev,
-        [id]: result.ok
-          ? `<CheckCircle /> ${result.detail}${result.latencyMs ? ` (${result.latencyMs} ms)` : ''}`
-          : `<AlertCircle /> ${result.detail}`
+        [id]: { ok: result.ok, text: `Test connection: ${result.detail}${result.latencyMs ? ` (${result.latencyMs} ms)` : ''}` }
       }))
     } catch (error) {
-      setTesting((prev) => ({ ...prev, [id]: `<AlertCircle /> ${(error as Error).message}` }))
+      setTestResults((prev) => ({ ...prev, [id]: { ok: false, text: `Test connection failed: ${(error as Error).message}` } }))
+    } finally {
+      // Always stop the spinner, whatever happened to the request.
+      setTesting((prev) => ({ ...prev, [id]: false }))
     }
   }
 
@@ -168,9 +178,10 @@ export function SettingsPanel({ onClose }: Props) {
                       value={keyDrafts[provider.id] ?? ''}
                       onChange={(event) => setKeyDrafts((prev) => ({ ...prev, [provider.id]: event.target.value }))}
                       className="field"
+                      aria-label={`${provider.keyLabel ?? provider.label} key`}
                     />
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      <button className="btn btn--primary" onClick={() => void saveKey(provider.id)}>
+                      <button className="btn btn--primary" onClick={() => void saveKey(provider.id)} disabled={(keyDrafts[provider.id] ?? '') === ''}>
                         <Key className="icon icon--sm" aria-hidden="true" />
                         <span>Save key</span>
                       </button>
@@ -179,15 +190,24 @@ export function SettingsPanel({ onClose }: Props) {
                         <span>Clear</span>
                       </button>
                     </div>
+                    {justSaved === provider.id && (
+                      <div className="muted" style={{ marginTop: '8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <CheckCircle className="icon icon--xs" style={{ color: 'var(--success)' }} aria-hidden="true" />
+                        Key saved in the encrypted secret store. It is never shown again — use Clear to remove it.
+                      </div>
+                    )}
+                    {justSaved !== provider.id && !provider.hasKey && (keyDrafts[provider.id] ?? '') !== '' && (
+                      <div className="muted" style={{ marginTop: '8px', fontSize: '12px' }}>Not saved yet — click “Save key”.</div>
+                    )}
                   </div>
                 )}
 
                 <div className="provider-card__actions">
-                  <button className="btn" onClick={() => void test(provider.id)} disabled={testing[provider.id] === 'Testing&hellip;'} aria-label={`Test ${provider.label} connection`}>
+                  <button className="btn" onClick={() => void test(provider.id)} disabled={testing[provider.id] === true} aria-label={`Test ${provider.label} connection`}>
                     {testing[provider.id] ? (
                       <>
                         <Loader2 className="icon icon--sm" style={{ animation: 'spin 1s linear infinite' }} aria-hidden="true" />
-                        <span>Testing&hellip;</span>
+                        <span>Testing…</span>
                       </>
                     ) : (
                       <>
@@ -196,8 +216,17 @@ export function SettingsPanel({ onClose }: Props) {
                       </>
                     )}
                   </button>
-                  {testing[provider.id] && <span className="muted" dangerouslySetInnerHTML={{ __html: testing[provider.id] }} />}
                 </div>
+                {testResults[provider.id] && (
+                  <div className={`notice ${testResults[provider.id].ok ? 'notice--success' : 'notice--error'}`} style={{ marginTop: '8px', marginBottom: 0 }}>
+                    {testResults[provider.id].ok ? (
+                      <CheckCircle className="icon icon--sm notice__icon" aria-hidden="true" />
+                    ) : (
+                      <AlertCircle className="icon icon--sm notice__icon" aria-hidden="true" />
+                    )}
+                    <span className="notice__body">{testResults[provider.id].text}</span>
+                  </div>
+                )}
 
                 {settings.activeProvider === provider.id && provider.vision === 'no' && (
                   <div className="provider-card__warning" style={{ marginTop: '12px' }}>
