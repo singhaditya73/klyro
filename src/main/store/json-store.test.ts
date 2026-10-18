@@ -111,7 +111,7 @@ describe('JsonStore', () => {
     const file = join(harness.userData, 'test.json')
     const tmp = file + '.tmp'
     harness.files.set(tmp, 'unfinished')
-    const store = new JsonStore('test.json', { a: 1 })
+    new JsonStore('test.json', { a: 1 })
     expect(harness.files.has(tmp)).toBe(false)
     expect(harness.logs.some((l) => l.includes('unfinished store write'))).toBe(true)
   })
