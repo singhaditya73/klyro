@@ -71,6 +71,10 @@ export const IPC = {
   meetingSave: 'meeting:save',
   meetingSummarize: 'meeting:summarize',
   meetingDelete: 'meeting:delete',
+  meetingTranscriptAppend: 'meeting:transcript:append',
+  meetingTranscriptGap: 'meeting:transcript:gap',
+  meetingTranscriptGet: 'meeting:transcript:get',
+  meetingTranscriptDiscard: 'meeting:transcript:discard',
 
   workflowList: 'workflow:list',
   workflowCreate: 'workflow:create',

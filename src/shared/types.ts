@@ -671,6 +671,13 @@ export interface KlyroApi {
   meetingSave(draft: MeetingDraft): Promise<MeetingRecord[]>
   meetingSummarize(id: string): Promise<MeetingRecord[]>
   meetingDelete(id: string): Promise<MeetingRecord[]>
+  /** Append one transcribed chunk; silence artefacts and repeats are dropped. */
+  meetingTranscriptAppend(text: string): Promise<{ segments: MeetingSegment[]; added: boolean }>
+  /** Record that a stretch of audio could not be transcribed. */
+  meetingTranscriptGap(): Promise<{ segments: MeetingSegment[]; added: boolean }>
+  /** The transcript of a recording that was still in progress at last exit. */
+  meetingTranscriptGet(): Promise<{ startedAt: number; updatedAt: number; segments: MeetingSegment[] } | null>
+  meetingTranscriptDiscard(): Promise<MeetingRecord[]>
 
   workflowList(): Promise<WorkflowRecord[]>
   workflowCreate(draft: WorkflowDraft): Promise<WorkflowRecord[]>

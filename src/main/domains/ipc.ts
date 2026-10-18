@@ -360,6 +360,15 @@ export function registerIpcHandlers(): void {
     meetings.remove(idSchema.parse(id))
     return meetings.list()
   })
+  handle(IPC.meetingTranscriptAppend, (_event, text: unknown) =>
+    meetings.appendTranscript(z.string().max(40000).parse(text ?? ''))
+  )
+  handle(IPC.meetingTranscriptGap, () => meetings.markTranscriptGap())
+  handle(IPC.meetingTranscriptGet, () => meetings.liveTranscript())
+  handle(IPC.meetingTranscriptDiscard, () => {
+    meetings.discardLiveTranscript()
+    return meetings.list()
+  })
 
   handle(IPC.workflowList, () => workflows.list())
   handle(IPC.workflowCreate, (_event, draft: unknown) => {

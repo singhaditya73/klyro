@@ -247,6 +247,12 @@ export function StudioPanel({ onClose }: Props) {
                 only the audio needed for transcription leaves the device.
               </p>
               {studio.transcribeError ? <div className="agent__warning">{studio.transcribeError}</div> : null}
+              {studio.recoveredAt && !studio.recording ? (
+                <div className="agent__warning">
+                  Recovered an unsaved transcript from {new Date(studio.recoveredAt).toLocaleString()}. Save it to keep it, or
+                  discard it.
+                </div>
+              ) : null}
               <div className="provider__actions">
                 {studio.recording ? (
                   <button className="btn btn--danger" onClick={() => void studio.stopRecording()}>

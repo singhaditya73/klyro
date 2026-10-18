@@ -110,4 +110,26 @@ describe('parseMeetingSummary', () => {
   it('handles empty input', () => {
     expect(parseMeetingSummary('   ')).toEqual({ summary: '', actions: [] })
   })
+
+  it('accepts alternative action-item keys and string payloads', () => {
+    const alt = parseMeetingSummary('{"summary":"Reviewed the plan.","actionItems":["Send notes"]}')
+    expect(alt.actions).toEqual(['Send notes'])
+
+    const asString = parseMeetingSummary('{"summary":"Reviewed.","action_items":"- Send notes\\n- Book the room"}')
+    expect(asString.actions).toEqual(['Send notes', 'Book the room'])
+  })
+
+  it('cleans and de-duplicates action items', () => {
+    const parsed = parseMeetingSummary(
+      '{"summary":"Reviewed.","actions":[" 1. Send notes ","Send notes","- Send notes!","x","","Book the room"]}'
+    )
+    expect(parsed.actions).toEqual(['Send notes', 'Book the room'])
+  })
+
+  it('caps the number of action items', () => {
+    const many = `{"summary":"Reviewed.","actions":${JSON.stringify(
+      Array.from({ length: 40 }, (_, index) => `Action number ${index}`)
+    )}}`
+    expect(parseMeetingSummary(many).actions).toHaveLength(20)
+  })
 })

@@ -32,6 +32,7 @@ export interface StudioController {
   recording: boolean
   liveSegments: MeetingSegment[]
   seconds: number
+  recoveredAt: number | null
   meetingBusy: boolean
   startRecording: () => Promise<void>
   stopRecording: () => Promise<void>
@@ -76,6 +77,7 @@ export function useStudio(): StudioController {
   const [recording, setRecording] = useState(false)
   const [liveSegments, setLiveSegments] = useState<MeetingSegment[]>([])
   const [seconds, setSeconds] = useState(0)
+  const [recoveredAt, setRecoveredAt] = useState<number | null>(null)
   const [meetingBusy, setMeetingBusy] = useState(false)
   const [transcribeError, setTranscribeError] = useState<string | null>(null)
 
@@ -113,6 +115,18 @@ export function useStudio(): StudioController {
       setPatches(await window.klyro.patchList())
     } catch {
       setPatches([])
+    }
+    // A recording that was interrupted before it was saved is still here; show it
+    // rather than silently losing the meeting.
+    try {
+      const recovered = await window.klyro.meetingTranscriptGet()
+      if (recovered && recovered.segments.length > 0) {
+        startedAtRef.current = recovered.startedAt
+        setLiveSegments(recovered.segments)
+        setRecoveredAt(recovered.updatedAt)
+      }
+    } catch {
+      // Recovery is best-effort.
     }
   }, [refreshRuns])
 
@@ -246,11 +260,31 @@ export function useStudio(): StudioController {
   }, [])
 
   const handleChunk = useCallback(async (blob: Blob): Promise<void> => {
+    let text = ''
     try {
       const buffer = await blob.arrayBuffer()
-      const result = await window.klyro.transcribe(buffer, blob.type || 'audio/webm')
-      const text = result.text.trim()
-      if (text) setLiveSegments((prev) => [...prev, { at: Date.now() - startedAtRef.current, text }])
+      const mimeType = blob.type || 'audio/webm'
+      try {
+        text = (await window.klyro.transcribe(buffer, mimeType)).text.trim()
+      } catch (first) {
+        // One retry: a single failed chunk should not punch a hole in the notes.
+        await new Promise((resolve) => window.setTimeout(resolve, 800))
+        text = (await window.klyro.transcribe(buffer, mimeType)).text.trim()
+        void first
+      }
+      setTranscribeError(null)
+    } catch (caught) {
+      setTranscribeError(`${(caught as Error).message} — that stretch of audio was not transcribed.`)
+      const marked = await window.klyro.meetingTranscriptGap().catch(() => null)
+      if (marked) setLiveSegments(marked.segments)
+      return
+    }
+
+    try {
+      // The main process owns the transcript so duplicates at chunk boundaries
+      // are removed, and it persists as it grows.
+      const result = await window.klyro.meetingTranscriptAppend(text)
+      if (result.added) setLiveSegments(result.segments)
     } catch (caught) {
       setTranscribeError((caught as Error).message)
     }
@@ -265,9 +299,16 @@ export function useStudio(): StudioController {
       const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
       streamRef.current = stream
       recorderRef.current = recorder
-      startedAtRef.current = Date.now()
-      setLiveSegments([])
-      setSeconds(0)
+      // Keep offsets consistent with any transcript recovered after a crash.
+      const recovered = await window.klyro.meetingTranscriptGet().catch(() => null)
+      if (recovered) {
+        startedAtRef.current = recovered.startedAt
+        setLiveSegments(recovered.segments)
+      } else {
+        startedAtRef.current = Date.now()
+        setLiveSegments([])
+      }
+      setSeconds(Math.max(0, Math.floor((Date.now() - startedAtRef.current) / 1000)))
 
       recorder.ondataavailable = (event) => {
         if (!event.data || event.data.size === 0) return
@@ -325,7 +366,6 @@ export function useStudio(): StudioController {
     },
     [liveSegments]
   )
-
   const summarizeMeeting = useCallback(async (id: string): Promise<void> => {
     setError(null)
     setMeetingBusy(true)
@@ -345,6 +385,8 @@ export function useStudio(): StudioController {
   const discardRecording = useCallback((): void => {
     setLiveSegments([])
     setSeconds(0)
+    // Also drop the persisted copy, or it would reappear after a restart.
+    void window.klyro.meetingTranscriptDiscard().catch(() => undefined)
   }, [])
 
   const runWorkflow = useCallback(
@@ -401,6 +443,7 @@ export function useStudio(): StudioController {
     recording,
     liveSegments,
     seconds,
+    recoveredAt,
     meetingBusy,
     startRecording,
     stopRecording,

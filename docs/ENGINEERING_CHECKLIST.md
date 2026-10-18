@@ -75,7 +75,7 @@ Legend: ✅ done+tested · 🟡 implemented, not fully verified · ⛔ blocked (
 | D | D4 multi-step evaluation with mocked services | ✅ verified |
 | E | E1 incremental indexing + exclusions + safe paths | ✅ verified |
 | E | E2 line-range citations + diff/apply with approval + revert | ✅ verified |
-| F | F1 meeting chunk dedup/retry + structured extraction | ⬜ not started |
+| F | F1 meeting chunk dedup/retry + structured extraction | ✅ verified |
 | G | G1 common integration contract | ⬜ not started |
 | G | G2 Google Calendar / Email / Slack / Drive | ⛔ blocked on OAuth credentials |
 | H | H1 provider error categories, retry, rate-limit handling | ⬜ not started |
@@ -115,6 +115,29 @@ Status column reflects **verified in this program**, not intent. Only mark ✅ a
 - `retrieval.ts`/`documents.ts`: chunks carry an end line; citations render as `file.ts:12-40` via `knowledge/locations.ts`.
 - UI (no redesign): the indexed-project section shows what the last scan did, and the code tab gains "Edit a project file" with a diff preview plus Apply / Discard / Revert.
 - Tests: 207 passing, typecheck clean, build clean, smoke OK.
+
+### Phase F — meeting & transcription reliability (this commit)
+
+- `knowledge/transcript.ts` (+ tests): pure chunk-assembly rules — silence/artefact
+  detection (`[BLANK_AUDIO]`, `(inaudible)`, `[Music]`, a lone "you"), word-level
+  boundary de-duplication (≥3 repeated words are stripped, so a cut boundary does
+  not repeat the previous chunk), exact-repeat rejection (a retried chunk is never
+  appended twice), and whitespace/bullet normalisation.
+- `meetings.ts`: the main process now owns the in-progress transcript
+  (`appendTranscript`, `markTranscriptGap`), persists it as it grows, and exposes it
+  for recovery after a crash (`liveTranscript`, `discardLiveTranscript`). Saving a
+  meeting re-cleans the segments and clears the draft, so a stored meeting never
+  contains a duplicated or artefact segment.
+- Retry: a failed chunk is retried once by the renderer; if it still fails the
+  transcript records an explicit gap marker and the UI says so, rather than losing
+  audio silently.
+- Action items: `parseMeetingSummary` accepts `actions`/`actionItems`/`action_items`/
+  `followUps`, tolerates a string payload, strips bullets/quotes, truncates, and
+  de-duplicates (max 20).
+- Temp audio: transcription builds a `Blob`/`FormData` in memory — verified there is
+  no temp file for audio anywhere in `src/main` — and the patch writer now removes
+  its `.klyro-tmp` file if the rename fails.
+- Tests: 223 passing, typecheck clean, build clean, smoke OK.
 
 ### Metrics (measured, not estimated)
 | Measurement | Value | Where |

@@ -106,6 +106,10 @@ const api: KlyroApi = {
   meetingSave: (draft: MeetingDraft) => ipcRenderer.invoke(IPC.meetingSave, draft),
   meetingSummarize: (id: string) => ipcRenderer.invoke(IPC.meetingSummarize, id),
   meetingDelete: (id: string) => ipcRenderer.invoke(IPC.meetingDelete, id),
+  meetingTranscriptAppend: (text: string) => ipcRenderer.invoke(IPC.meetingTranscriptAppend, text),
+  meetingTranscriptGap: () => ipcRenderer.invoke(IPC.meetingTranscriptGap),
+  meetingTranscriptGet: () => ipcRenderer.invoke(IPC.meetingTranscriptGet),
+  meetingTranscriptDiscard: () => ipcRenderer.invoke(IPC.meetingTranscriptDiscard),
 
   workflowList: () => ipcRenderer.invoke(IPC.workflowList),
   workflowCreate: (draft: WorkflowDraft) => ipcRenderer.invoke(IPC.workflowCreate, draft),

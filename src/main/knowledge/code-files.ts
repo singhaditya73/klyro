@@ -87,7 +87,40 @@ export function renderTemplate(template: string, vars: Record<string, string>): 
   return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, key: string) => vars[key] ?? '')
 }
 
-/** Split a model answer into a summary paragraph plus bullet action items. */
+const ACTION_KEYS = ['actions', 'actionItems', 'action_items', 'followUps', 'follow_ups', 'todos']
+
+/** Clean one action item: no bullets, quotes, or trailing punctuation soup. */
+function cleanAction(item: string): string {
+  return item
+    .replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '')
+    .replace(/^["'\s]+|["'\s]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 300)
+}
+
+/** Keep the first mention of each action; models like to repeat themselves. */
+function uniqueActions(items: string[], limit = 20): string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const item of items) {
+    const cleaned = cleanAction(item)
+    if (cleaned.length < 3) continue
+    const key = cleaned.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(cleaned)
+    if (result.length >= limit) break
+  }
+  return result
+}
+
+/**
+ * Split a model answer into a summary plus structured action items.
+ *
+ * Accepts the JSON shape we ask for, tolerates fenced or chatty JSON, and falls
+ * back to reading bullets out of plain text.
+ */
 export function parseMeetingSummary(raw: string): { summary: string; actions: string[] } {
   const text = raw.trim()
   if (!text) return { summary: '', actions: [] }
@@ -96,11 +129,16 @@ export function parseMeetingSummary(raw: string): { summary: string; actions: st
   const jsonEnd = text.lastIndexOf('}')
   if (jsonStart !== -1 && jsonEnd > jsonStart) {
     try {
-      const parsed = JSON.parse(text.slice(jsonStart, jsonEnd + 1)) as { summary?: unknown; actions?: unknown }
-      const summary = typeof parsed.summary === 'string' ? parsed.summary.trim() : ''
-      const actions = Array.isArray(parsed.actions)
-        ? parsed.actions.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean)
-        : []
+      const parsed = JSON.parse(text.slice(jsonStart, jsonEnd + 1)) as Record<string, unknown>
+      const summary = typeof parsed.summary === 'string' ? parsed.summary.trim().slice(0, 4000) : ''
+      const rawActions = ACTION_KEYS.map((key) => parsed[key]).find((value) => Array.isArray(value) || typeof value === 'string')
+      const actions = uniqueActions(
+        Array.isArray(rawActions)
+          ? rawActions.filter((item): item is string => typeof item === 'string')
+          : typeof rawActions === 'string'
+            ? rawActions.split('\n')
+            : []
+      )
       if (summary || actions.length) return { summary, actions }
     } catch {
       // fall through to text parsing
@@ -114,5 +152,5 @@ export function parseMeetingSummary(raw: string): { summary: string; actions: st
     if (bullet && bullet[1].trim()) actions.push(bullet[1].trim())
     else if (line.trim()) summaryLines.push(line.trim())
   }
-  return { summary: summaryLines.join(' ').trim(), actions }
+  return { summary: summaryLines.join(' ').trim(), actions: uniqueActions(actions) }
 }

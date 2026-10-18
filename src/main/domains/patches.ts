@@ -142,8 +142,14 @@ class PatchDomain {
     // Write via a temp file in the same directory so a crash cannot truncate the original.
     await mkdir(dirname(patch.absolutePath), { recursive: true })
     const temporary = `${patch.absolutePath}.klyro-tmp`
-    await writeFile(temporary, patch.content, 'utf8')
-    await rename(temporary, patch.absolutePath)
+    try {
+      await writeFile(temporary, patch.content, 'utf8')
+      await rename(temporary, patch.absolutePath)
+    } catch (error) {
+      // Never leave a stray temp file next to the user's source.
+      await rm(temporary, { force: true }).catch(() => undefined)
+      throw error
+    }
 
     logger.info(`Patches: applied edit to ${patch.path}`)
     this.store.update((state) => {
