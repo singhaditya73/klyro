@@ -6,9 +6,11 @@ interface Props {
   busy: boolean
   onSend: (content: string, attachments: Attachment[]) => void | Promise<void>
   onStop: () => void
+  /** `hero` = borderless variant embedded in larger pages (Home). */
+  variant?: 'inline' | 'hero'
 }
 
-export function Composer({ busy, onSend, onStop }: Props) {
+export function Composer({ busy, onSend, onStop, variant = 'inline' }: Props) {
   const [text, setText] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [sources, setSources] = useState<any[] | null>(null)
@@ -83,7 +85,7 @@ export function Composer({ busy, onSend, onStop }: Props) {
   }
 
   return (
-    <div className="composer">
+    <div className={`composer${variant === 'hero' ? ' composer--hero' : ''}`}>
       {attachments.length > 0 && (
         <div className="composer__attachments">
           {attachments.map((attachment, index) => (
@@ -91,6 +93,7 @@ export function Composer({ busy, onSend, onStop }: Props) {
               <img src={attachment.dataUrl} alt={attachment.label ?? 'screen'} />
               <span>{attachment.label ?? 'screen'}</span>
               <button
+                className="btn btn--icon btn--icon-sm btn--ghost"
                 aria-label="Remove attachment"
                 onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== index))}
               >
@@ -106,7 +109,8 @@ export function Composer({ busy, onSend, onStop }: Props) {
       <textarea
         className="composer__textarea"
         value={text}
-        placeholder="Ask Klyro anything&hellip;   (Enter to send &middot; Shift+Enter for new line)"
+        aria-label="Message Klyro"
+        placeholder="Ask Klyro anything…"
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.shiftKey) {
@@ -140,6 +144,7 @@ export function Composer({ busy, onSend, onStop }: Props) {
           )}
         </button>
         <div className="spacer" />
+        <span className="composer__hint" aria-hidden="true">Enter to send · Shift+Enter for a new line</span>
         {busy ? (
           <button className="btn btn--danger" onClick={onStop} aria-label="Stop generation">
             <StopCircle className="icon icon--sm" aria-hidden="true" />

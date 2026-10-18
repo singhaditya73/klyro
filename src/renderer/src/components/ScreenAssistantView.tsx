@@ -1,16 +1,18 @@
 import { useState, useEffect } from 'react'
-import type { CaptureSource, Attachment, SendChatRequest } from '@shared/types'
-import { Monitor, ArrowRight, X, AlertCircle } from 'lucide-react'
+import type { CaptureSource, Attachment, SendChatRequest, WorkspaceView } from '@shared/types'
+import { LoaderCircle, CheckCircle2, Monitor, ArrowRight, X, AlertCircle } from 'lucide-react'
 import KlyroMark from '../assets/logo/klyro-mark.svg'
 
-interface Props {}
+interface Props {
+  onOpenView?: (view: WorkspaceView) => void
+}
 
-export function ScreenAssistantView({}: Props) {
+export function ScreenAssistantView({ onOpenView }: Props) {
   const [sources, setSources] = useState<CaptureSource[] | null>(null)
   const [selectedSource, setSelectedSource] = useState<string | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [question, setQuestion] = useState('')
-  const [answer, setAnswer] = useState<string | null>(null)
+  const [asked, setAsked] = useState(false)
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [permissionStatus, setPermissionStatus] = useState<'unknown' | 'granted' | 'denied'>('unknown')
@@ -51,7 +53,8 @@ export function ScreenAssistantView({}: Props) {
   async function ask() {
     if (!question.trim() && !preview) return
     setStreaming(true)
-    setAnswer(null)
+    setAsked(false)
+    setError(null)
     try {
       const attachments: Attachment[] = preview ? [{ kind: 'image', mime: 'image/png', dataUrl: preview, label: selectedSource || 'screen' }] : []
       const request: SendChatRequest = {
@@ -60,7 +63,9 @@ export function ScreenAssistantView({}: Props) {
         attachments
       }
       await window.klyro.sendChat(request)
-      // The answer will come through the chat stream
+      // The response streams into the Chat workspace; make that path explicit
+      // instead of showing a dead "Answer" section that stayed empty.
+      setAsked(true)
     } catch (caught) {
       setError((caught as Error).message)
     } finally {
@@ -75,10 +80,9 @@ export function ScreenAssistantView({}: Props) {
 
   const workspaceStyle: React.CSSProperties = { flex: 1, display: 'flex', flexDirection: 'column' }
   const headerStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 12 }
-  const logoStyle: React.CSSProperties = { width: 32, height: 32 }
-  const titleStyle: React.CSSProperties = { margin: '2px 0 0', fontSize: '13px', color: 'var(--text-muted)' }
-  const sectionStyle: React.CSSProperties = { marginBottom: 32 }
-  const h2Style: React.CSSProperties = { margin: '0 0 16px', fontSize: '16px', fontWeight: 600 }
+  const logoStyle: React.CSSProperties = { width: 28, height: 28 }
+  const sectionStyle: React.CSSProperties = { marginBottom: 32, width: '100%' }
+  const h2Style: React.CSSProperties = { margin: '0 0 16px', fontSize: '15px', fontWeight: 600 }
 
   return (
     <div className="workspace" style={workspaceStyle}>
@@ -87,26 +91,26 @@ export function ScreenAssistantView({}: Props) {
           <img src={KlyroMark} alt="" style={logoStyle} aria-hidden="true" />
           <div>
             <h1 className="workspace-header__title">Screen Assistant</h1>
-            <p style={titleStyle}>Ask questions about what&apos;s on your screen</p>
+            <p className="workspace-header__subtitle">Ask questions about what&apos;s on your screen</p>
           </div>
         </div>
       </header>
 
-      <div style={{ flex: 1, overflow: 'auto', padding: '32px 20px', display: 'flex', flexDirection: 'column', maxWidth: '960px', margin: '0 auto', width: '100%' }}>
-        <div className={`notice${permissionStatus === 'granted' ? '' : ' notice--warning'}`} style={{ marginBottom: 24 }}>
+      <div className="workspace-content" style={{ maxWidth: 860 }}>
+        <div className={`notice${permissionStatus === 'granted' ? ' notice--info' : ' notice--warning'}`} style={{ marginBottom: 24 }}>
           <AlertCircle className="icon icon--md notice__icon" aria-hidden="true" />
-          <div>
+          <div className="notice__body">
             {permissionStatus === 'granted' ? (
               <>
                 <strong>Screen capture available</strong>
-                <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  Klyro can capture your screen when you explicitly request it.
+                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  Klyro can capture your screen when you explicitly request it. Nothing is captured automatically.
                 </p>
               </>
             ) : (
               <>
                 <strong>Screen capture permission required</strong>
-                <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>
                   Grant screen recording permission in System Settings → Privacy & Security → Screen Recording.
                 </p>
               </>
@@ -167,24 +171,28 @@ export function ScreenAssistantView({}: Props) {
         <section style={sectionStyle}>
           <h2 style={h2Style}>Your question</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <textarea
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              placeholder="What would you like to know about your screen?"
-              rows={3}
-              className="field"
-              style={{ borderRadius: 'var(--radius-lg)', padding: '14px 16px', fontSize: '14px' }}
-            />
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <label className="field">
+              <span className="field__label sr-only">Question about the capture</span>
+              <textarea
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                placeholder="What would you like to know about your screen?"
+                rows={3}
+                className="field"
+                aria-label="Question about the captured screen"
+                style={{ borderRadius: 'var(--radius-lg)', padding: '14px 16px', fontSize: '14px' }}
+              />
+            </label>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
               <button
                 className="btn btn--primary"
                 onClick={ask}
                 disabled={streaming || (!question.trim() && !preview)}
-                style={{ padding: '12px 24px', fontSize: '14px' }}
+                style={{ padding: '10px 20px', fontSize: '14px' }}
               >
                 {streaming ? (
                   <>
-                    <span className="icon icon--sm" style={{ animation: 'blink 1s infinite' }} aria-hidden="true">●</span>
+                    <LoaderCircle className="icon icon--sm" style={{ animation: 'spin 1s linear infinite' }} aria-hidden="true" />
                     <span>Analyzing…</span>
                   </>
                 ) : (
@@ -200,16 +208,41 @@ export function ScreenAssistantView({}: Props) {
                   <span>Clear screen</span>
                 </button>
               )}
+              {preview ? null : (
+                <span className="muted" style={{ fontSize: '12px' }}>Capture the screen first, or ask a general question.</span>
+              )}
             </div>
-            {error && <div className="notice notice--error" style={{ marginTop: 8 }}><AlertCircle className="icon icon--sm notice__icon" aria-hidden="true" />{error}</div>}
+            {error && <div className="notice notice--error"><AlertCircle className="icon icon--sm notice__icon" aria-hidden="true" />{error}</div>}
+            {asked && (
+              <div className="notice notice--info">
+                <CheckCircle2 className="icon icon--sm notice__icon" aria-hidden="true" />
+                <div className="notice__body">
+                  <strong>Question sent</strong>
+                  <span style={{ fontSize: '12px' }}>
+                    Klyro is answering in the Chat workspace. Your capture stays here for follow-ups.
+                  </span>
+                  {onOpenView && (
+                    <div className="notice__actions">
+                      <button className="btn btn--sm" onClick={() => onOpenView('chat')}>
+                        <ArrowRight className="icon icon--xs" aria-hidden="true" />
+                        <span>Open Chat</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </section>
 
-        {answer && (
-          <section>
-            <h2 style={h2Style}>Answer</h2>
-            <div className="card" style={{ background: 'var(--surface-raised)', border: '1px solid var(--border-subtle)' }}>
-              <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.65, color: 'var(--text-primary)' }}>{answer}</div>
+        {preview && (
+          <section style={{ width: '100%' }}>
+            <h2 style={h2Style}>Captured screen</h2>
+            <div className="card">
+              <div style={{ display: 'grid', gap: 6 }}>
+                <div className="muted" style={{ fontSize: '12px' }}>Source: <strong style={{ color: 'var(--text-secondary)' }}>{selectedSource}</strong></div>
+                <div className="muted" style={{ fontSize: '12px' }}>Send it with a question above, or clear it with “Clear screen”.</div>
+              </div>
             </div>
           </section>
         )}

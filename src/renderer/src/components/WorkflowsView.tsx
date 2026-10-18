@@ -3,10 +3,10 @@ import { Play, StopCircle, Trash2, Clock, ChevronDown, ChevronUp, FileText, Chec
 import { useStudio } from '../hooks/useStudio'
 import KlyroMark from '../assets/logo/klyro-mark.svg'
 
-const h2Style: React.CSSProperties = { margin: '0 0 16px', fontSize: '16px', fontWeight: 600 }
-const sectionStyle: React.CSSProperties = { marginBottom: 40 }
-const gridStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }
-const cardStyle: React.CSSProperties = { display: 'flex', flexDirection: 'column', height: '100%' }
+const h2Style: React.CSSProperties = { margin: '0 0 16px', fontSize: '15px', fontWeight: 600 }
+const sectionStyle: React.CSSProperties = { marginBottom: 40, width: '100%' }
+const gridStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '14px' }
+const cardStyle: React.CSSProperties = { display: 'flex', flexDirection: 'column', height: '100%', margin: 0 }
 
 export function WorkflowsView() {
   const studio = useStudio()
@@ -21,28 +21,32 @@ export function WorkflowsView() {
     <div className="workspace" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
       <header className="workspace-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <img src={KlyroMark} alt="" style={{ width: 32, height: 32 }} aria-hidden="true" />
-          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>Workflows</h1>
+          <img src={KlyroMark} alt="" style={{ width: 28, height: 28 }} aria-hidden="true" />
+          <div>
+            <h1 className="workspace-header__title">Workflows</h1>
+            <p className="workspace-header__subtitle">Chain model calls and tools into repeatable runs</p>
+          </div>
         </div>
       </header>
 
-      <div style={{ flex: 1, overflow: 'auto', padding: '32px 20px', display: 'flex', flexDirection: 'column', maxWidth: '1000px', margin: '0 auto', width: '100%' }}>
+      <div className="workspace-content" style={{ maxWidth: 1040 }}>
         <section style={sectionStyle}>
           <h2 style={h2Style}>Run a workflow</h2>
           <div className="field" style={{ marginBottom: 16 }}>
-            <span className="field__label">Input</span>
+            <label className="field__label" htmlFor="workflow-input">Input</label>
             <textarea
+              id="workflow-input"
               rows={4}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Input for the workflow (used as {{input}}) — a repo, a question, notes, or a diff…"
+              placeholder="Input for the workflow — a repo, a question, notes, or a diff…"
               className="field"
               style={{ borderRadius: 'var(--radius-lg)', padding: '14px 16px', fontSize: '14px' }}
             />
+            <span className="field__label" style={{ color: 'var(--text-muted)' }}>
+              The input is available as <code style={{ background: 'var(--surface-base)', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontFamily: 'Geist Mono, monospace' }}>{'{{input}}'}</code> in workflow steps.
+            </span>
           </div>
-                  <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
-            The input is available as <code style={{ background: 'var(--surface-base)', padding: '2px 6px', borderRadius: '4px', fontSize: '11px' }}>{'{{input}}'}</code> in workflow steps.
-          </p>
 
           {studio.workflowSteps.length > 0 && (
             <div style={{ marginBottom: '24px' }}>
@@ -91,9 +95,7 @@ export function WorkflowsView() {
         </section>
 
         <section style={sectionStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <h2 style={h2Style}>Available workflows</h2>
-          </div>
+          <h2 className="section-label" style={{ textTransform: 'none', letterSpacing: 0, fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 16px' }}>Available workflows</h2>
 
           {studio.workflows.length === 0 ? (
             <div className="empty-content" style={{ padding: '48px 24px', background: 'var(--surface-raised)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xl)' }}>
@@ -147,16 +149,27 @@ export function WorkflowsView() {
         </section>
 
         {studio.workflowRuns.length > 0 && (
-          <section>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <section style={{ width: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
               <h2 style={h2Style}>Recent runs</h2>
-              <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)' }}>
+              <p className="muted" style={{ margin: 0, fontSize: '12px' }}>
                 Runs are recorded on this device so an interrupted run is never left silently in progress.
               </p>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {studio.workflowRuns.slice(0, 10).map((run) => (
-                <div key={run.id} className="card" onClick={() => setOpenRun(openRun === run.id ? null : run.id)} style={{ cursor: 'pointer' }}>
+                <div
+                  key={run.id}
+                  className="card"
+                  onClick={() => setOpenRun(openRun === run.id ? null : run.id)}
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={openRun === run.id}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenRun(openRun === run.id ? null : run.id) }
+                  }}
+                  style={{ cursor: 'pointer', margin: 0 }}
+                >
                   <div className="card__row" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
                     <span className={run.status === 'completed' ? 'pill pill--ok' : run.status === 'failed' ? 'pill pill--danger' : 'pill'}> {run.status} </span>
                     <strong>{run.workflowName}</strong>

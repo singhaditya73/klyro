@@ -7,12 +7,16 @@
   --surface-raised: #212427;
   --surface-hover: #252525;
   --surface-active: #2A2A2A;
+  --surface-elevated: #222428; /* dialogs: one step above raised, reads as a layer */
+  --overlay-bg: rgba(8, 8, 8, 0.6);
   --border-subtle: #303236;
   --border-default: #383B40;
   --border-strong: #45484D;
   --text-primary: #F0F0EE;
   --text-secondary: #B8BABD;
   --text-muted: #898D94;
+  --text-disabled: #71757B;
+  --placeholder: #7A7E84;
   --action-primary-bg: #E0E1DE;
   --action-primary-fg: #191919;
   --action-primary-hover: #C8C9C6;
@@ -22,6 +26,7 @@
   --success-hover: #4ADE80;
   --warning: #F59E0B;
   --focus-ring: #E0E1DE;
+  --focus-ring-soft: rgba(224, 225, 222, 0.08);
 
   /* Radii */
   --radius-sm: 6px;
@@ -29,10 +34,24 @@
   --radius-lg: 10px;
   --radius-xl: 12px;
 
-  /* Transitions */
-  --transition-fast: 80ms ease;
-  --transition-base: 140ms ease;
-  --transition-slow: 200ms ease;
+  /* Spacing scale (for new layouts; legacy px remain where untouched) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Motion: shortest duration that communicates the change */
+  --duration-1: 120ms; /* micro: hover, press, icon swaps */
+  --duration-2: 160ms; /* surfaces, small popovers, tooltips */
+  --duration-3: 220ms; /* dialogs, larger layout changes */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-inout: cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast: var(--duration-1) ease;
+  --transition-base: var(--duration-2) ease;
+  --transition-slow: var(--duration-3) var(--ease-out);
 
   /* Shadows */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -44,6 +63,8 @@
   --sidebar-collapsed-width: 64px;
   --header-height: 56px;
   --composer-min-height: 88px;
+  /* Readable column for text-heavy workspaces; wide task areas opt out explicitly. */
+  --content-max: 1000px;
 
   color-scheme: dark;
 }
@@ -131,12 +152,15 @@ a { color: inherit; text-decoration: none; }
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), opacity var(--transition-fast);
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), opacity var(--transition-fast), transform var(--duration-1) var(--ease-out);
   white-space: nowrap;
 }
 .btn:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--border-strong); }
-.btn:active:not(:disabled) { background: var(--surface-active); }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+/* Press feedback: brief, no movement beyond a hairline so layout stays put. */
+.btn:active:not(:disabled) { background: var(--surface-active); transform: translateY(1px); }
+/* Disabled stays legible: lowered but not invisible, muted text, no hover. */
+.btn:disabled { opacity: 0.55; color: var(--text-secondary); cursor: not-allowed; transform: none; }
+.btn:disabled .btn__label { color: var(--text-secondary); }
 .btn--primary {
   background: var(--action-primary-bg);
   border-color: var(--action-primary-bg);
@@ -182,6 +206,11 @@ a { color: inherit; text-decoration: none; }
   transition: width var(--transition-base);
 }
 .sidebar--collapsed { width: var(--sidebar-collapsed-width); }
+.sidebar--collapsed .sidebar__actions .btn { justify-content: center; padding: 10px; }
+.sidebar--collapsed .sidebar__actions .btn__label { display: none; }
+/* Collapsed rail: conversations list is hidden; icon-only actions and nav. */
+.sidebar--collapsed .sidebar__section { flex: 0 0 auto; }
+.sidebar--collapsed .sidebar__footer { margin-top: 8px; }
 
 .sidebar__brand {
   display: flex;
@@ -223,7 +252,14 @@ a { color: inherit; text-decoration: none; }
 .sidebar--collapsed .sidebar__actions .btn__label { display: none; }
 .sidebar--collapsed .sidebar__actions .btn { justify-content: center; padding: 10px; }
 
-.sidebar__search-wrapper { padding: 0 12px 12px; }
+.sidebar__search-wrapper { padding: 0 12px 12px; position: relative; }
+.sidebar__search-clear {
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  transform: translateY(-38%);
+  padding: 4px;
+}
 .sidebar__search {
   width: 100%;
   padding: 9px 12px;
@@ -239,8 +275,27 @@ a { color: inherit; text-decoration: none; }
 .sidebar__search:focus { border-color: var(--border-strong); background: var(--surface-raised); }
 .sidebar--collapsed .sidebar__search-wrapper { display: none; }
 
-.sidebar__nav { flex: 1; overflow-y: auto; padding: 0 8px 12px; }
+.sidebar__nav { flex: 0 0 auto; overflow-y: auto; padding: 0 8px 12px; }
+/* The chats list takes the leftover vertical space and scrolls — it must be
+   willing to shrink so the workspace rail and footer never get clipped on
+   short windows. */
+.sidebar__nav--chats {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.sidebar__nav--chats .conversation-list { min-height: fit-content; }
 .sidebar__section { margin-top: 16px; }
+/* On short windows the workspace rail must be willing to shrink and scroll
+   so the Settings footer never gets clipped out of view. */
+.sidebar__section--workspaces {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.sidebar__section--workspaces .sidebar__nav { flex: 0 0 auto; }
 .sidebar__section:first-child { margin-top: 0; }
 .sidebar__section-title {
   font-size: 10px;
@@ -339,6 +394,9 @@ a { color: inherit; text-decoration: none; }
 
 .sidebar__footer { padding: 12px; border-top: 1px solid var(--border-subtle); }
 .sidebar__footer .btn { width: 100%; }
+.sidebar__footer-row { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.sidebar__footer-row .btn:first-child { flex: 1; min-width: 0; }
+.sidebar__footer-row .btn--icon { width: auto; flex-shrink: 0; }
 .sidebar--collapsed .sidebar__footer .btn__label { display: none; }
 .sidebar--collapsed .sidebar__footer .btn { justify-content: center; padding: 10px; }
 
@@ -372,23 +430,50 @@ a { color: inherit; text-decoration: none; }
 .workspace { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
 /* ---- Workspace Header ---- */
+/* One header pattern everywhere: 56px tall, brand mark left, title,
+   optional subtitle, actions right. Titles use the shared title class. */
 .workspace-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: var(--header-height);
+  min-height: var(--header-height);
   padding: 0 20px;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--surface-base);
   flex-shrink: 0;
 }
 .workspace-header__title {
-  font-size: 16px;
+  margin: 0;
+  font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.02em;
   color: var(--text-primary);
 }
+.workspace-header__subtitle {
+  margin: 1px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
 .workspace-header__actions { display: flex; align-items: center; gap: 8px; }
+
+/* Standard content column; workspaces may override --content-max locally. */
+.workspace-content {
+  flex: 1;
+  overflow: auto;
+  padding: 28px 20px 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+.workspace-content > * { width: 100%; max-width: var(--content-max); }
+
+/* Subtle per-workspace transition, keyed by the active view in App. */
+@keyframes viewIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.view-in { animation: viewIn var(--duration-3) var(--ease-out); }
 
 /* ---- Page Header (for modal panels) ---- */
 .page-header {
@@ -421,21 +506,21 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   max-width: 420px;
   padding: 0 24px;
 }
-.empty-state__logo { width: 64px; height: 64px; opacity: 0.6; }
-.empty-state__title { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; color: var(--text-primary); }
-.empty-state__text { margin: 0; font-size: 15px; color: var(--text-secondary); line-height: 1.6; }
+.empty-state__logo { width: 56px; height: 56px; opacity: 0.55; }
+.empty-state__title { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; color: var(--text-primary); }
+.empty-state__text { margin: 0; font-size: 14px; color: var(--text-secondary); line-height: 1.6; }
 .empty-state__actions { display: flex; gap: 10px; margin-top: 8px; }
 
 .message {
   max-width: 100%;
   width: fit-content;
-  max-width: 100%;
+  min-width: 0;
   border-radius: var(--radius-lg);
-  padding: 14px 18px;
+  padding: 12px 18px;
   border: 1px solid var(--border-subtle);
   background: var(--surface-base);
   animation: messageIn 0.2s ease-out;
@@ -457,6 +542,17 @@ a { color: inherit; text-decoration: none; }
 .message__role { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
 .message__model { font-size: 11px; font-weight: 400; color: var(--text-muted); text-transform: none; letter-spacing: 0; }
 .message__context { font-size: 11px; color: var(--text-muted); font-weight: 400; }
+/* Copy action appears on hover or keyboard focus; it never changes layout. */
+.message__copy {
+  margin-left: auto;
+  align-self: center;
+  opacity: 0;
+  transition: opacity var(--duration-1) var(--ease-out);
+}
+.message:hover .message__copy,
+.message:focus-within .message__copy,
+.message__copy:focus-visible { opacity: 1; }
+.message__copy[aria-label='Copied'] { opacity: 1; }
 .message__body { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.65; font-size: 14px; }
 .message__attachments { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .message__attachments img { max-width: 280px; max-height: 180px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); }
@@ -464,6 +560,7 @@ a { color: inherit; text-decoration: none; }
 /* ---- Streaming indicator ---- */
 .message--streaming .message__body::after { content: ''; display: inline-block; width: 8px; height: 18px; margin-left: 4px; background: currentColor; opacity: 0.5; animation: blink 1s infinite; vertical-align: text-bottom; }
 @keyframes blink { 0%, 50% { opacity: 0.5; } 51%, 100% { opacity: 0.15; } }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---- Composer ---- */
 .composer {
@@ -472,6 +569,18 @@ a { color: inherit; text-decoration: none; }
   border-top: 1px solid var(--border-subtle);
   background: var(--app-background);
   flex-shrink: 0;
+}
+/* Borderless variant used inside larger page layouts (Home hero). */
+.composer--hero {
+  border-top: none;
+  background: transparent;
+  padding: 0;
+}
+.composer__hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: 'Geist Mono', monospace;
+  letter-spacing: 0.01em;
 }
 .composer__attachments { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .attachment-chip {
@@ -540,21 +649,22 @@ a { color: inherit; text-decoration: none; }
 /* ---- Modal ---- */
 .modal {
   position: fixed; inset: 0;
-  background: rgba(10, 10, 10, 0.7);
+  background: var(--overlay-bg);
   display: flex; align-items: center; justify-content: center;
   z-index: 50; padding: 24px;
-  animation: modalFadeIn 0.15s ease-out;
+  animation: modalFadeIn var(--duration-2) var(--ease-out);
 }
 @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
 .modal__panel {
   width: min(720px, 100%);
-  max-height: 88vh;
-  background: var(--surface-base);
+  max-height: min(88vh, 100%);
+  background: var(--surface-elevated);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-xl);
   display: flex; flex-direction: column;
   overflow: hidden;
-  animation: modalSlideIn 0.2s ease-out;
+  box-shadow: var(--shadow-lg);
+  animation: modalSlideIn var(--duration-3) var(--ease-out);
 }
 @keyframes modalSlideIn { from { opacity: 0; transform: translateY(16px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 .modal__panel--wide { width: min(960px, 100%); }
@@ -562,8 +672,10 @@ a { color: inherit; text-decoration: none; }
 
 .modal__head {
   display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
   padding: 16px 20px;
   border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
 }
 .modal__head h2 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.02em; }
 .modal__body { padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; }
@@ -687,8 +799,11 @@ a { color: inherit; text-decoration: none; }
 
 /* ---- Warning/Error/Notice ---- */
 .notice { padding: 12px 14px; border-radius: var(--radius-md); font-size: 13px; display: flex; align-items: flex-start; gap: 10px; }
+.notice__body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.notice__actions { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
 .notice--warning { background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.25); color: var(--warning); }
 .notice--error { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); color: var(--danger); }
+.notice--success { background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.25); color: var(--success); }
 .notice--info { background: var(--surface-raised); border: 1px solid var(--border-subtle); color: var(--text-secondary); }
 .notice__icon { flex-shrink: 0; margin-top: 1px; }
 
@@ -779,3 +894,82 @@ a { color: inherit; text-decoration: none; }
 .mb-2 { margin-bottom: 8px; }
 .mb-4 { margin-bottom: 16px; }
 .w-full { width: 100%; }
+
+/* ---- Legacy classes still referenced by components (consolidated here) ---- */
+/* Monospaced technical output inside result cards. */
+.code-out {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  background: var(--surface-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-family: 'Geist Mono', monospace;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  overflow: auto;
+  max-height: 240px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.provider__actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+.provider__key { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.provider__key input { flex: 1; min-width: 0; }
+
+/* ---- Home quick actions ---- */
+/* Compact interactive rows: icon, title, one-line explanation, affordance. */
+.quick-action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  text-align: left;
+  background: var(--surface-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13px;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.quick-action:hover { background: var(--surface-hover); border-color: var(--border-strong); }
+.quick-action:active { background: var(--surface-active); }
+.quick-action__icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; flex-shrink: 0;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+}
+.quick-action__title { font-weight: 500; }
+.quick-action__desc { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+.quick-action__chevron { margin-left: auto; color: var(--text-muted); flex-shrink: 0; transition: transform var(--duration-1) var(--ease-out); }
+.quick-action:hover .quick-action__chevron { transform: translateX(2px); color: var(--text-secondary); }
+
+/* Section labels: quiet, sans (mono reserved for technical content). */
+.section-label {
+  margin: 0 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* ---- Loading state for buttons ---- */
+.btn[aria-busy='true'] { cursor: progress; opacity: 0.75; }
+
+/* Clear-button affordance inside search fields. */
+.search-clear {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  line-height: 1;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+}
+.search-clear:hover { color: var(--text-primary); }

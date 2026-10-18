@@ -36,10 +36,12 @@ export function SettingsPanel({ onClose }: Props) {
   const [testing, setTesting] = useState<Record<string, string>>({})
   const [keyError, setKeyError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [version, setVersion] = useState<string | null>(null)
 
   useEffect(() => {
     void (async () => {
       try {
+        setVersion((await window.klyro.getAppInfo()).version)
         setSettings(await window.klyro.getSettings())
         setProviders(await window.klyro.listProviders())
         setPermissions(await window.klyro.checkPermissions())
@@ -118,7 +120,7 @@ export function SettingsPanel({ onClose }: Props) {
     return (
       <>
         <section>
-          <h3 style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Providers</h3>
+          <h3 className="section-label">Providers</h3>
           <p className="muted" style={{ margin: '0 0 16px', fontSize: '13px' }}>
             Choose a provider, paste your API key, and set a model. Keys are stored encrypted on this device and never sent to the page.
           </p>
@@ -209,7 +211,7 @@ export function SettingsPanel({ onClose }: Props) {
         </section>
 
         <section style={{ marginTop: '32px' }}>
-          <h3 style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Assistant</h3>
+          <h3 className="section-label">Assistant</h3>
           <label className="field" style={{ marginBottom: '16px' }}>
             <span className="field__label">System prompt</span>
             <textarea rows={3} value={settings.systemPrompt} onChange={(event) => void patch({ systemPrompt: event.target.value })} className="field" />
@@ -235,7 +237,7 @@ export function SettingsPanel({ onClose }: Props) {
         </section>
 
         <section style={{ marginTop: '32px' }}>
-          <h3 style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Desktop</h3>
+          <h3 className="section-label">Desktop</h3>
           <label className="checkbox">
             <input type="checkbox" checked={settings.launchAtLogin} onChange={(event) => void patch({ launchAtLogin: event.target.checked })} />
             <span>Launch Klyro at login</span>
@@ -296,7 +298,7 @@ export function SettingsPanel({ onClose }: Props) {
         </section>
 
         <section style={{ marginTop: '32px' }}>
-          <h3 style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Memory & knowledge</h3>
+          <h3 className="section-label">Memory & knowledge</h3>
           <p className="muted" style={{ margin: '0 0 16px', fontSize: '13px', lineHeight: 1.5 }}>
             Everything here is stored locally on this device. Memories and document excerpts relevant to your question are added to the prompt automatically.
           </p>
@@ -325,7 +327,7 @@ export function SettingsPanel({ onClose }: Props) {
         </section>
 
         <section style={{ marginTop: '32px' }}>
-          <h3 style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Security & data</h3>
+          <h3 className="section-label">Security & data</h3>
           {security && (
             <div className="permissions-section" style={{ marginBottom: '24px' }}>
               <h4>
@@ -470,14 +472,14 @@ export function SettingsPanel({ onClose }: Props) {
         </section>
 
         <section style={{ marginTop: '32px' }}>
-          <h3 style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>About</h3>
+          <h3 className="section-label">About</h3>
           <div className="card">
             <div className="card__row">
               <img src={KlyroMark} alt="" style={{ width: 40, height: 40 }} aria-hidden="true" />
               <div>
                 <div style={{ fontWeight: 600, fontSize: '15px' }}>Klyro</div>
                 <div className="muted" style={{ fontSize: '12px', marginTop: '2px' }}>Your AI. Your entire computer.</div>
-                <div className="muted" style={{ fontSize: '11px', marginTop: '4px' }}>Version 0.2.0</div>
+                <div className="muted" style={{ fontSize: '11px', marginTop: '4px' }}>{version ? `Version ${version}` : 'Version…'}</div>
               </div>
             </div>
             <div className="card__text muted" style={{ marginTop: '12px', fontSize: '12px', lineHeight: 1.6 }}>

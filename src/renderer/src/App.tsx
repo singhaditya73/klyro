@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState, useCallback, useEffect } from 'react'
+import { Suspense, lazy, useState, useCallback, useEffect, useRef } from 'react'
 import { ChatView } from './components/ChatView'
 import { Sidebar } from './components/Sidebar'
 import { useChat } from './hooks/useChat'
@@ -38,6 +38,20 @@ export default function App() {
     studio: false,
   })
 
+  // Dialog a11y: remember what opened a panel and return focus there when the
+  // last panel closes (close button, Escape, or opening a different panel).
+  const panelInvokerRef = useRef<HTMLElement | null>(null)
+  const wasAnyPanelOpen = useRef(false)
+  useEffect(() => {
+    const anyOpen = Object.values(openPanels).some(Boolean)
+    if (wasAnyPanelOpen.current && !anyOpen) {
+      const invoker = panelInvokerRef.current
+      if (invoker && invoker.isConnected) invoker.focus()
+      panelInvokerRef.current = null
+    }
+    wasAnyPanelOpen.current = anyOpen
+  }, [openPanels])
+
   // Full-workspace views swap `activeView`; agent/memory/settings/studio open as panels
   const closeAllPanels = useCallback(() => {
     setOpenPanels({ settings: false, agent: false, knowledge: false, studio: false })
@@ -49,6 +63,8 @@ export default function App() {
 
   // Open exactly one panel: close any open panel first, then open the requested one.
   const openPanel = useCallback((panel: string) => {
+    const invoker = document.activeElement
+    if (invoker instanceof HTMLElement && invoker !== document.body) panelInvokerRef.current = invoker
     closeAllPanels()
     setOpenPanels(prev => ({ ...prev, [panel]: true }))
   }, [closeAllPanels])
@@ -102,10 +118,11 @@ export default function App() {
             onLoadEarlier={chat.loadEarlier}
             onSend={chat.send}
             onStop={chat.stop}
+            onNewChat={() => void chat.newConversation()}
           />
         )
       case 'screen':
-        return <ScreenAssistantView />
+        return <ScreenAssistantView onOpenView={handleSidebarAction} />
       // 'agent' and 'memory' render as side panels/overlays above the active workspace
       case 'workflows':
         return (
@@ -165,7 +182,7 @@ export default function App() {
       />
 
       <main className="main" role="main">
-        <div className="workspace" style={{ transition: 'opacity 140ms ease' }}>
+        <div key={activeView} className="workspace view-in">
           {renderWorkspace()}
         </div>
       </main>

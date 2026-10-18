@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Attachment, ChatMessage } from '@shared/types'
 import { Composer } from './Composer'
 import { MessageBubble, type MessageContext } from './MessageBubble'
 import { ChevronUp } from 'lucide-react'
+import KlyroMark from '../assets/logo/klyro-mark.svg'
 
 interface Props {
   messages: ChatMessage[]
@@ -12,6 +13,7 @@ interface Props {
   onLoadEarlier?: () => void | Promise<void>
   onSend: (content: string, attachments: Attachment[]) => void | Promise<void>
   onStop: () => void
+  onNewChat: () => void | Promise<void>
 }
 
 export function ChatView({
@@ -21,10 +23,12 @@ export function ChatView({
   hasMore = false,
   onLoadEarlier,
   onSend,
-  onStop
+  onStop,
+  onNewChat
 }: Props) {
   const endRef = useRef<HTMLDivElement | null>(null)
   const previous = useRef<{ first?: string; last?: string }>({})
+  const [logoFailed, setLogoFailed] = useState(false)
 
   useEffect(() => {
     const first = messages[0]?.id
@@ -48,11 +52,17 @@ export function ChatView({
         )}
         {messages.length === 0 ? (
           <div className="empty-state">
-            <img src="/assets/logo/klyro-mark.svg" alt="" className="empty-state__logo" aria-hidden="true" />
+            {logoFailed ? (
+              <span className="empty-state__logo icon icon--xl" style={{ color: 'var(--text-muted)', width: 56, height: 56 }} aria-hidden="true">
+                &#9679;
+              </span>
+            ) : (
+              <img src={KlyroMark} alt="" className="empty-state__logo" aria-hidden="true" onError={() => setLogoFailed(true)} />
+            )}
             <h1 className="empty-state__title">Klyro</h1>
             <p className="empty-state__text">Your AI workspace. Ask a question, share your screen, or use your voice.</p>
             <div className="empty-state__actions">
-              <button className="btn btn--primary" onClick={() => { /* handled by parent */ }}>
+              <button className="btn btn--primary" onClick={() => void onNewChat()}>
                 <span>New chat</span>
               </button>
             </div>

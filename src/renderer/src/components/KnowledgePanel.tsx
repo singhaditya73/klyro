@@ -26,6 +26,8 @@ export function KnowledgePanel({ onClose }: Props) {
   const [issueBody, setIssueBody] = useState('')
   const [issueNotice, setIssueNotice] = useState<string | null>(null)
   const [openRepos, setOpenRepos] = useState(false)
+  // Two-step destructive confirm: first click arms the button, second click runs it.
+  const [confirmClear, setConfirmClear] = useState<'memories' | 'documents' | null>(null)
 
   const github = knowledge.integrations.find((entry) => entry.id === 'github')
   const shownMemories = filter
@@ -159,15 +161,35 @@ export function KnowledgePanel({ onClose }: Props) {
                     </>
                   )}
                 </button>
-                <button className="btn btn--ghost" onClick={() => void knowledge.clearMemories()}>
-                  <Trash2 className="icon icon--sm" aria-hidden="true" />
-                  <span>Clear all</span>
-                </button>
+                {confirmClear === 'memories' ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 12, color: 'var(--danger)' }}>Delete all memories?</span>
+                    <button className="btn btn--danger btn--sm" onClick={() => { void knowledge.clearMemories(); setConfirmClear(null) }}>
+                      <span>Yes, clear all</span>
+                    </button>
+                    <button className="btn btn--ghost btn--sm" onClick={() => setConfirmClear(null)}>
+                      <span>Keep</span>
+                    </button>
+                  </div>
+                ) : (
+                  <button className="btn btn--ghost btn--sm" onClick={() => setConfirmClear('memories')} aria-label="Clear all memories">
+                    <Trash2 className="icon icon--sm" aria-hidden="true" />
+                    <span>Clear all</span>
+                  </button>
+                )}
               </div>
 
               <h3 style={{ ...h3Style, marginTop: 24 }}>Remembered ({shownMemories.length})</h3>
               {shownMemories.length === 0 ? (
-                <div className="muted" style={{ padding: 24, textAlign: 'center' }}>Nothing stored yet.</div>
+                <div className="empty-content">
+                  <Brain className="empty-content__icon" aria-hidden="true" />
+                  <h4 className="empty-content__title">Nothing remembered yet</h4>
+                  <p className="empty-content__text">
+                    Tell Klyro a fact above — preferences, context, conventions — and it gets cited
+                    automatically in future answers. <code>Learn durable facts from conversations</code> in
+                    Settings adds to this list for you.
+                  </p>
+                </div>
               ) : (
                 shownMemories.map((record) => (
                   <div key={record.id} className="card">
@@ -231,13 +253,38 @@ export function KnowledgePanel({ onClose }: Props) {
                     </>
                   )}
                 </button>
-                <button className="btn btn--ghost" onClick={() => void knowledge.clearDocuments()}>
-                  <Trash2 className="icon icon--sm" aria-hidden="true" />
-                  <span>Clear all</span>
-                </button>
+                {confirmClear === 'documents' ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 12, color: 'var(--danger)' }}>Remove all indexed documents?</span>
+                    <button className="btn btn--danger btn--sm" onClick={() => { void knowledge.clearDocuments(); setConfirmClear(null) }}>
+                      <span>Yes, clear all</span>
+                    </button>
+                    <button className="btn btn--ghost btn--sm" onClick={() => setConfirmClear(null)}>
+                      <span>Keep</span>
+                    </button>
+                  </div>
+                ) : (
+                  <button className="btn btn--ghost btn--sm" onClick={() => setConfirmClear('documents')} aria-label="Clear all documents">
+                    <Trash2 className="icon icon--sm" aria-hidden="true" />
+                    <span>Clear all</span>
+                  </button>
+                )}
               </div>
               {knowledge.documents.length === 0 ? (
-                <div className="muted" style={{ padding: 24, textAlign: 'center' }}>No documents indexed.</div>
+                <div className="empty-content">
+                  <FileText className="empty-content__icon" aria-hidden="true" />
+                  <h4 className="empty-content__title">No documents indexed</h4>
+                  <p className="empty-content__text">
+                    Import files once; their excerpts are then cited in answers when relevant. Imported
+                    text stays on this device.
+                  </p>
+                  <div className="empty-content__actions">
+                    <button className="btn btn--sm" onClick={() => void knowledge.importDocuments()}>
+                      <Plus className="icon icon--xs" aria-hidden="true" />
+                      <span>Add documents…</span>
+                    </button>
+                  </div>
+                </div>
               ) : (
                 knowledge.documents.map((document) => (
                   <div key={document.id} className="card">

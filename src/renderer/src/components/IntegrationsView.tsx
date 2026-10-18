@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Blocks, GitBranch, Plug, CheckCircle, AlertCircle, ExternalLink, ChevronDown, ChevronUp, Trash2, Key, Mail, MessageSquare, FileText } from 'lucide-react'
+import { Blocks, GitBranch, Plug, CheckCircle, AlertCircle, ExternalLink, ChevronDown, ChevronUp, Trash2, Mail, MessageSquare, FileText } from 'lucide-react'
 import { useKnowledge } from '../hooks/useKnowledge'
 import KlyroMark from '../assets/logo/klyro-mark.svg'
 
@@ -13,6 +13,8 @@ export function IntegrationsView({}: Props) {
   const [issueBody, setIssueBody] = useState('')
   const [issueNotice, setIssueNotice] = useState<string | null>(null)
   const [openRepos, setOpenRepos] = useState(false)
+  const [showToken, setShowToken] = useState(false)
+  const [connecting, setConnecting] = useState(false)
 
   const github = knowledge.integrations.find((entry) => entry.id === 'github')
 
@@ -30,28 +32,36 @@ export function IntegrationsView({}: Props) {
 
   const workspaceStyle: React.CSSProperties = { flex: 1, display: 'flex', flexDirection: 'column' }
   const headerStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 12 }
-  const contentStyle: React.CSSProperties = { flex: 1, overflow: 'auto', padding: '32px 20px', display: 'flex', flexDirection: 'column', maxWidth: '960px', margin: '0 auto', width: '100%' }
-  const sectionStyle: React.CSSProperties = { marginBottom: 40 }
+  const sectionStyle: React.CSSProperties = { marginBottom: 40, width: '100%' }
 
   return (
     <div className="workspace" style={workspaceStyle}>
       <header className="workspace-header">
         <div style={headerStyle}>
-          <img src={KlyroMark} alt="" style={{ width: 32, height: 32 }} aria-hidden="true" />
-          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>Integrations</h1>
+          <img src={KlyroMark} alt="" style={{ width: 28, height: 28 }} aria-hidden="true" />
+          <div>
+            <h1 className="workspace-header__title">Integrations</h1>
+            <p className="workspace-header__subtitle">Connect the tools Klyro works with</p>
+          </div>
         </div>
       </header>
 
-      <div style={contentStyle}>
+      <div className="workspace-content" style={{ maxWidth: 920 }}>
         <section style={sectionStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 16 }}>
             <div className="icon icon--lg" style={{ background: 'var(--surface-raised)', borderRadius: 'var(--radius-md)', padding: 10, color: 'var(--text-secondary)' }}>
               <GitBranch aria-hidden="true" />
             </div>
-            <div>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>GitHub</h2>
-              <p style={{ margin: '2px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
-                Create issues, search repositories, and link code to conversations
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <h2 style={{ margin: 0, fontSize: 17, fontWeight: 600 }}>GitHub</h2>
+                <span className={`pill ${github?.connected ? 'pill--ok' : 'pill--warn'}`}>
+                  <span className="status-indicator__dot" style={{ background: 'currentColor', width: 6, height: 6, borderRadius: '50%', display: 'inline-block', marginRight: 6 }} aria-hidden="true" />
+                  {github?.connected ? 'Connected' : 'Not connected'}
+                </span>
+              </div>
+              <p style={{ margin: '3px 0 0', fontSize: 13, color: 'var(--text-secondary)' }}>
+                Issues, repositories, and code context — token stays encrypted on this device
               </p>
             </div>
           </div>
@@ -59,16 +69,19 @@ export function IntegrationsView({}: Props) {
           {github?.detail && (
             <div className="notice notice--info" style={{ marginBottom: 16 }}>
               <span className="icon icon--sm notice__icon" aria-hidden="true"><Plug /></span>
-              {github.detail}
+              <span className="notice__body">{github.detail}</span>
             </div>
           )}
 
           {github?.test && (
-            <div className={`notice ${github.test.ok ? 'notice--info' : 'notice--error'}`} style={{ marginBottom: 16 }}>
+            <div className={`notice ${github.test.ok ? 'notice--success' : 'notice--error'}`} style={{ marginBottom: 16 }}>
               <span className="icon icon--sm notice__icon" aria-hidden="true">
                 {github.test.ok ? <CheckCircle /> : <AlertCircle />}
               </span>
-              <span>Test connection: {github.test.detail}</span>
+              <span className="notice__body">
+                Test connection: {github.test.detail}
+                {github.test.ok ? '' : ' — clear below or paste a new token.'}
+              </span>
             </div>
           )}
 
@@ -159,25 +172,49 @@ export function IntegrationsView({}: Props) {
             </div>
           ) : (
             <div className="card">
-              <div className="provider__key" style={{ flexDirection: 'column', gap: 12, alignItems: 'stretch' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <Key className="icon icon--md" style={{ color: 'var(--text-muted)' }} aria-hidden="true" />
-                  <div>
-                    <div style={{ fontWeight: 500 }}>Personal access token required</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Create a token with <code>repo</code> scope at GitHub Settings → Developer settings → Personal access tokens</div>
-                  </div>
+              <div className="field">
+                <span className="field__label">Personal access token required</span>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  Create a token with the <code>repo</code> scope at GitHub Settings → Developer settings →
+                  Personal access tokens. It is stored encrypted by Klyro and is never sent anywhere else,
+                  logged, or shown again after saving.
+                </span>
+                <div className="provider__key" style={{ marginTop: 12 }}>
+                  <input
+                    type={showToken ? 'text' : 'password'}
+                    aria-label="GitHub personal access token"
+                    placeholder="ghp_…"
+                    value={githubToken}
+                    onChange={(event) => setGithubToken(event.target.value)}
+                    className="field"
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    onClick={() => setShowToken(!showToken)}
+                    aria-pressed={showToken}
+                  >
+                    {showToken ? 'Hide' : 'Show'}
+                  </button>
+                  <button
+                    className="btn btn--primary"
+                    disabled={!githubToken.trim() || connecting}
+                    onClick={async () => {
+                      setConnecting(true)
+                      try {
+                        await knowledge.saveGitHubToken(githubToken)
+                        setGithubToken('')
+                      } finally {
+                        setConnecting(false)
+                      }
+                    }}
+                  >
+                    <Plug className="icon icon--sm" aria-hidden="true" />
+                    <span>{connecting ? 'Connecting…' : 'Connect GitHub'}</span>
+                  </button>
                 </div>
-                <input
-                  type="password"
-                  placeholder="Paste personal access token (repo scope)…"
-                  value={githubToken}
-                  onChange={(event) => setGithubToken(event.target.value)}
-                  className="field"
-                />
-                <button className="btn btn--primary" disabled={!githubToken.trim()} onClick={() => { void knowledge.saveGitHubToken(githubToken); setGithubToken(''); }}>
-                  <Plug className="icon icon--sm" aria-hidden="true" />
-                  <span>Connect GitHub</span>
-                </button>
+                {github && <span className="composer__hint">Saved token: stored in the encrypted secret store — never rendered here.</span>}
               </div>
             </div>
           )}
@@ -191,7 +228,7 @@ export function IntegrationsView({}: Props) {
                 { id: 'drive', label: 'Google Drive', description: 'Search and attach files', icon: <FileText /> },
                 { id: 'notion', label: 'Notion', description: 'Search pages and databases', icon: <FileText /> },
               ].map((item) => (
-                <div key={item.id} className="card" style={{ opacity: 0.6, pointerEvents: 'none' }}>
+                <div key={item.id} className="card">
                   <div className="card__row">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div className="icon icon--md" style={{ background: 'var(--surface-base)', borderRadius: 'var(--radius-sm)', padding: 8, color: 'var(--text-muted)' }}>
@@ -199,17 +236,18 @@ export function IntegrationsView({}: Props) {
                       </div>
                       <div>
                         <div style={{ fontWeight: 500 }}>{item.label}</div>
-                        <div className="muted" style={{ fontSize: 11 }}>OAuth app required</div>
+                        <span className="pill pill--warn">Planned · OAuth</span>
                       </div>
                     </div>
-                    <span className="pill pill--warn">Planned</span>
                   </div>
-                  <div className="card__text muted" style={{ fontSize: 12 }}>{item.description}</div>
+                  <div className="card__text muted" style={{ fontSize: 12 }}>
+                    {item.description}. Not yet implemented — it will appear with an OAuth connect flow; no placeholder buttons here.
+                  </div>
                 </div>
               ))}
             </div>
             <p style={{ margin: '16px 0 0', fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
-              Planned integrations connect through OAuth once their app credentials are configured.
+              Planned integrations land with real OAuth support. GitHub is available today.
             </p>
           </div>
         </section>

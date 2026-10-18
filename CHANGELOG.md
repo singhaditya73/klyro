@@ -4,7 +4,10 @@ All notable changes to Klyro are recorded here. Versions follow [SemVer](https:/
 
 ## [Unreleased]
 
-Post-0.2.0 engineering completion program (details in `docs/ENGINEERING_CHECKLIST.md`).
+## [0.2.1] — 2026-10-19
+
+Post-0.2.0 engineering completion program (details in `docs/ENGINEERING_CHECKLIST.md`)
+and a full UI/UX polish pass.
 
 ### Fixed
 
@@ -14,6 +17,25 @@ Post-0.2.0 engineering completion program (details in `docs/ENGINEERING_CHECKLIS
   Suspense boundary, and raw `\uXXXX` escapes in JSX text render their real
   glyphs. Verified by a scripted click-through of every sidebar item in the
   running app.
+- Chat empty-state logo loaded from a runtime URL that resolves in neither the
+  renderer dev server nor the packaged app; it now imports the bundled mark
+  (inlined by Vite) with a graceful fallback, and its dead "New chat" button
+  actually starts a conversation.
+- The collapsed sidebar referenced a size (64px) but the Workspaces navigation
+  and Settings were wrapped in expanded-only blocks, so collapsing removed all
+  navigation; collapsed mode is now a proper icon rail with title tooltips and
+  aria-labels. The collapse/expand control itself was wired but never rendered.
+- Home's composer was a second, divergent copy of the chat composer (text "X"
+  remove button, inconsistent padding, late file-bottom import); it now reuses
+  the shared `Composer` component with a hero variant and navigates to Chat on
+  send, where the answer streams.
+- Screen Assistant's Ask action streamed its answer into the Chat workspace
+  without telling the user (the "Answer" section could never render); it now
+  confirms and offers a direct link, and keeps the capture for follow-ups.
+- Unstyled leftover classes still referenced by components (`.code-out`,
+  `.provider__key/`, `.provider__actions`) now have shared definitions.
+- Sidebar no longer clips its Settings footer on short windows: the chats list
+  and the workspace rail shrink and scroll instead of overflowing.
 
 ### Added
 
@@ -21,6 +43,18 @@ Post-0.2.0 engineering completion program (details in `docs/ENGINEERING_CHECKLIS
   status, `selfTest()`) plus a registry; GitHub implements it with a live
   credential check, exposed as a "Test connection" button in the Integrations
   view.
+- Design-system consolidation: motion duration/easing tokens, elevated-surface
+  and overlay tokens, disabled/placeholder text tokens, `.section-label`,
+  `.quick-action`, `.composer__hint`, standardized workspace-header pattern,
+  and a subtle keyed workspace transition. Legible disabled states; message
+  copy affordance appears on hover/focus without layout shift.
+- Dialog accessibility: focus returns to the invoking control when a panel
+  closes (close button, Escape, or opening another panel).
+- Two-step destructive confirmation for "Clear all" (memories/documents) and
+  sidebar chat deletion — nothing destructive executes on a single click.
+- GitHub token form: show/hide toggle, honest connecting state, connection
+  state pill; planned integrations marked "Planned · OAuth" with no fake
+  connect buttons.
 - **Opt-in crash reporting (J2)** — off by default; when enabled, redacted
   reports are stored locally (max 20) and viewable/clearable in Settings, and
   are only uploaded if `KLYRO_DIAGNOSTICS_URL` is explicitly configured.
