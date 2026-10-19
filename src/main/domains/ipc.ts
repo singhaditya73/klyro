@@ -20,7 +20,7 @@ import { memory } from './memory'
 import { privacy } from './privacy'
 import { workflows } from './workflows'
 import { transcribeAudio } from './audio'
-import { applyOverlayOpacity, applyOverlayPrivateMode, getOverlayWindow, overlayPrivateModeSupported, setOverlayStickyRecording } from './windows'
+import { applyOverlayDisplay, applyOverlayOpacity, applyOverlayPrivateMode, getOverlayWindow, listDisplays, overlayPrivateModeSupported, setOverlayStickyRecording } from './windows'
 import { conversations } from './conversations'
 import { checkPermissions } from './permissions'
 import { grabScreen, listCaptureSources, probeOverlayVisibility } from './screenshot'
@@ -75,6 +75,7 @@ const settingsPatchSchema = z
     chatMcpTools: z.boolean().optional(),
     screenAutoCapture: z.boolean().optional(),
     screenPreWarm: z.boolean().optional(),
+    overlayDisplay: z.union([z.literal('primary'), z.number().int().min(0).max(7)]).optional(),
     allowUnencryptedSecrets: z.boolean().optional(),
     overlayPrivateMode: z.boolean().optional(),
     overlayOpacity: z.number().int().min(20).max(100).optional(),
@@ -178,6 +179,7 @@ export function registerIpcHandlers(): void {
     if ('toggleShortcut' in parsed) registerShortcuts()
     if ('overlayPrivateMode' in parsed) applyOverlayPrivateMode()
     if ('overlayOpacity' in parsed) applyOverlayOpacity()
+    if ('overlayDisplay' in parsed) applyOverlayDisplay()
     return next
   })
 
@@ -479,6 +481,7 @@ export function registerIpcHandlers(): void {
 
   handle(IPC.usageRows, () => usage.rows())
   handle(IPC.privacyProbeOverlay, () => probeOverlayVisibility())
+  handle(IPC.screenListDisplays, () => listDisplays())
   handle(IPC.usageClear, () => {
     usage.clear()
   })

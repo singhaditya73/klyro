@@ -113,7 +113,8 @@ export const IPC = {
   usageClear: 'usage:clear',
 
   /* Privacy: does this machine exclude the overlay from screen captures? */
-  privacyProbeOverlay: 'privacy:probeOverlay'
+  privacyProbeOverlay: 'privacy:probeOverlay',
+  screenListDisplays: 'screen:listDisplays'
 } as const
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC]

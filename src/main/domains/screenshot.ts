@@ -1,4 +1,7 @@
 import { desktopCapturer, screen, BrowserWindow } from 'electron'
+import { spawn } from 'node:child_process'
+import { readFileSync, unlinkSync, existsSync } from 'node:fs'
+import { join } from 'node:path'
 import type { CaptureResult, CaptureSource } from '@shared/types'
 import { getOverlayWindow } from './windows'
 
@@ -167,6 +170,123 @@ export async function warmupScreenPermission(): Promise<void> {
   }
 }
 
+/**
+ * Capture the display with a compositor-native screenshot tool, so no
+ * permission dialog appears.
+ *
+ * On Wayland, Electron's desktopCapturer goes through the xdg-desktop-portal,
+ * which raises a "share your screen" dialog on every capture — and that
+ * dialog is on your screen, where the meeting can see it. A native tool
+ * (grim on wlroots, gnome-screenshot or ImageMagick's import on X11) grabs
+ * the display with no dialog at all.
+ *
+ * Returns null when no tool is available, and the caller falls back to
+ * Electron's own capture.
+ */
+/** How long the native-tool path may take before Electron's capture is used. */
+const NATIVE_BUDGET_MS = 1500
+
+/** Is this tool on PATH? Probing tools that do not exist wastes seconds. */
+function hasTool(command: string): boolean {
+  const paths = (process.env.PATH ?? '').split(':').filter(Boolean)
+  return paths.some((dir) => existsSync(join(dir, command)))
+}
+
+async function captureViaNativeTool(): Promise<{ dataUrl: string; name: string } | null> {
+  if (process.platform !== 'linux') return null
+  const started = Date.now()
+  const attempts: Array<{ command: string; args: string[]; file?: boolean }> = []
+
+  // wlroots compositors: grim writes a PNG to stdout and never prompts.
+  if (process.env.WAYLAND_DISPLAY && hasTool('grim')) {
+    attempts.push({ command: 'grim', args: ['-'] })
+  }
+  // GNOME: the Shell's own screenshot interface takes a picture without any
+  // dialogue, unlike the portal.
+  if (hasTool('gdbus')) {
+    attempts.push({
+      command: 'gdbus',
+      args: [
+        'call',
+        '--session',
+        '--dest',
+        'org.gnome.Shell.Screenshot',
+        '--object-path',
+        '/org/gnome/Shell/Screenshot',
+        '--method',
+        'org.gnome.Shell.Screenshot.Screenshot',
+        'false',
+        'false',
+        '/tmp/klyro-capture.png'
+      ],
+      file: true
+    })
+  }
+  // X11: plain screenshot tools, no dialog.
+  if (hasTool('gnome-screenshot')) attempts.push({ command: 'gnome-screenshot', args: ['-f', '-'] })
+  if (hasTool('scrot')) attempts.push({ command: 'scrot', args: ['-o', '-'] })
+  if (hasTool('magick')) attempts.push({ command: 'magick', args: ['import', '-window', 'root', 'png:-'] })
+  else if (hasTool('import')) attempts.push({ command: 'import', args: ['-window', 'root', 'png:-'] })
+
+  for (const attempt of attempts) {
+    // The native path is an optimisation, not a dependency: if the tools are
+    // slow to answer, fall back to Electron's capture instead of making the
+    // user wait.
+    if (Date.now() - started > NATIVE_BUDGET_MS) break
+    if (attempt.file) {
+      const file = attempt.args[attempt.args.length - 1]
+      const result = await runCaptureTool(attempt.command, attempt.args)
+      if (result !== null) {
+        try {
+          const bytes = readFileSync(file)
+          unlinkSync(file)
+          if (bytes.length > 1000) {
+            return { dataUrl: `data:image/png;base64,${bytes.toString('base64')}`, name: 'Screen' }
+          }
+        } catch {
+          // The tool wrote nothing usable; try the next one.
+        }
+      }
+      continue
+    }
+    const png = await runCaptureTool(attempt.command, attempt.args)
+    if (png && png.length > 1000) {
+      return { dataUrl: `data:image/png;base64,${png.toString('base64')}`, name: 'Screen' }
+    }
+  }
+  return null
+}
+
+/** Run a capture tool, returning its PNG bytes (or null on any failure). */
+function runCaptureTool(command: string, args: string[]): Promise<Buffer | null> {
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (value: Buffer | null): void => {
+      if (settled) return
+      settled = true
+      resolve(value)
+    }
+    try {
+      const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'ignore'] })
+      const chunks: Buffer[] = []
+      child.stdout.on('data', (chunk: Buffer) => chunks.push(chunk))
+      child.on('error', () => finish(null))
+      child.on('close', (code) => finish(code === 0 ? Buffer.concat(chunks) : null))
+      // Never let a stuck tool hold the capture hostage.
+      setTimeout(() => {
+        try {
+          child.kill()
+        } catch {
+          // already gone
+        }
+        finish(null)
+      }, 1500)
+    } catch {
+      finish(null)
+    }
+  })
+}
+
 export async function grabScreen(sourceId?: string): Promise<CaptureResult> {
   // A specific screen or window: the user chose it, so capture it as-is.
   if (sourceId) {
@@ -183,9 +303,13 @@ export async function grabScreen(sourceId?: string): Promise<CaptureResult> {
   // The whole display, with Klyro hidden for the moment of the shot so the
   // picture shows what is *below* the overlay.
   //
-  // Only screens are enumerated here (not every window): listing windows means
-  // thumbnailing each one, which is slow enough to be felt on the click.
+  // On Linux a compositor-native tool is preferred: Electron's capture goes
+  // through the xdg-desktop-portal, and that portal dialog appears on your
+  // screen — where a meeting can see it. The native path raises no dialog.
   return withSelfHidden(async () => {
+    const native = await captureViaNativeTool()
+    if (native) return native
+
     const primary = screen.getPrimaryDisplay()
     const sources = await desktopCapturer.getSources({
       types: ['screen'],

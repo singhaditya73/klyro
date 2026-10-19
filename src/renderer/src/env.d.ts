@@ -103,6 +103,8 @@ interface KlyroApi {
   usageRows(): Promise<any[]>
   usageClear(): Promise<void>
 
+  screenListDisplays(): Promise<Array<{ index: number; label: string; primary: boolean; bounds: { x: number; y: number; width: number; height: number } }>>
+
   privacyProbeOverlay(): Promise<{
     excluded: boolean
     changedRatio: number

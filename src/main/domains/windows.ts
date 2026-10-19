@@ -182,14 +182,46 @@ export function setOverlayStickyRecording(sticky: boolean): void {
   overlayStickyRecording = sticky === true
 }
 
+/**
+ * Which display the overlay lives on. 'primary' is the normal one; a number
+ * is the index of another connected screen. Putting the overlay on a screen
+ * you are *not* sharing is the simplest way to keep it out of the meeting —
+ * no capture trickery required, the shared framebuffer simply does not
+ * contain it.
+ */
+function overlayDisplay(): Electron.Display {
+  const displays = screen.getAllDisplays()
+  const chosen = settingsDomain.get().overlayDisplay
+  if (typeof chosen === 'number' && chosen >= 0 && chosen < displays.length) {
+    return displays[chosen]
+  }
+  return screen.getPrimaryDisplay()
+}
+
 function positionOverlay(win: BrowserWindow): void {
-  const { workArea } = screen.getPrimaryDisplay()
+  const { workArea } = overlayDisplay()
   win.setBounds({
     x: Math.round(workArea.x + (workArea.width - OVERLAY_WIDTH) / 2),
     y: Math.round(workArea.y + workArea.height * 0.16),
     width: OVERLAY_WIDTH,
     height: OVERLAY_HEIGHT
   })
+}
+
+/** Connected displays, for the settings picker. */
+export function listDisplays(): Array<{ index: number; label: string; primary: boolean; bounds: { x: number; y: number; width: number; height: number } }> {
+  return screen.getAllDisplays().map((display, index) => ({
+    index,
+    label: `Screen ${index + 1}`,
+    primary: display.id === screen.getPrimaryDisplay().id,
+    bounds: display.bounds
+  }))
+}
+
+/** Move the overlay to another display (or back to the primary one). */
+export function applyOverlayDisplay(): void {
+  if (!overlayWindow || overlayWindow.isDestroyed()) return
+  positionOverlay(overlayWindow)
 }
 
 export function toggleOverlay(): void {

@@ -248,6 +248,7 @@ export function SettingsPanel({ onClose }: Props) {
   const [keyError, setKeyError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [version, setVersion] = useState<string | null>(null)
+  const [displays, setDisplays] = useState<Array<{ index: number; label: string; primary: boolean; bounds: { width: number; height: number } }>>([])
 
   useEffect(() => {
     void (async () => {
@@ -264,6 +265,10 @@ export function SettingsPanel({ onClose }: Props) {
         setLoadError((error as Error).message)
       }
     })()
+  }, [])
+
+  useEffect(() => {
+    void window.klyro.screenListDisplays().then(setDisplays).catch(() => setDisplays([]))
   }, [])
 
   async function patch(next: Partial<AppSettings>): Promise<void> {
@@ -542,6 +547,30 @@ export function SettingsPanel({ onClose }: Props) {
             )}
             {' '}On Windows and Linux the system never asks per capture. On macOS the operating system asks for Screen Recording once, and that prompt comes from the OS, not from Klyro — it cannot be skipped.
           </div>
+
+          <label className="field" style={{ marginTop: '16px' }}>
+            <span className="field__label">Overlay screen</span>
+            <select
+              value={String(settings.overlayDisplay)}
+              onChange={(event) => {
+                const raw = event.target.value
+                void patch({ overlayDisplay: raw === 'primary' ? 'primary' : Number(raw) })
+              }}
+              className="field"
+            >
+              <option value="primary">Primary screen</option>
+              {displays.map((display) => (
+                <option key={display.index} value={String(display.index)}>
+                  {display.label}
+                  {display.primary ? ' (primary)' : ''} — {display.bounds.width}×{display.bounds.height}
+                </option>
+              ))}
+            </select>
+            <span className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+              With two screens, put the overlay on the one you are <em>not</em> sharing: the meeting cannot show
+              what is not in the shared framebuffer, and no capture trick is needed.
+            </span>
+          </label>
 
           <PrivacyCheckSection />
 

@@ -63,6 +63,12 @@ export interface AppSettings {
    * meeting (macOS raises a one-time system prompt on the first capture).
    */
   screenPreWarm: boolean
+  /**
+   * Which display the quick-ask overlay lives on. 'primary' is the normal
+   * screen; a number is another connected display. Putting the overlay on a
+   * screen you are not sharing keeps it out of the meeting by construction.
+   */
+  overlayDisplay: 'primary' | number
 }
 
 /** Whether a model can read images; `unknown` is honest for local/custom endpoints. */
@@ -758,6 +764,16 @@ export interface KlyroApi {
     platform: string
     supported: boolean
   }>
+
+  /** Connected displays, for the "which screen holds the overlay" setting. */
+  screenListDisplays(): Promise<
+    Array<{
+      index: number
+      label: string
+      primary: boolean
+      bounds: { x: number; y: number; width: number; height: number }
+    }>
+  >
   securityStatus(): Promise<SecurityStatus>
   dataSummary(): Promise<DataSummary>
   dataClear(scope: DataScope): Promise<DataSummary>

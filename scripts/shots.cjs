@@ -101,7 +101,7 @@ app.whenReady().then(async () => {
       button.click()
       return 'clicked'
     })()`)
-    await wait(2500)
+    await wait(12000)
     const state = await overlayWindow.webContents.executeJavaScript(`(() => ({
       hasCapture: Boolean(document.querySelector('.overlay__capture')),
       note: (document.querySelector('.overlay__note') || {}).textContent || '',
