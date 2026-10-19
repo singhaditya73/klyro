@@ -439,6 +439,33 @@ export function SettingsPanel({ onClose }: Props) {
             </span>
           </label>
 
+          <h4 style={{ margin: '24px 0 12px', fontSize: '13px', fontWeight: 600 }}>Screen capture</h4>
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={settings.screenAutoCapture}
+              onChange={(event) => void patch({ screenAutoCapture: event.target.checked })}
+            />
+            <span>
+              Capture instantly — one click attaches what is on screen, with no picker
+            </span>
+          </label>
+          <div className="muted" style={{ marginTop: '8px', fontSize: '12px', lineHeight: 1.6 }}>
+            {settings.screenAutoCapture
+              ? 'Klyro hides itself for the moment of the shot, captures the display below it, and attaches it to your next message. Turn this off to choose a specific screen or window instead.'
+              : 'Klyro asks which screen or window to share each time. Turn this on to capture what is below the overlay in a single click.'}
+            {' '}
+            {permissions && (
+              <span>
+                System permission: <strong>{permissions.screen}</strong>
+                {permissions.screen === 'denied'
+                  ? ' — allow Screen Recording in your system settings, otherwise the capture comes back black or fails.'
+                  : '.'}
+              </span>
+            )}
+            {' '}On Windows and Linux the system never asks per capture. On macOS the operating system asks for Screen Recording once, and that prompt comes from the OS, not from Klyro — it cannot be skipped.
+          </div>
+
           {permissions && (
             <div className="permissions-section" style={{ marginTop: '16px' }}>
               <h4>Permissions</h4>

@@ -52,6 +52,12 @@ export interface AppSettings {
    * one lands in the audit log.
    */
   chatMcpTools: boolean
+  /**
+   * Capture the screen with one click: the display is captured (Klyro hides
+   * itself for the shot) and attached to the message, with no source picker.
+   * When off, the picker asks which screen or window to share.
+   */
+  screenAutoCapture: boolean
 }
 
 /** Whether a model can read images; `unknown` is honest for local/custom endpoints. */

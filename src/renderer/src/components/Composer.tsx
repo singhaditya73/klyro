@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Attachment } from '@shared/types'
-import { Mic, Monitor, X, Send, StopCircle } from 'lucide-react'
+import { Loader2, Mic, Monitor, X, Send, StopCircle } from 'lucide-react'
 
 interface Props {
   busy: boolean
@@ -27,6 +27,7 @@ export function Composer({
   const [sources, setSources] = useState<any[] | null>(null)
   const [recording, setRecording] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [capturing, setCapturing] = useState(false)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -61,10 +62,25 @@ export function Composer({
 
   async function openSources(): Promise<void> {
     setError(null)
+    setCapturing(true)
     try {
+      // Instant capture (the default): one click captures what is below the
+      // overlay — no picker, no extra question. With it off, the user picks
+      // which screen or window to share.
+      const settings = await window.klyro.getSettings()
+      if (settings?.screenAutoCapture !== false) {
+        const shot = await window.klyro.grabScreen()
+        setAttachments((prev) => [
+          ...prev,
+          { kind: 'image', mime: 'image/png', dataUrl: shot.dataUrl, label: shot.name }
+        ])
+        return
+      }
       setSources(await window.klyro.listCaptureSources())
     } catch (caught) {
       setError((caught as Error).message)
+    } finally {
+      setCapturing(false)
     }
   }
 
@@ -154,8 +170,18 @@ export function Composer({
       />
 
       <div className="composer__actions">
-        <button className="btn btn--icon btn--ghost" onClick={openSources} title="Share your screen" aria-label="Share screen">
-          <Monitor className="icon icon--md" aria-hidden="true" />
+        <button
+          className="btn btn--icon btn--ghost"
+          onClick={openSources}
+          disabled={capturing}
+          title="Attach what is on your screen"
+          aria-label="Attach a screen capture"
+        >
+          {capturing ? (
+            <Loader2 className="icon icon--md spin" aria-hidden="true" />
+          ) : (
+            <Monitor className="icon icon--md" aria-hidden="true" />
+          )}
         </button>
         <button
           className={`btn btn--ghost${recording ? ' btn--danger' : ''}`}

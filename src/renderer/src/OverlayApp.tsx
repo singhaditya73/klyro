@@ -21,10 +21,15 @@ export default function OverlayApp() {
   const [assistSource, setAssistSource] = useState<'System audio' | 'Microphone' | null>(null)
   // A screen capture waiting to be sent with the next question.
   const [capture, setCapture] = useState<{ dataUrl: string; name: string } | null>(null)
+  // Screens and windows to choose from (instant capture turned off).
+  const [overlaySources, setOverlaySources] = useState<Array<{ id: string; name: string; thumbnail: string }> | null>(null)
+  // True while a capture is in flight — the shot takes a moment, so say so.
+  const [capturing, setCapturing] = useState(false)
 
   const streamRef = useRef<MediaStream | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
+  const inputRef = useRef<HTMLInputElement | null>(null)
   const mimeRef = useRef('audio/webm')
   const gateRef = useRef<SilenceWatcher | null>(null)
   const modeRef = useRef<AssistMode>('idle')
@@ -203,13 +208,39 @@ export default function OverlayApp() {
    * Capture what is on screen. Klyro hides its own windows for the moment of
    * the capture, so the picture shows the app you are working in — and the
    * capture travels with your question to a vision model.
+   *
+   * With instant capture on (the default) this is a single click: the display
+   * below the overlay is captured and attached. With it off, a compact list of
+   * screens and windows appears so the user can choose.
    */
   async function captureScreen(): Promise<void> {
-    if (busyRef.current) return
+    if (busyRef.current || capturing) return
     setAssistNote(null)
+    setCapturing(true)
     try {
-      const shot = await window.klyro.grabScreen()
+      const settings = await window.klyro.getSettings()
+      if (settings?.screenAutoCapture !== false) {
+        const shot = await window.klyro.grabScreen()
+        setCapture({ dataUrl: shot.dataUrl, name: shot.name })
+        setAssistNote('Captured what is below Klyro — ask your question.')
+        window.setTimeout(() => inputRef.current?.focus(), 30)
+        return
+      }
+      setOverlaySources(await window.klyro.listCaptureSources())
+    } catch (error) {
+      setAssistNote((error as Error).message)
+    } finally {
+      setCapturing(false)
+    }
+  }
+
+  /** Pick a specific screen or window (instant capture turned off). */
+  async function captureSource(id: string): Promise<void> {
+    setOverlaySources(null)
+    try {
+      const shot = await window.klyro.grabScreen(id)
       setCapture({ dataUrl: shot.dataUrl, name: shot.name })
+      window.setTimeout(() => inputRef.current?.focus(), 30)
     } catch (error) {
       setAssistNote((error as Error).message)
     }
@@ -330,6 +361,7 @@ export default function OverlayApp() {
           </button>
         )}
         <input
+          ref={inputRef}
           autoFocus
           value={text}
           placeholder={assistBusy ? 'Assist runs in this box…' : 'Ask anything…'}
@@ -388,12 +420,21 @@ export default function OverlayApp() {
             <button
               className={`btn btn--sm${capture ? ' btn--primary' : ''}`}
               onClick={() => void captureScreen()}
-              disabled={busy}
+              disabled={busy || capturing}
               title="Capture what is on screen and ask about it"
               aria-label="Capture screen"
             >
-              <Monitor className="icon icon--sm" aria-hidden="true" />
-              <span>{capture ? 'Captured' : 'Capture screen'}</span>
+              {capturing ? (
+                <>
+                  <Loader2 className="icon icon--sm overlay__spin" aria-hidden="true" />
+                  <span>Capturing…</span>
+                </>
+              ) : (
+                <>
+                  <Monitor className="icon icon--sm" aria-hidden="true" />
+                  <span>{capture ? 'Captured' : 'Capture screen'}</span>
+                </>
+              )}
             </button>
             <button className="btn btn--sm" onClick={() => void startSnippet()} disabled={busy}>
               <Mic className="icon icon--sm" aria-hidden="true" />
@@ -445,6 +486,20 @@ export default function OverlayApp() {
               {line}
             </div>
           ))}
+        </div>
+      )}
+
+      {overlaySources && (
+        <div className="overlay__sources">
+          {overlaySources.map((source) => (
+            <button key={source.id} className="overlay__source-card" onClick={() => void captureSource(source.id)}>
+              <img src={source.thumbnail} alt={source.name} />
+              <span>{source.name}</span>
+            </button>
+          ))}
+          <button className="btn btn--icon btn--icon-sm btn--ghost" onClick={() => setOverlaySources(null)} aria-label="Cancel">
+            <X className="icon icon--xs" aria-hidden="true" />
+          </button>
         </div>
       )}
 

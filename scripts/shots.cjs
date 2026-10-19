@@ -92,12 +92,44 @@ app.whenReady().then(async () => {
     const image = await overlayWindow.webContents.capturePage()
     writeFileSync(join(outDir, '08-overlay.png'), image.toPNG())
     console.log('shot 08-overlay')
+
+    // One click on "Capture screen": what is below must end up attached.
+    await overlayWindow.webContents.executeJavaScript(`(() => {
+      const button = [...document.querySelectorAll('button')].find((node) =>
+        (node.getAttribute('aria-label') || '').toLowerCase().includes('capture screen'))
+      if (!button) return 'no-button'
+      button.click()
+      return 'clicked'
+    })()`)
+    await wait(2500)
+    const state = await overlayWindow.webContents.executeJavaScript(`(() => ({
+      hasCapture: Boolean(document.querySelector('.overlay__capture')),
+      note: (document.querySelector('.overlay__note') || {}).textContent || '',
+      inputFocused: document.activeElement && document.activeElement.tagName
+    }))()`)
+    console.log('overlay capture check:', JSON.stringify(state))
+    const after = await overlayWindow.webContents.capturePage()
+    writeFileSync(join(outDir, '13-overlay-captured.png'), after.toPNG())
+    console.log('shot 13-overlay-captured')
   }
 
   // Settings panel
   await clickByLabel('settings')
   await wait(1500)
   await shot('06-settings', main)
+
+  // The screen-capture section, scrolled into view.
+  const scrolled = await main.webContents.executeJavaScript(`(() => {
+    const body = document.querySelector('.modal__body')
+    if (!body) return 'no-body'
+    const heading = [...body.querySelectorAll('h4')].find((node) => (node.textContent || '').includes('Screen capture'))
+    if (!heading) return 'no-heading'
+    heading.scrollIntoView({ block: 'center' })
+    return 'scrolled'
+  })()`)
+  console.log('settings scroll:', scrolled)
+  await wait(700)
+  await shot('14-settings-screen', main)
 
   // The panels share the modal surface; review the two biggest ones.
   await clickByLabel('agent')

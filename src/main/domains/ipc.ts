@@ -73,6 +73,7 @@ const settingsPatchSchema = z
     knowledgeEnabled: z.boolean().optional(),
     documentRecallCount: z.number().int().min(1).max(10).optional(),
     chatMcpTools: z.boolean().optional(),
+    screenAutoCapture: z.boolean().optional(),
     allowUnencryptedSecrets: z.boolean().optional(),
     overlayPrivateMode: z.boolean().optional(),
     overlayOpacity: z.number().int().min(20).max(100).optional(),

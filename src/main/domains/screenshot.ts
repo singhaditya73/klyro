@@ -62,34 +62,37 @@ async function withSelfHidden<T>(action: () => Promise<T>): Promise<T> {
 }
 
 export async function grabScreen(sourceId?: string): Promise<CaptureResult> {
-  const sources = await desktopCapturer.getSources({
-    types: ['screen', 'window'],
-    thumbnailSize: { width: 1920, height: 1080 },
-    fetchWindowIcons: false
-  })
-  if (sources.length === 0) {
-    throw new Error('No screen sources available. Screen recording permission may be required.')
-  }
-  const chosen =
-    (sourceId ? sources.find((s) => s.id === sourceId) : undefined) ??
-    sources.find((s) => s.id.startsWith('screen')) ??
-    sources[0]
-  // A whole-screen capture must not include Klyro itself; a specific window
-  // capture is left alone (the user picked that window on purpose).
-  if (!sourceId) {
-    const dataUrl = await withSelfHidden(async () => {
-      const fresh = await desktopCapturer.getSources({
-        types: ['screen', 'window'],
-        thumbnailSize: { width: 1920, height: 1080 },
-        fetchWindowIcons: false
-      })
-      const target =
-        fresh.find((s) => s.id === chosen.id) ?? fresh.find((s) => s.id.startsWith('screen')) ?? fresh[0]
-      return { dataUrl: target.thumbnail.toDataURL(), name: target.name }
+  // A specific screen or window: the user chose it, so capture it as-is.
+  if (sourceId) {
+    const sources = await desktopCapturer.getSources({
+      types: ['screen', 'window'],
+      thumbnailSize: { width: 1920, height: 1080 },
+      fetchWindowIcons: false
     })
-    return dataUrl
+    const chosen = sources.find((s) => s.id === sourceId)
+    if (!chosen) throw new Error('That screen or window is no longer available.')
+    return { dataUrl: chosen.thumbnail.toDataURL(), name: chosen.name || 'Screen' }
   }
-  return { dataUrl: chosen.thumbnail.toDataURL(), name: chosen.name }
+
+  // The whole display, with Klyro hidden for the moment of the shot so the
+  // picture shows what is *below* the overlay.
+  //
+  // Only screens are enumerated here (not every window): listing windows means
+  // thumbnailing each one, which is slow enough to be felt on the click.
+  return withSelfHidden(async () => {
+    const primary = screen.getPrimaryDisplay()
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width: 1920, height: 1080 },
+      fetchWindowIcons: false
+    })
+    const target =
+      sources.find((s) => s.display_id === String(primary.id)) ?? sources[0]
+    if (!target) {
+      throw new Error('No screen available for capture. Screen recording permission may be required.')
+    }
+    return { dataUrl: target.thumbnail.toDataURL(), name: target.name || 'Screen' }
+  })
 }
 
 /** Physical-pixel capture of the primary display for the agent, with the
