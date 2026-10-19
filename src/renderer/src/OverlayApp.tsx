@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Eye, EyeOff, Headphones, Loader2, Mic, Square } from 'lucide-react'
+import { Eye, EyeOff, Headphones, Loader2, Mic, Monitor, Square, X } from 'lucide-react'
 import { createSilenceWatcher, isNoAnswer, listenPrompt, looksLikeQuestion, pickRecordMimeType, snippetPrompt, type SilenceWatcher } from './lib/listen'
+import type { Attachment } from '@shared/types'
 import KlyroMark from './assets/logo/klyro-mark.svg'
 
 type AssistMode = 'idle' | 'recording' | 'listening'
@@ -18,6 +19,8 @@ export default function OverlayApp() {
   const [autoAnswer, setAutoAnswer] = useState(true)
   const [assistNote, setAssistNote] = useState<string | null>(null)
   const [assistSource, setAssistSource] = useState<'System audio' | 'Microphone' | null>(null)
+  // A screen capture waiting to be sent with the next question.
+  const [capture, setCapture] = useState<{ dataUrl: string; name: string } | null>(null)
 
   const streamRef = useRef<MediaStream | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
@@ -181,10 +184,33 @@ export default function OverlayApp() {
     setBusy(true)
     setAssistNote(null)
     try {
-      await window.klyro.sendChat({ conversationId: id, content })
+      await window.klyro.sendChat({ conversationId: id, content, attachments: captureAttachments() })
+      setCapture(null)
     } catch (error) {
       busyRef.current = false
       setBusy(false)
+      setAssistNote((error as Error).message)
+    }
+  }
+
+  /** The pending capture, as a chat attachment (undefined when there is none). */
+  function captureAttachments(): Attachment[] | undefined {
+    if (!capture) return undefined
+    return [{ kind: 'image', mime: 'image/png', dataUrl: capture.dataUrl, label: capture.name }]
+  }
+
+  /**
+   * Capture what is on screen. Klyro hides its own windows for the moment of
+   * the capture, so the picture shows the app you are working in — and the
+   * capture travels with your question to a vision model.
+   */
+  async function captureScreen(): Promise<void> {
+    if (busyRef.current) return
+    setAssistNote(null)
+    try {
+      const shot = await window.klyro.grabScreen()
+      setCapture({ dataUrl: shot.dataUrl, name: shot.name })
+    } catch (error) {
       setAssistNote((error as Error).message)
     }
   }
@@ -323,7 +349,8 @@ export default function OverlayApp() {
                 setAnswer('')
                 setBusy(true)
                 setText('')
-                await window.klyro.sendChat({ conversationId: id, content })
+                await window.klyro.sendChat({ conversationId: id, content, attachments: captureAttachments() })
+                setCapture(null)
               })()
             }
           }}
@@ -345,7 +372,8 @@ export default function OverlayApp() {
             setAnswer('')
             setBusy(true)
             setText('')
-            await window.klyro.sendChat({ conversationId: id, content })
+            await window.klyro.sendChat({ conversationId: id, content, attachments: captureAttachments() })
+            setCapture(null)
           })()}
           >
             Ask
@@ -357,6 +385,16 @@ export default function OverlayApp() {
         {assistSource && <span className="overlay__source">{assistSource}</span>}
         {mode === 'idle' && (
           <>
+            <button
+              className={`btn btn--sm${capture ? ' btn--primary' : ''}`}
+              onClick={() => void captureScreen()}
+              disabled={busy}
+              title="Capture what is on screen and ask about it"
+              aria-label="Capture screen"
+            >
+              <Monitor className="icon icon--sm" aria-hidden="true" />
+              <span>{capture ? 'Captured' : 'Capture screen'}</span>
+            </button>
             <button className="btn btn--sm" onClick={() => void startSnippet()} disabled={busy}>
               <Mic className="icon icon--sm" aria-hidden="true" />
               <span>Record question</span>
@@ -407,6 +445,23 @@ export default function OverlayApp() {
               {line}
             </div>
           ))}
+        </div>
+      )}
+
+      {capture && (
+        <div className="overlay__capture">
+          <img src={capture.dataUrl} alt={`Captured: ${capture.name}`} />
+          <div className="overlay__capture-text">
+            <strong>Screen captured</strong>
+            <span>{capture.name} — attached to your next question</span>
+          </div>
+          <button
+            className="btn btn--icon btn--icon-sm btn--ghost"
+            onClick={() => setCapture(null)}
+            aria-label="Remove the screen capture"
+          >
+            <X className="icon icon--xs" aria-hidden="true" />
+          </button>
         </div>
       )}
 

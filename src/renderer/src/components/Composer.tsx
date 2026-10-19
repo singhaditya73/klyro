@@ -197,11 +197,23 @@ export function Composer({
             <button className="btn btn--ghost btn--sm" onClick={() => void chooseSource()}>Primary screen</button>
             <button className="btn btn--ghost btn--sm" onClick={() => setSources(null)}>Cancel</button>
           </div>
+          <p className="source-picker__hint">
+            Klyro attaches the picture to your next message and a vision model reads it. Nothing is captured
+            until you pick a source, and the capture is never stored.
+          </p>
           <div className="source-picker__grid">
             {sources.map((source) => (
               <button key={source.id} className="source-card" onClick={() => void chooseSource(source.id)}>
                 <img src={source.thumbnail} alt={source.name} />
                 <span>{source.name}</span>
+              </button>
+            ))}
+          </div>
+          <div className="source-picker__examples">
+            <span className="muted">Try:</span>
+            {['What error is this?', 'Summarise this page', 'What does this button do?', 'Extract the numbers'].map((example) => (
+              <button key={example} className="btn btn--ghost btn--sm" onClick={() => setText(example)}>
+                <span>{example}</span>
               </button>
             ))}
           </div>

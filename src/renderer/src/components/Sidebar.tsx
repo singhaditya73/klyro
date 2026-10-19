@@ -43,6 +43,8 @@ type NavItem = {
   label: string
   icon: React.ReactNode
   onClick: () => void
+  /** Plain-language explanation, shown as a tooltip. */
+  hint?: string
 }
 
 export function Sidebar(props: Props) {
@@ -52,7 +54,13 @@ export function Sidebar(props: Props) {
   const navItems: NavItem[] = [
     { id: 'home', label: 'Home', icon: <HomeIcon />, onClick: props.onOpenHome },
     { id: 'chat', label: 'Chat', icon: <MessageSquareIcon />, onClick: props.onOpenChat },
-    { id: 'screen', label: 'Screen', icon: <MonitorIcon />, onClick: props.onOpenScreen },
+    {
+      id: 'screen',
+      label: 'Screen',
+      icon: <MonitorIcon />,
+      onClick: props.onOpenScreen,
+      hint: 'Ask about what is on your screen: capture it, then ask a question about the picture'
+    },
     { id: 'agent', label: 'Agent', icon: <BotIcon />, onClick: props.onOpenAgent },
     { id: 'workflows', label: 'Workflows', icon: <WorkflowIcon />, onClick: props.onOpenWorkflows },
     { id: 'memory', label: 'Memory', icon: <BrainIcon />, onClick: props.onOpenMemory },
@@ -168,7 +176,7 @@ export function Sidebar(props: Props) {
               className={`nav-item${props.activeView === item.id ? ' nav-item--active' : ''}`}
               onClick={item.onClick}
               aria-current={props.activeView === item.id ? 'true' : undefined}
-              title={props.collapsed ? item.label : undefined}
+              title={props.collapsed ? item.label : item.hint}
               aria-label={props.collapsed ? item.label : undefined}
             >
               <span className="nav-item__icon">{item.icon}</span>
