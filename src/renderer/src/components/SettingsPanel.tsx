@@ -287,7 +287,7 @@ export function SettingsPanel({ onClose }: Props) {
     }
   }
 
-  async function updateProviderField(id: ProviderId, field: 'baseUrl' | 'model', value: string): Promise<void> {
+  async function updateProviderField(id: ProviderId, field: 'baseUrl' | 'model' | 'fastModel', value: string): Promise<void> {
     if (!settings) return
     const current = settings.providers[id]
     await patch({ providers: { ...settings.providers, [id]: { ...current, [field]: value } } })
@@ -393,6 +393,19 @@ export function SettingsPanel({ onClose }: Props) {
                   <label className="field">
                     <span className="field__label">Base URL</span>
                     <input value={config.baseUrl} onChange={(event) => void updateProviderField(provider.id, 'baseUrl', event.target.value)} className="field" />
+                  </label>
+                  <label className="field">
+                    <span className="field__label">Fast model (overlay)</span>
+                    <input
+                      value={config.fastModel ?? ''}
+                      placeholder="e.g. llama-3.3-70b-versatile"
+                      onChange={(event) => void updateProviderField(provider.id, 'fastModel', event.target.value)}
+                      className="field"
+                    />
+                    <span className="muted" style={{ fontSize: 11 }}>
+                      The quick-ask overlay answers with this model, so the reply lands in under a second. Leave it
+                      empty to use the main model.
+                    </span>
                   </label>
                 </div>
 
@@ -573,6 +586,19 @@ export function SettingsPanel({ onClose }: Props) {
           </label>
 
           <PrivacyCheckSection />
+
+          <label className="checkbox" style={{ marginTop: '16px' }}>
+            <input
+              type="checkbox"
+              checked={settings.overlayAnswerCache}
+              onChange={(event) => void patch({ overlayAnswerCache: event.target.checked })}
+            />
+            <span>Instant replay — answer the same question about the same screen instantly</span>
+          </label>
+          <div className="muted" style={{ marginTop: '6px', fontSize: 12, lineHeight: 1.6 }}>
+            When you ask the same thing twice about an unchanged screen, Klyro replays the answer instead of
+            asking the model again. The cache expires after 15 minutes and is stored locally.
+          </div>
 
           <label className="checkbox" style={{ marginTop: '16px' }}>
             <input

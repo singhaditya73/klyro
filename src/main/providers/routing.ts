@@ -12,7 +12,7 @@ import type { AppSettings, ProviderId, VisionSupport } from '@shared/types'
 import { DEFAULT_PROVIDERS, PROVIDER_META } from './defaults'
 import { ProviderError } from './errors'
 
-export type Purpose = 'chat' | 'agent' | 'code' | 'knowledge' | 'transcription'
+export type Purpose = 'chat' | 'agent' | 'code' | 'knowledge' | 'transcription' | 'overlay'
 
 export interface ResolvedRoute {
   providerId: ProviderId
@@ -77,7 +77,13 @@ export function resolveRoute({ settings, apiKey, purpose = 'chat' }: RouteInput)
   const defaults = DEFAULT_PROVIDERS[providerId] ?? DEFAULT_PROVIDERS.openai
   const configured = settings.providers?.[providerId]
 
-  const model = (configured?.model ?? '').trim() || defaults.model
+  // The overlay asks for the fast model: it wants an answer now, not the
+  // most thorough one.
+  const fastModel = (configured?.fastModel ?? '').trim()
+  const model =
+    purpose === 'overlay' && fastModel
+      ? fastModel
+      : (configured?.model ?? '').trim() || defaults.model
   const baseUrl = (configured?.baseUrl ?? '').trim() || defaults.baseUrl
 
   if (!baseUrl) {

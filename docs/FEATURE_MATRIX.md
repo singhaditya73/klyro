@@ -42,7 +42,8 @@ Status legend: **✅ done** · **🟡 partial** · **⬜ planned**
 | 12. Document & research intelligence | 🟡 | Local document import (text, code, HTML, PDF via `pdftotext`, Office via `unzip`) + BM25 grounding. **"Ask about this" (0.3.2)**: ground one chat message in the full text of a pinned document. Web research planned |
 | 13. Productivity / task management | 🟡 | Meeting action items, workflow runs, and the **post-meeting action agent**: proposes issues from action items, user approves, Klyro executes, outcomes land in a per-meeting output ledger |
 | 14. Trust, security, reliability | 🟡 | Sandboxed renderer with context isolation, origin-validated IPC, encrypted keys, encrypted-at-rest secrets, navigation guards, locked-down CSP, microphone-only permission policy, idle-timeout on model streams, and a **local audit log** (agent actions, MCP tool calls, meeting outputs — exportable as JSON, clearable, never sent anywhere) |
-| 15. Usage & cost honesty | ✅ | Local per-provider request ledger (Settings → Provider usage): requests, tool calls, failures. **RMS silence gate (0.3.2)**: listen mode skips transcription on silence-only chunks, so quiet meeting minutes cost zero provider calls |
+| 15. Speed (consumer path) | ✅ | **Turbo mode (0.4.0)**: the quick-ask overlay answers with the provider's *fast model* (set per provider), a short answer budget, and an **instant replay** cache — the same question about an unchanged screen comes back instantly, labelled as a replay. The overlay reports **time-to-first-token** ("0.84s") under every answer, and the number is also written to the audit log |
+| 16. Usage & cost honesty | ✅ | Local per-provider request ledger (Settings → Provider usage): requests, tool calls, failures. **RMS silence gate (0.3.2)**: listen mode skips transcription on silence-only chunks, so quiet meeting minutes cost zero provider calls |
 
 ## Desktop agent (Stage B)
 

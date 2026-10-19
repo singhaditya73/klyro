@@ -12,6 +12,11 @@ export interface ProviderSettings {
   baseUrl: string
   model: string
   /**
+   * A faster model used by the quick-ask overlay, so the answer arrives in
+   * under a second even when the chat model is the slow, thorough one.
+   */
+  fastModel?: string
+  /**
    * Speech-to-text model for providers whose audio endpoint is OpenAI-shaped.
    * Empty = the provider cannot transcribe.
    */
@@ -69,6 +74,8 @@ export interface AppSettings {
    * screen you are not sharing keeps it out of the meeting by construction.
    */
   overlayDisplay: 'primary' | number
+  /** Replay an answer instantly when the same question meets the same screen. */
+  overlayAnswerCache: boolean
 }
 
 /** Whether a model can read images; `unknown` is honest for local/custom endpoints. */
@@ -150,6 +157,11 @@ export interface SendChatRequest {
   conversationId: string
   content: string
   attachments?: Attachment[]
+  /**
+   * Turbo mode (the quick-ask overlay): use the provider's fast model, keep
+   * the answer short, and allow an instant replay of an identical question.
+   */
+  useFastModel?: boolean
   /** When set, replaces BM25 grounding with the full text of that document. */
   pinnedDocumentId?: string
 }
@@ -161,7 +173,17 @@ export type ChatStreamEvent =
   /** A tool call wants to run; the UI must get an explicit answer. */
   | { type: 'tool-pending'; messageId: string; callId: string; name: string; args: string }
   | { type: 'tool-resolved'; messageId: string; callId: string; ok: boolean }
-  | { type: 'done'; messageId: string }
+  | {
+      type: 'done'
+      messageId: string
+      /** Milliseconds until the first token. */
+      ms?: number
+      /** Milliseconds until the answer was complete. */
+      totalMs?: number
+      model?: string
+      /** True when the answer was replayed from the cache. */
+      cached?: boolean
+    }
   | { type: 'error'; messageId: string; message: string }
 
 export interface CaptureSource {

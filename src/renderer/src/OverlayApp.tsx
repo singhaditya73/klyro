@@ -25,6 +25,8 @@ export default function OverlayApp() {
   const [overlaySources, setOverlaySources] = useState<Array<{ id: string; name: string; thumbnail: string }> | null>(null)
   // True while a capture is in flight — the shot takes a moment, so say so.
   const [capturing, setCapturing] = useState(false)
+  // How long the last answer took, and whether it was replayed instantly.
+  const [timing, setTiming] = useState<{ ms: number; totalMs: number; model?: string; cached?: boolean } | null>(null)
 
   const streamRef = useRef<MediaStream | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
@@ -48,6 +50,9 @@ export default function OverlayApp() {
         setAnswer((prev) => prev + event.text)
       } else if (event.type === 'done' || event.type === 'error') {
         setBusy(false)
+        if (event.type === 'done') {
+          setTiming({ ms: event.ms ?? 0, totalMs: event.totalMs ?? 0, model: event.model, cached: event.cached })
+        }
         if (event.type === 'error') setAssistNote(event.message)
         // Once the answer landed and nothing is still recording, the overlay
         // can go back to hiding on blur.
@@ -189,7 +194,7 @@ export default function OverlayApp() {
     setBusy(true)
     setAssistNote(null)
     try {
-      await window.klyro.sendChat({ conversationId: id, content, attachments: captureAttachments() })
+      await window.klyro.sendChat({ conversationId: id, content, attachments: captureAttachments(), useFastModel: true })
       setCapture(null)
     } catch (error) {
       busyRef.current = false
@@ -381,7 +386,7 @@ export default function OverlayApp() {
                 setAnswer('')
                 setBusy(true)
                 setText('')
-                await window.klyro.sendChat({ conversationId: id, content, attachments: captureAttachments() })
+                await window.klyro.sendChat({ conversationId: id, content, attachments: captureAttachments(), useFastModel: true })
                 setCapture(null)
               })()
             }
@@ -404,7 +409,7 @@ export default function OverlayApp() {
             setAnswer('')
             setBusy(true)
             setText('')
-            await window.klyro.sendChat({ conversationId: id, content, attachments: captureAttachments() })
+            await window.klyro.sendChat({ conversationId: id, content, attachments: captureAttachments(), useFastModel: true })
             setCapture(null)
           })()}
           >
@@ -522,7 +527,24 @@ export default function OverlayApp() {
 
       <div className="overlay__answer">
         {answer && !isNoAnswer(answer) ? (
-          answer
+          <>
+            {answer}
+            {timing && (
+              <div className="overlay__timing">
+                {timing.cached ? (
+                  <span className="overlay__timing-badge">instant replay</span>
+                ) : (
+                  <span className="overlay__timing-badge">{(timing.ms / 1000).toFixed(2)}s</span>
+                )}
+                {timing.model && <span>{timing.model}</span>}
+                {timing.cached ? (
+                  <span>same question, same screen</span>
+                ) : timing.totalMs > 0 ? (
+                  <span>complete in {(timing.totalMs / 1000).toFixed(1)}s</span>
+                ) : null}
+              </div>
+            )}
+          </>
         ) : assistNote ? (
           <span className="overlay__note">{assistNote}</span>
         ) : busy ? (

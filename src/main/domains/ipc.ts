@@ -76,6 +76,7 @@ const settingsPatchSchema = z
     screenAutoCapture: z.boolean().optional(),
     screenPreWarm: z.boolean().optional(),
     overlayDisplay: z.union([z.literal('primary'), z.number().int().min(0).max(7)]).optional(),
+    overlayAnswerCache: z.boolean().optional(),
     allowUnencryptedSecrets: z.boolean().optional(),
     overlayPrivateMode: z.boolean().optional(),
     overlayOpacity: z.number().int().min(20).max(100).optional(),
@@ -100,7 +101,8 @@ const sendChatSchema = z.object({
     )
     .max(8)
     .optional(),
-  pinnedDocumentId: z.string().min(1).max(80).optional()
+  pinnedDocumentId: z.string().min(1).max(80).optional(),
+  useFastModel: z.boolean().optional()
     .optional()
 })
 

@@ -17,6 +17,7 @@ import { memory } from './memory'
 import { mcp } from './mcp'
 import { settingsDomain } from './settings'
 import { usage } from './usage'
+import { answerCache, AnswerCache } from './answer-cache'
 import { wrapUntrusted } from '../security/untrusted'
 
 let controller: AbortController | null = null
@@ -135,19 +136,47 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
     emit({ type: 'context', messageId: assistantId, memories: knowledge.memories, documents: knowledge.documents })
   }
   let text = ''
+  const startedAt = Date.now()
+  let firstTokenMs: number | null = null
 
   try {
     // Resolved here so a missing key or an empty model fails with a message that
     // says what to fix, rather than a 401 from the endpoint.
-    const route = resolveRoute({ settings, apiKey: settingsDomain.apiKey(providerId), purpose: 'chat' })
+    const route = resolveRoute({
+      settings,
+      apiKey: settingsDomain.apiKey(providerId),
+      purpose: request.useFastModel ? 'overlay' : 'chat'
+    })
     const baseOptions = {
       model: route.model,
       baseUrl: route.baseUrl,
       apiKey: route.apiKey,
+      ...(request.useFastModel ? { maxTokens: 400, temperature: 0.3 } : {}),
       system: [settings.systemPrompt + styleSuffix(settings.responseStyle), knowledge.block]
         .filter(Boolean)
         .join('\n\n'),
       signal: abort.signal
+    }
+
+    // Turbo: the same question about the same screen was answered moments
+    // ago, so replay it instead of paying for the same answer twice.
+    if (request.useFastModel && settings.overlayAnswerCache) {
+      const cacheKey = answerCache.key(
+        route.model,
+        request.content,
+        AnswerCache.captureHash(request.attachments?.[0]?.dataUrl)
+      )
+      const cached = answerCache.get(cacheKey)
+      if (cached) {
+        const replay = cached.answer
+        text = replay
+        emit({ type: 'delta', messageId: assistantId, text: replay })
+        conversations.updateMessage(conversationId, assistantId, { content: replay })
+        emit({ type: 'done', messageId: assistantId, cached: true, ms: 0, totalMs: 0, model: route.model })
+        usage.record(providerId, 'chat', { toolCall: false })
+        audit.record('chat.cached', `Replayed a cached answer for "${request.content.slice(0, 80)}"`)
+        return
+      }
     }
 
     // The tool loop: the model may call MCP tools (when enabled and any are
@@ -165,6 +194,7 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
           { onStall: () => abort.abort() }
         )) {
           if (chunk.kind === 'text') {
+            if (firstTokenMs === null) firstTokenMs = Date.now() - startedAt
             roundText += chunk.text
             text += chunk.text
             emit({ type: 'delta', messageId: assistantId, text: chunk.text })
@@ -174,6 +204,7 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
         }
       } else {
         for await (const delta of withIdleTimeout(provider.chat({ ...baseOptions, turns: history }), { onStall: () => abort.abort() })) {
+          if (firstTokenMs === null) firstTokenMs = Date.now() - startedAt
           roundText += delta
           text += delta
           emit({ type: 'delta', messageId: assistantId, text: delta })
@@ -225,8 +256,21 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
     }
 
     conversations.updateMessage(conversationId, assistantId, { content: text })
-    emit({ type: 'done', messageId: assistantId })
+    const totalMs = Date.now() - startedAt
+    emit({ type: 'done', messageId: assistantId, ms: firstTokenMs ?? totalMs, totalMs, model: route.model })
     usage.record(providerId, 'chat')
+    // Remember it: the same question about the same screen is instant next time.
+    if (request.useFastModel && settings.overlayAnswerCache && text.trim().length > 0) {
+      answerCache.set(
+        answerCache.key(
+          route.model,
+          request.content,
+          AnswerCache.captureHash(request.attachments?.[0]?.dataUrl)
+        ),
+        text,
+        route.model
+      )
+    }
     // Extraction costs a model call, so only run it for substantive exchanges.
     if (settings.memoryAutoExtract && text.trim().length >= 24 && request.content.trim().length >= 24) {
       const origin = `conversation:${conversation.title || conversationId}`
