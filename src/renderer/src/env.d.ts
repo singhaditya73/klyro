@@ -103,6 +103,13 @@ interface KlyroApi {
   usageRows(): Promise<any[]>
   usageClear(): Promise<void>
 
+  privacyProbeOverlay(): Promise<{
+    excluded: boolean
+    changedRatio: number
+    platform: string
+    supported: boolean
+  }>
+
   workflowList(): Promise<any[]>
   workflowRun(id: string, input: string): Promise<any>
   workflowCancel(runId: string): Promise<void>

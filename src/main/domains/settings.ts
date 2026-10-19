@@ -25,7 +25,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   overlayPrivateMode: false,
   overlayOpacity: 100,
   chatMcpTools: false,
-  screenAutoCapture: true
+  screenAutoCapture: true,
+  screenPreWarm: true
 }
 
 class SettingsDomain {

@@ -110,7 +110,10 @@ export const IPC = {
 
   /* Local usage ledger */
   usageRows: 'usage:rows',
-  usageClear: 'usage:clear'
+  usageClear: 'usage:clear',
+
+  /* Privacy: does this machine exclude the overlay from screen captures? */
+  privacyProbeOverlay: 'privacy:probeOverlay'
 } as const
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC]

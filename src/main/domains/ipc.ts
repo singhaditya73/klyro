@@ -23,7 +23,7 @@ import { transcribeAudio } from './audio'
 import { applyOverlayOpacity, applyOverlayPrivateMode, getOverlayWindow, overlayPrivateModeSupported, setOverlayStickyRecording } from './windows'
 import { conversations } from './conversations'
 import { checkPermissions } from './permissions'
-import { grabScreen, listCaptureSources } from './screenshot'
+import { grabScreen, listCaptureSources, probeOverlayVisibility } from './screenshot'
 import { settingsDomain } from './settings'
 import { registerShortcuts } from './shortcuts'
 import { mcp } from './mcp'
@@ -74,6 +74,7 @@ const settingsPatchSchema = z
     documentRecallCount: z.number().int().min(1).max(10).optional(),
     chatMcpTools: z.boolean().optional(),
     screenAutoCapture: z.boolean().optional(),
+    screenPreWarm: z.boolean().optional(),
     allowUnencryptedSecrets: z.boolean().optional(),
     overlayPrivateMode: z.boolean().optional(),
     overlayOpacity: z.number().int().min(20).max(100).optional(),
@@ -477,6 +478,7 @@ export function registerIpcHandlers(): void {
   })
 
   handle(IPC.usageRows, () => usage.rows())
+  handle(IPC.privacyProbeOverlay, () => probeOverlayVisibility())
   handle(IPC.usageClear, () => {
     usage.clear()
   })

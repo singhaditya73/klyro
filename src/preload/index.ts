@@ -65,6 +65,7 @@ const api: KlyroApi = {
   auditList: (limit?: number) => ipcRenderer.invoke(IPC.auditList, limit),
   auditClear: () => ipcRenderer.invoke(IPC.auditClear),
   usageRows: () => ipcRenderer.invoke(IPC.usageRows),
+  privacyProbeOverlay: () => ipcRenderer.invoke(IPC.privacyProbeOverlay),
   usageClear: () => ipcRenderer.invoke(IPC.usageClear),
   securityStatus: () => ipcRenderer.invoke(IPC.securityStatus),
   dataSummary: () => ipcRenderer.invoke(IPC.dataSummary),

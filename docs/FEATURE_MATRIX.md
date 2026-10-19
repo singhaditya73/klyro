@@ -8,6 +8,7 @@ Status legend: **✅ done** · **🟡 partial** · **⬜ planned**
 | --- | --- | --- |
 | 1.1 Floating assistant window | ✅ | Frameless always-on-top overlay window; **user-controlled opacity (20–100%, 0.3.3)** via window-level transparency; explicit drag handles (top bar + Klyro wordmark), interactive controls excluded from dragging |
 | 1.2 Global shortcut to show/hide | ✅ | Default `Ctrl/Cmd+Shift+Space` (configurable) |
+| 1.2b Capture exclusion, verified | ✅ | **Private mode** excludes the overlay from screen captures and live screen shares on Windows and macOS (`WDA_EXCLUDEFROMCAPTURE` / `NSWindow.sharingType = .none`) — the same supported APIs password managers use. **0.3.7: a privacy check measures it on your machine** — two captures, one with the overlay up and one without, compared pixel by pixel — and reports the number instead of claiming it. macOS permission is requested at launch so the system prompt never appears mid-meeting. Linux/X11 has no per-window exclusion API; the check says so plainly |
 | 1.3 Text questions | ✅ | Streaming chat |
 | 1.4 Voice input | 🟡 | Record → transcribe via OpenAI-compatible `/audio/transcriptions`; local Whisper supported |
 | 1.5 Contextual follow-ups | ✅ | Full conversation history sent to the provider |

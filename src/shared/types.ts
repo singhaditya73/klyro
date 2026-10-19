@@ -58,6 +58,11 @@ export interface AppSettings {
    * When off, the picker asks which screen or window to share.
    */
   screenAutoCapture: boolean
+  /**
+   * Ask the OS for screen-capture permission at launch rather than during a
+   * meeting (macOS raises a one-time system prompt on the first capture).
+   */
+  screenPreWarm: boolean
 }
 
 /** Whether a model can read images; `unknown` is honest for local/custom endpoints. */
@@ -742,6 +747,17 @@ export interface KlyroApi {
   /* Local usage ledger */
   usageRows(): Promise<Array<{ provider: string; requests: number; toolCalls: number; failures: number }>>
   usageClear(): Promise<void>
+
+  /**
+   * Measure — not guess — whether the overlay is excluded from screen
+   * captures on this machine.
+   */
+  privacyProbeOverlay(): Promise<{
+    excluded: boolean
+    changedRatio: number
+    platform: string
+    supported: boolean
+  }>
   securityStatus(): Promise<SecurityStatus>
   dataSummary(): Promise<DataSummary>
   dataClear(scope: DataScope): Promise<DataSummary>

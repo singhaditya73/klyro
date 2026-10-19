@@ -10,7 +10,7 @@ import type {
   SecurityStatus
 } from '@shared/types'
 import { useModal } from '../hooks/useModal'
-import { Loader2, CheckCircle, AlertCircle, Shield, ShieldQuestion, HardDrive, Trash2, Download, Broom, Database, Key, Zap, X, ExternalLink } from 'lucide-react'
+import { Loader2, CheckCircle, CheckCircle2, AlertCircle, Shield, ShieldCheck, ShieldQuestion, HardDrive, Trash2, Download, Broom, Database, Key, Zap, X, ExternalLink } from 'lucide-react'
 import KlyroMark from '../assets/logo/klyro-mark.svg'
 
 interface Props {
@@ -151,6 +151,83 @@ function AuditLogSection() {
           </button>
         </span>
       </div>
+    </div>
+  )
+}
+
+/** Privacy check: measures whether the overlay is excluded from captures. */
+function PrivacyCheckSection() {
+  const [result, setResult] = useState<{
+    excluded: boolean
+    changedRatio: number
+    platform: string
+    supported: boolean
+  } | null>(null)
+  const [running, setRunning] = useState(false)
+
+  async function run(): Promise<void> {
+    setRunning(true)
+    try {
+      setResult(await window.klyro.privacyProbeOverlay())
+    } catch (error) {
+      setResult({ excluded: false, changedRatio: 1, platform: 'unknown', supported: false })
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  return (
+    <div style={{ marginTop: '16px', padding: '14px 16px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', background: 'var(--surface-base)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Privacy check</div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+            Captures the screen twice — once with the overlay up, once without — and compares the pixels.
+          </div>
+        </div>
+        <button className="btn btn--sm" onClick={() => void run()} disabled={running}>
+          {running ? <Loader2 className="icon icon--xs spin" aria-hidden="true" /> : <ShieldCheck className="icon icon--xs" aria-hidden="true" />}
+          <span>{running ? 'Checking…' : 'Check now'}</span>
+        </button>
+      </div>
+      {result && (
+        <div
+          className={`notice ${result.excluded ? 'notice--success' : 'notice--warning'}`}
+          style={{ marginTop: 12 }}
+        >
+          {result.excluded ? (
+            <CheckCircle2 className="icon icon--sm notice__icon" aria-hidden="true" />
+          ) : (
+            <AlertCircle className="icon icon--sm notice__icon" aria-hidden="true" />
+          )}
+          <div className="notice__body">
+            {result.excluded ? (
+              <>
+                <strong>Verified: the overlay is excluded from screen captures on this machine.</strong>
+                <div style={{ fontSize: 12, marginTop: 2 }}>
+                  Only {Math.round(result.changedRatio * 100)}% of the overlay&rsquo;s area changed between the two captures — that is
+                  screen noise, not the overlay. A full-screen share will not show it.
+                </div>
+              </>
+            ) : result.supported ? (
+              <>
+                <strong>Not excluded on this platform.</strong>
+                <div style={{ fontSize: 12, marginTop: 2 }}>
+                  {Math.round(result.changedRatio * 100)}% of the overlay&rsquo;s area is present in the capture, so a full-screen share
+                  would show it. Windows and macOS can exclude a window from captures; Linux/X11 has no such API.
+                </div>
+              </>
+            ) : (
+              <>
+                <strong>Could not run the check.</strong>
+                <div style={{ fontSize: 12, marginTop: 2 }}>
+                  The overlay window was not available yet. Open the quick-ask overlay once, then run the check again.
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -464,6 +541,23 @@ export function SettingsPanel({ onClose }: Props) {
               </span>
             )}
             {' '}On Windows and Linux the system never asks per capture. On macOS the operating system asks for Screen Recording once, and that prompt comes from the OS, not from Klyro — it cannot be skipped.
+          </div>
+
+          <PrivacyCheckSection />
+
+          <label className="checkbox" style={{ marginTop: '16px' }}>
+            <input
+              type="checkbox"
+              checked={settings.screenPreWarm}
+              onChange={(event) => void patch({ screenPreWarm: event.target.checked })}
+            />
+            <span>Ask for screen permission at launch, not mid-meeting</span>
+          </label>
+          <div className="muted" style={{ marginTop: '6px', fontSize: 12, lineHeight: 1.6 }}>
+            On macOS the system raises a one-time Screen Recording prompt the first time anything captures the
+            screen. Klyro asks for it when it starts, so you answer it before a call instead of while everyone
+            is watching. Windows never asks per capture, and on Linux this is left off (a portal dialog at
+            launch would be worse than a dialog later).
           </div>
 
           {permissions && (

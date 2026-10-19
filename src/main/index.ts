@@ -11,6 +11,7 @@ import { createTray } from './domains/tray'
 import { createMainWindow, createOverlayWindow, showMainWindow } from './domains/windows'
 import { maintenance } from './domains/maintenance'
 import { mcp } from './domains/mcp'
+import { warmupScreenPermission } from './domains/screenshot'
 
 app.setName('Klyro')
 
@@ -91,6 +92,14 @@ if (!gotLock) {
     createOverlayWindow()
     createTray()
     registerShortcuts()
+    // Ask the OS for screen-capture permission at launch, not in the middle of
+    // a meeting: on macOS the first capture raises a system prompt, and it is
+    // much better to answer it before the call starts. Windows never asks per
+    // capture, and on Linux (Wayland portals) asking here would pop a dialog
+    // at launch — so the warm-up is macOS-only.
+    if (settingsDomain.get().screenPreWarm && process.platform === 'darwin') {
+      void warmupScreenPermission()
+    }
     logger.info(`Klyro ${app.getVersion()} ready on ${process.platform}`)
 
     app.on('activate', () => {

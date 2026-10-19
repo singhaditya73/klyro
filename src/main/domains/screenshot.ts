@@ -1,5 +1,6 @@
 import { desktopCapturer, screen, BrowserWindow } from 'electron'
 import type { CaptureResult, CaptureSource } from '@shared/types'
+import { getOverlayWindow } from './windows'
 
 export interface AgentFrame {
   dataUrl: string
@@ -58,6 +59,111 @@ async function withSelfHidden<T>(action: () => Promise<T>): Promise<T> {
       win.show()
     }
     if (focused && !focused.isDestroyed()) focused.focus()
+  }
+}
+
+/**
+ * A raw capture of the primary display *without* hiding Klyro. Only the
+ * privacy probe uses this: it needs to see whether the overlay is present in
+ * the pixels, which is exactly what a screen share would contain.
+ */
+async function captureRawDisplay(): Promise<{ bitmap: Buffer; width: number; height: number }> {
+  const primary = screen.getPrimaryDisplay()
+  const pixelWidth = Math.max(1, Math.round(primary.size.width * primary.scaleFactor))
+  const pixelHeight = Math.max(1, Math.round(primary.size.height * primary.scaleFactor))
+  const sources = await desktopCapturer.getSources({
+    types: ['screen'],
+    thumbnailSize: { width: pixelWidth, height: pixelHeight },
+    fetchWindowIcons: false
+  })
+  const target = sources.find((s) => s.display_id === String(primary.id)) ?? sources[0]
+  if (!target) throw new Error('No screen available for the privacy check.')
+  const size = target.thumbnail.getSize()
+  return { bitmap: target.thumbnail.toBitmap(), width: size.width, height: size.height }
+}
+
+/**
+ * Prove, on this machine, whether the overlay is excluded from screen
+ * captures. The check captures the display twice — once with the overlay
+ * visible, once with it hidden — and compares the pixels where the overlay
+ * was. Identical pixels mean the overlay is excluded from what a screen
+ * share would contain; different pixels mean it is visible to everyone.
+ *
+ * No guessing, no marketing: the app measures it and reports the number.
+ */
+export async function probeOverlayVisibility(): Promise<{
+  excluded: boolean
+  changedRatio: number
+  platform: NodeJS.Platform
+  supported: boolean
+}> {
+  const overlay = getOverlayWindow()
+  if (!overlay || overlay.isDestroyed()) {
+    return { excluded: false, changedRatio: 1, platform: process.platform, supported: false }
+  }
+  const wasVisible = overlay.isVisible()
+  const bounds = overlay.getBounds()
+  try {
+    overlay.showInactive()
+    await new Promise((resolve) => setTimeout(resolve, 320))
+    const withOverlay = await captureRawDisplay()
+
+    overlay.hide()
+    await new Promise((resolve) => setTimeout(resolve, 320))
+    const withoutOverlay = await captureRawDisplay()
+
+    // Compare the region the overlay occupied, in capture pixels.
+    const scaleX = withOverlay.width / screen.getPrimaryDisplay().size.width
+    const scaleY = withOverlay.height / screen.getPrimaryDisplay().size.height
+    const x0 = Math.max(0, Math.floor(bounds.x * scaleX))
+    const y0 = Math.max(0, Math.floor(bounds.y * scaleY))
+    const x1 = Math.min(withOverlay.width, Math.ceil((bounds.x + bounds.width) * scaleX))
+    const y1 = Math.min(withOverlay.height, Math.ceil((bounds.y + bounds.height) * scaleY))
+    if (x1 <= x0 || y1 <= y0) {
+      return { excluded: false, changedRatio: 1, platform: process.platform, supported: false }
+    }
+
+    let changed = 0
+    let total = 0
+    for (let y = y0; y < y1; y += 1) {
+      for (let x = x0; x < x1; x += 1) {
+        const index = (y * withOverlay.width + x) * 4
+        total += 1
+        if (
+          withOverlay.bitmap[index] !== withoutOverlay.bitmap[index] ||
+          withOverlay.bitmap[index + 1] !== withoutOverlay.bitmap[index + 1] ||
+          withOverlay.bitmap[index + 2] !== withoutOverlay.bitmap[index + 2]
+        ) {
+          changed += 1
+        }
+      }
+    }
+    const changedRatio = total === 0 ? 1 : changed / total
+    // A little noise is normal (a blinking caret in the region); a real
+    // overlay changes a large part of its own area.
+    const excluded = changedRatio < 0.02
+    return { excluded, changedRatio, platform: process.platform, supported: true }
+  } finally {
+    if (!wasVisible) overlay.hide()
+    else overlay.showInactive()
+  }
+}
+
+/**
+ * Ask the OS for screen-capture permission at launch rather than in the
+ * middle of a meeting. On macOS the first capture triggers a system prompt;
+ * doing it here means the user grants it before the meeting starts, not while
+ * the meeting is on screen.
+ */
+export async function warmupScreenPermission(): Promise<void> {
+  try {
+    await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width: 16, height: 16 },
+      fetchWindowIcons: false
+    })
+  } catch {
+    // Permission not granted (or not supported) — the user is asked later.
   }
 }
 
