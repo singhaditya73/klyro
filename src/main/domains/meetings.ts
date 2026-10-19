@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { MeetingDraft, MeetingRecord, MeetingSegment } from '@shared/types'
+import type { MeetingDraft, MeetingOutput, MeetingRecord, MeetingSegment } from '@shared/types'
 import { parseMeetingSummary } from '../knowledge/code-files'
 import { appendSegment } from '../knowledge/transcript'
 import { logger } from '../logger'
@@ -7,6 +7,7 @@ import { getProvider } from '../providers'
 import { resolveRoute } from '../providers/routing'
 import { wrapUntrusted } from '../security/untrusted'
 import { JsonStore } from '../store/json-store'
+import { usage } from './usage'
 import { withIdleTimeout } from '../util/idle-timeout'
 import { settingsDomain } from './settings'
 
@@ -42,6 +43,16 @@ class MeetingDomain {
 
   get(id: string): MeetingRecord | null {
     return this.store.get().meetings.find((meeting) => meeting.id === id) ?? null
+  }
+
+  /** Append executed-action entries to the meeting's output ledger. */
+  addOutputs(id: string, outputs: MeetingOutput[]): void {
+    if (outputs.length === 0) return
+    this.store.update((state) => {
+      const meeting = state.meetings.find((entry) => entry.id === id)
+      if (!meeting) return
+      meeting.outputs = [...(meeting.outputs ?? []), ...outputs]
+    })
   }
 
   save(draft: MeetingDraft): MeetingRecord {
@@ -179,6 +190,7 @@ class MeetingDomain {
     )) {
       output += delta
     }
+    usage.record(providerId, 'meeting-summary')
 
     const { summary, actions } = parseMeetingSummary(output)
     if (!summary && actions.length === 0) throw new Error('The model returned no usable summary.')

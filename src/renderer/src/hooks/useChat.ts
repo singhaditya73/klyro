@@ -15,8 +15,11 @@ export interface ChatController {
   loadEarlier: () => Promise<void>
   newConversation: () => Promise<void>
   deleteConversation: (id: string) => Promise<void>
-  send: (content: string, attachments: Attachment[]) => Promise<void>
+  send: (content: string, attachments: Attachment[], pinnedDocumentId?: string) => Promise<void>
   stop: () => void
+  /** Answer the tool call the model is waiting on (null pendingTool = nothing). */
+  pendingTool: { callId: string; name: string; args: string } | null
+  respondTool: (approved: boolean) => Promise<void>
 }
 
 /** Messages loaded at a time; "Load earlier" grows the window. */
@@ -29,6 +32,7 @@ export function useChat(): ChatController {
   const [streamingId, setStreamingId] = useState<string | null>(null)
   const [contexts, setContexts] = useState<Record<string, { memories: number; documents: number }>>({})
   const [search, setSearch] = useState('')
+  const [pendingTool, setPendingTool] = useState<{ callId: string; name: string; args: string } | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const activeIdRef = useRef<string | null>(null)
   // How much of the open conversation is loaded, so refreshes do not shrink it.
@@ -143,6 +147,12 @@ export function useChat(): ChatController {
             prev.map((m) => (m.id === event.messageId ? { ...m, content: m.content + event.text } : m))
           )
           break
+        case 'tool-pending':
+          setPendingTool({ callId: event.callId, name: event.name, args: event.args })
+          break
+        case 'tool-resolved':
+          setPendingTool((current) => (current?.callId === event.callId ? null : current))
+          break
         case 'done':
         case 'error':
           setStreamingId((current) => (current === event.messageId ? null : current))
@@ -153,7 +163,7 @@ export function useChat(): ChatController {
     })
   }, [refreshActive, refreshList])
 
-  const send = useCallback(async (content: string, attachments: Attachment[]): Promise<void> => {
+  const send = useCallback(async (content: string, attachments: Attachment[], pinnedDocumentId?: string): Promise<void> => {
     let conversationId = activeIdRef.current
     if (!conversationId) {
       const conversation = await window.klyro.createConversation()
@@ -165,11 +175,18 @@ export function useChat(): ChatController {
       ...prev,
       { id: `local-${Date.now()}`, role: 'user', content, attachments, createdAt: Date.now() }
     ])
-    await window.klyro.sendChat({ conversationId, content, attachments })
+    await window.klyro.sendChat({ conversationId, content, attachments, ...(pinnedDocumentId ? { pinnedDocumentId } : {}) })
   }, [])
 
   const stop = useCallback((): void => {
     void window.klyro.abortChat()
+  }, [])
+
+  const respondTool = useCallback(async (approved: boolean): Promise<void> => {
+    setPendingTool((current) => {
+      if (current) void window.klyro.chatRespondTool(current.callId, approved)
+      return null
+    })
   }, [])
 
   const deleteConversation = useCallback(
@@ -199,6 +216,8 @@ export function useChat(): ChatController {
     newConversation,
     deleteConversation,
     send,
-    stop
+    stop,
+    pendingTool,
+    respondTool
   }
 }

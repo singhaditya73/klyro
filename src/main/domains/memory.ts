@@ -5,6 +5,7 @@ import { getProvider } from '../providers'
 import { resolveRoute } from '../providers/routing'
 import { bm25Search, jaccard } from '../knowledge/retrieval'
 import { JsonStore } from '../store/json-store'
+import { usage } from './usage'
 import { settingsDomain } from './settings'
 
 interface MemoryState {
@@ -199,7 +200,9 @@ class MemoryDomain {
       })) {
         output += delta
       }
+      usage.record(route.providerId ?? settings.activeProvider, 'memory-extract', {})
     } catch (error) {
+      usage.record(settings.activeProvider, 'memory-extract', { failed: true })
       logger.warn('Memory extraction failed', (error as Error).message)
       return []
     }

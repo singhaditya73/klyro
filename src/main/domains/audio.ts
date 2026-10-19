@@ -1,6 +1,7 @@
 import { getProvider } from '../providers'
 import { DEFAULT_PROVIDERS, DEFAULT_TRANSCRIBE_MODEL } from '../providers/defaults'
 import { resolveRoute } from '../providers/routing'
+import { usage } from './usage'
 import { settingsDomain } from './settings'
 
 /**
@@ -21,16 +22,23 @@ export async function transcribeAudio(audio: ArrayBuffer, mimeType: string): Pro
     )
   }
 
-  // resolveRoute rejects unsupported providers with a message that says why.
+  // resolveRoute rejects unsupported providers with a local endpoint check too.
   const route = resolveRoute({ settings, apiKey: settingsDomain.apiKey(providerId), purpose: 'transcription' })
 
-  return provider.transcribe({
-    baseUrl: route.baseUrl,
-    apiKey: route.apiKey,
-    // Groq expects whisper-large-v3, OpenAI whisper-1 — each provider carries
-    // the correct id so the same /audio/transcriptions path serves both.
-    model: DEFAULT_PROVIDERS[providerId].transcribeModel ?? DEFAULT_TRANSCRIBE_MODEL,
-    audio,
-    mimeType
-  })
+  try {
+    const text = await provider.transcribe({
+      baseUrl: route.baseUrl,
+      apiKey: route.apiKey,
+      // Groq expects whisper-large-v3, OpenAI whisper-1 — each provider carries
+      // the correct id so the same /audio/transcriptions path serves both.
+      model: DEFAULT_PROVIDERS[providerId].transcribeModel ?? DEFAULT_TRANSCRIBE_MODEL,
+      audio,
+      mimeType
+    })
+    usage.record(providerId, 'transcribe')
+    return text
+  } catch (error) {
+    usage.record(providerId, 'transcribe', { failed: true })
+    throw error
+  }
 }

@@ -1,33 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
-  CodeActionKind,
-  CodeCitation,
   MeetingRecord,
   MeetingSegment,
-  PatchRecord,
-  ProjectStatus,
   WorkflowRecord,
   WorkflowRun,
   WorkflowRunStatus
 } from '@shared/types'
 
 export interface StudioController {
-  project: ProjectStatus | null
-  indexing: boolean
-  codeOutput: string
-  codeCitations: CodeCitation[]
-  codeBusy: boolean
-  runCodeAction: (kind: CodeActionKind, code: string, question?: string) => Promise<void>
-  indexProject: () => Promise<void>
-  clearProject: () => Promise<void>
-
-  patches: PatchRecord[]
-  patchBusy: boolean
-  proposePatch: (path: string, content: string) => Promise<void>
-  applyPatch: (id: string) => Promise<void>
-  revertPatch: (id: string) => Promise<void>
-  discardPatch: (id: string) => Promise<void>
-
   meetings: MeetingRecord[]
   recording: boolean
   liveSegments: MeetingSegment[]
@@ -39,6 +19,8 @@ export interface StudioController {
   saveMeeting: (title: string) => Promise<void>
   summarizeMeeting: (id: string) => Promise<void>
   deleteMeeting: (id: string) => Promise<void>
+  /** Re-read the saved meeting list (after background changes like the action ledger). */
+  refreshMeetings: () => Promise<void>
   discardRecording: () => void
   transcribeError: string | null
 
@@ -65,14 +47,6 @@ function pickMimeType(): string {
 }
 
 export function useStudio(): StudioController {
-  const [project, setProject] = useState<ProjectStatus | null>(null)
-  const [indexing, setIndexing] = useState(false)
-  const [codeOutput, setCodeOutput] = useState('')
-  const [codeCitations, setCodeCitations] = useState<CodeCitation[]>([])
-  const [codeBusy, setCodeBusy] = useState(false)
-  const [patches, setPatches] = useState<PatchRecord[]>([])
-  const [patchBusy, setPatchBusy] = useState(false)
-
   const [meetings, setMeetings] = useState<MeetingRecord[]>([])
   const [recording, setRecording] = useState(false)
   const [liveSegments, setLiveSegments] = useState<MeetingSegment[]>([])
@@ -107,15 +81,9 @@ export function useStudio(): StudioController {
   }, [])
 
   const refresh = useCallback(async (): Promise<void> => {
-    setProject(await window.klyro.projectStatus())
     setMeetings(await window.klyro.meetingList())
     setWorkflows(await window.klyro.workflowList())
     await refreshRuns()
-    try {
-      setPatches(await window.klyro.patchList())
-    } catch {
-      setPatches([])
-    }
     // A recording that was interrupted before it was saved is still here; show it
     // rather than silently losing the meeting.
     try {
@@ -133,6 +101,11 @@ export function useStudio(): StudioController {
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  /** Cheap re-read of just the meeting list (used after the action ledger updates). */
+  const refreshMeetings = useCallback(async (): Promise<void> => {
+    setMeetings(await window.klyro.meetingList())
+  }, [])
 
   useEffect(() => {
     return window.klyro.onWorkflowEvent((event) => {
@@ -165,97 +138,6 @@ export function useStudio(): StudioController {
     return () => {
       if (timerRef.current !== null) window.clearInterval(timerRef.current)
       streamRef.current?.getTracks().forEach((track) => track.stop())
-    }
-  }, [])
-
-  const runCodeAction = useCallback(
-    async (kind: CodeActionKind, code: string, question?: string): Promise<void> => {
-      setError(null)
-      setCodeBusy(true)
-      setCodeOutput('')
-      setCodeCitations([])
-      try {
-        const result = await window.klyro.codeAssist({ kind, code, question })
-        setCodeOutput(result.text)
-        setCodeCitations(result.citations)
-      } catch (caught) {
-        setError((caught as Error).message)
-      } finally {
-        setCodeBusy(false)
-      }
-    },
-    []
-  )
-
-  const indexProject = useCallback(async (): Promise<void> => {
-    setError(null)
-    setIndexing(true)
-    try {
-      setProject(await window.klyro.projectIndex())
-    } catch (caught) {
-      setError((caught as Error).message)
-    } finally {
-      setIndexing(false)
-    }
-  }, [])
-
-  const clearProject = useCallback(async (): Promise<void> => {
-    try {
-      setProject(await window.klyro.projectClear())
-      setPatches(await window.klyro.patchList())
-    } catch (caught) {
-      setError((caught as Error).message)
-    }
-  }, [])
-
-  /** Build a diff for a proposed edit. Nothing is written until it is applied. */
-  const proposePatch = useCallback(async (path: string, content: string): Promise<void> => {
-    setError(null)
-    setPatchBusy(true)
-    try {
-      const patch = await window.klyro.patchPropose({ path, content })
-      setPatches((previous) => [patch, ...previous.filter((candidate) => candidate.id !== patch.id)])
-    } catch (caught) {
-      setError((caught as Error).message)
-    } finally {
-      setPatchBusy(false)
-    }
-  }, [])
-
-  const applyPatch = useCallback(async (id: string): Promise<void> => {
-    setError(null)
-    setPatchBusy(true)
-    try {
-      const updated = await window.klyro.patchApply(id)
-      setPatches((previous) => previous.map((patch) => (patch.id === id ? updated : patch)))
-      setProject(await window.klyro.projectStatus())
-    } catch (caught) {
-      setError((caught as Error).message)
-    } finally {
-      setPatchBusy(false)
-    }
-  }, [])
-
-  const revertPatch = useCallback(async (id: string): Promise<void> => {
-    setError(null)
-    setPatchBusy(true)
-    try {
-      const updated = await window.klyro.patchRevert(id)
-      setPatches((previous) => previous.map((patch) => (patch.id === id ? updated : patch)))
-      setProject(await window.klyro.projectStatus())
-    } catch (caught) {
-      setError((caught as Error).message)
-    } finally {
-      setPatchBusy(false)
-    }
-  }, [])
-
-  const discardPatch = useCallback(async (id: string): Promise<void> => {
-    setError(null)
-    try {
-      setPatches(await window.klyro.patchDiscard(id))
-    } catch (caught) {
-      setError((caught as Error).message)
     }
   }, [])
 
@@ -425,20 +307,6 @@ export function useStudio(): StudioController {
   }, [])
 
   return {
-    project,
-    indexing,
-    codeOutput,
-    codeCitations,
-    codeBusy,
-    patches,
-    patchBusy,
-    proposePatch,
-    applyPatch,
-    revertPatch,
-    discardPatch,
-    runCodeAction,
-    indexProject,
-    clearProject,
     meetings,
     recording,
     liveSegments,
@@ -452,6 +320,7 @@ export function useStudio(): StudioController {
     deleteMeeting,
     discardRecording,
     transcribeError,
+    refreshMeetings,
     workflows,
     workflowInput,
     setWorkflowInput,

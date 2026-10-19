@@ -37,6 +37,21 @@ export interface AppSettings {
   allowUnencryptedSecrets: boolean
   /** Opt-in crash/diagnostics capture (local files; upload only via explicit endpoint). */
   diagnosticsOptIn: boolean
+  /**
+   * Private mode for the quick-ask overlay: excluded from screen captures and
+   * shares, and it stays visible when another app takes focus. Supported on
+   * Windows and macOS; Linux/X11 has no per-window capture exclusion, so the
+   * overlay stays visible to captures there.
+   */
+  overlayPrivateMode: boolean
+  /** Overlay window opacity in percent (20–100). 100 = fully solid. */
+  overlayOpacity: number
+  /**
+   * Opt-in: allow the normal chat to call tools exposed by configured MCP
+   * servers. Every call still asks before it runs (or is declined), and each
+   * one lands in the audit log.
+   */
+  chatMcpTools: boolean
 }
 
 /** Whether a model can read images; `unknown` is honest for local/custom endpoints. */
@@ -113,16 +128,22 @@ export interface ConversationSummary {
   preview: string
 }
 
+/** One retrieved document the user explicitly pinned to the next message. */
 export interface SendChatRequest {
   conversationId: string
   content: string
   attachments?: Attachment[]
+  /** When set, replaces BM25 grounding with the full text of that document. */
+  pinnedDocumentId?: string
 }
 
 export type ChatStreamEvent =
   | { type: 'start'; conversationId: string; messageId: string; model: string; provider: ProviderId }
   | { type: 'context'; messageId: string; memories: number; documents: number }
   | { type: 'delta'; messageId: string; text: string }
+  /** A tool call wants to run; the UI must get an explicit answer. */
+  | { type: 'tool-pending'; messageId: string; callId: string; name: string; args: string }
+  | { type: 'tool-resolved'; messageId: string; callId: string; ok: boolean }
   | { type: 'done'; messageId: string }
   | { type: 'error'; messageId: string; message: string }
 
@@ -425,80 +446,6 @@ export interface GitHubIssue {
   isPullRequest: boolean
 }
 
-/* ---------- Coding mode ---------- */
-export type CodeActionKind = 'explain' | 'bugs' | 'tests' | 'refactor' | 'docs'
-
-export interface ProjectStatus {
-  root: string | null
-  files: number
-  chunks: number
-  indexedAt: number | null
-  skipped: number
-  /** What the last scan actually did, so indexing is never a black box. */
-  lastScan?: {
-    added: number
-    updated: number
-    reused: number
-    removed: number
-    skipped: number
-  }
-}
-
-/* ---------- Reviewable file edits ---------- */
-
-export type PatchStatus = 'pending' | 'applied' | 'reverted'
-
-export interface PatchRequest {
-  /** Path relative to the indexed project root. */
-  path: string
-  /** The complete proposed file contents. */
-  content: string
-}
-
-export interface PatchRecord {
-  id: string
-  path: string
-  absolutePath: string
-  /** True when the file did not exist before this patch. */
-  createdFile: boolean
-  created: number
-  appliedAt: number | null
-  revertedAt: number | null
-  status: PatchStatus
-  addedLines: number
-  removedLines: number
-  /** Hash of the file the diff was built from, so stale diffs cannot be applied. */
-  beforeHash: string
-  diff: string
-  content: string
-  backupPath: string | null
-  error: string | null
-}
-
-export interface CodeAssistRequest {
-  kind: CodeActionKind
-  code: string
-  language?: string
-  question?: string
-}
-
-export interface CodeCitation {
-  /** Workspace-relative file name as indexed. */
-  name: string
-  /** 1-based line where the cited chunk starts, or 0 when unknown. */
-  line: number
-  /** 1-based line where the cited chunk ends, when known. */
-  endLine?: number
-  /** Absolute path on disk, when known. */
-  path: string | null
-}
-
-export interface CodeAssistResult {
-  text: string
-  /** Files the answer drew on, with best-effort line locations. */
-  citations: CodeCitation[]
-}
-
 /* ---------- Meetings ---------- */
 
 export interface MeetingSegment {
@@ -515,6 +462,8 @@ export interface MeetingRecord {
   summary: string | null
   actions: string[]
   createdAt: number
+  /** Ledger of concrete actions taken on this meeting (issues filed, etc.). */
+  outputs?: MeetingOutput[]
 }
 
 export interface MeetingDraft {
@@ -522,6 +471,76 @@ export interface MeetingDraft {
   startedAt: number
   endedAt: number
   segments: MeetingSegment[]
+}
+
+/** One concrete thing Klyro did after a meeting (the "closing the loop" ledger). */
+export interface MeetingOutput {
+  at: number
+  kind: 'github-issue'
+  detail: string
+  url: string | null
+  ok: boolean
+}
+
+/* ---------- MCP connector (bring-your-own tool servers) ---------- */
+
+export interface MCPServerConfig {
+  id: string
+  name: string
+  command: string
+  args: string[]
+  env?: Record<string, string>
+}
+
+export interface MCPTool {
+  name: string
+  description?: string
+  inputSchema?: unknown
+}
+
+export interface MCPServerState {
+  config: MCPServerConfig
+  running: boolean
+  tools: MCPTool[]
+  lastError: string | null
+}
+
+export interface MCPCallResult {
+  ok: boolean
+  text: string
+}
+
+/** Function-calling spec for one MCP tool, as offered to the model. */
+export interface ToolSpec {
+  name: string
+  description: string
+  /** JSON Schema for the arguments object. */
+  parameters: Record<string, unknown>
+}
+
+/** Local, append-only record of a consequential app action (what-did-it-do log). */
+export interface AuditEntry {
+  id: string
+  at: number
+  kind: string
+  detail: string
+  meta?: Record<string, unknown>
+}
+
+/** One per-user proposed work item derived from a meeting's action items. */
+export interface ActionProposal {
+  kind: 'github-issue' | 'manual'
+  repo: string | null
+  title: string
+  body: string
+  reason: string
+}
+
+/** A proposal after execution — success or honest failure. */
+export interface ActionExecutionResult {
+  ok: boolean
+  detail: string
+  url: string | null
 }
 
 /* ---------- Security, privacy & data ---------- */
@@ -532,7 +551,7 @@ export interface SecurityStatus {
   hasPlaintextSecrets: boolean
 }
 
-export type DataScope = 'conversations' | 'memory' | 'documents' | 'project' | 'meetings' | 'agentTasks'
+export type DataScope = 'conversations' | 'memory' | 'documents' | 'meetings' | 'agentTasks'
 
 export type WorkspaceView = 'home' | 'chat' | 'screen' | 'agent' | 'workflows' | 'memory' | 'integrations'
 
@@ -552,7 +571,6 @@ export interface DataSummary {
   conversations: number
   memories: number
   documents: number
-  projectFiles: number
   meetings: number
   agentTasks: number
   credentials: number
@@ -569,7 +587,6 @@ export type WorkflowStepKind =
   | 'prompt'
   | 'githubIssues'
   | 'githubCreateIssue'
-  | 'projectSearch'
   | 'knowledge'
   | 'meetingSummary'
 
@@ -593,7 +610,6 @@ export type WorkflowStep = WorkflowStepOptions &
     | { kind: 'prompt'; template: string }
     | { kind: 'githubIssues'; repo: string }
     | { kind: 'githubCreateIssue'; repo: string; title: string; body: string }
-    | { kind: 'projectSearch'; query: string }
     | { kind: 'knowledge'; query: string }
     | { kind: 'meetingSummary'; meetingId: string }
   )
@@ -680,6 +696,8 @@ export interface KlyroApi {
 
   sendChat(req: SendChatRequest): Promise<void>
   abortChat(): Promise<void>
+  /** Answer a pending MCP tool-call approval for the running chat. */
+  chatRespondTool(callId: string, approved: boolean): Promise<void>
   onChatStream(listener: (event: ChatStreamEvent) => void): () => void
 
   listConversations(): Promise<ConversationSummary[]>
@@ -695,6 +713,29 @@ export interface KlyroApi {
 
   checkPermissions(): Promise<PermissionState>
   hideOverlay(): Promise<void>
+  /** Private-mode status for the overlay: capture exclusion support and current state. */
+  privateModeStatus(): Promise<{ supported: boolean; enabled: boolean }>
+  /** Keep the overlay visible across focus changes while meeting-assist records. */
+  setRecordingSticky(sticky: boolean): Promise<void>
+
+  /* MCP connector */
+  mcpServers(): Promise<MCPServerState[]>
+  mcpAddServer(input: { name: string; command: string; args?: string[] }): Promise<MCPServerConfig>
+  mcpRemoveServer(id: string): Promise<void>
+  mcpRefreshTools(id: string): Promise<MCPTool[]>
+  mcpCallTool(input: { serverId: string; name: string; args?: Record<string, unknown> }): Promise<MCPCallResult>
+
+  /* Post-meeting action agent */
+  meetingProposeActions(meetingId: string): Promise<{ meetingTitle: string; proposals: ActionProposal[] }>
+  meetingExecuteActions(input: { meetingId: string; proposals: ActionProposal[] }): Promise<MeetingOutput[]>
+
+  /* Audit log */
+  auditList(limit?: number): Promise<AuditEntry[]>
+  auditClear(): Promise<void>
+
+  /* Local usage ledger */
+  usageRows(): Promise<Array<{ provider: string; requests: number; toolCalls: number; failures: number }>>
+  usageClear(): Promise<void>
   securityStatus(): Promise<SecurityStatus>
   dataSummary(): Promise<DataSummary>
   dataClear(scope: DataScope): Promise<DataSummary>
@@ -733,17 +774,6 @@ export interface KlyroApi {
   githubRepos(): Promise<GitHubRepo[]>
   githubIssues(ownerRepo: string): Promise<GitHubIssue[]>
   githubCreateIssue(ownerRepo: string, title: string, body: string): Promise<GitHubIssue>
-
-  projectStatus(): Promise<ProjectStatus>
-  projectIndex(): Promise<ProjectStatus>
-  projectClear(): Promise<ProjectStatus>
-
-  patchList(): Promise<PatchRecord[]>
-  patchPropose(request: PatchRequest): Promise<PatchRecord>
-  patchApply(id: string): Promise<PatchRecord>
-  patchRevert(id: string): Promise<PatchRecord>
-  patchDiscard(id: string): Promise<PatchRecord[]>
-  codeAssist(request: CodeAssistRequest): Promise<CodeAssistResult>
 
   meetingList(): Promise<MeetingRecord[]>
   meetingSave(draft: MeetingDraft): Promise<MeetingRecord[]>

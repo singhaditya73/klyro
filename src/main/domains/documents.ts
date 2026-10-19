@@ -140,6 +140,15 @@ class DocumentDomain {
       .sort((a, b) => b.addedAt - a.addedAt)
   }
 
+  /** Full text of one document (joined chunks), or null when unknown. */
+  documentText(id: string): { name: string; text: string } | null {
+    const found = this.normalized().find((document) => document.id === id)
+    if (!found) return null
+    const text = found.chunks.map((chunk) => chunk.text).join('\n\n').trim()
+    if (!text) return null
+    return { name: found.name, text }
+  }
+
   private async extract(filePath: string): Promise<{ text: string; kind: string }> {
     const extension = extname(filePath).replace('.', '').toLowerCase()
     const info = await stat(filePath)

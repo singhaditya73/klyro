@@ -29,6 +29,29 @@ export function KnowledgePanel({ onClose }: Props) {
   // Two-step destructive confirm: first click arms the button, second click runs it.
   const [confirmClear, setConfirmClear] = useState<'memories' | 'documents' | null>(null)
 
+  // Ask-with-pinned-document: send one chat message grounded in a whole document.
+  const [askDocId, setAskDocId] = useState<string | null>(null)
+  const [askQuestion, setAskQuestion] = useState('')
+  const [askBusy, setAskBusy] = useState(false)
+  const [askNote, setAskNote] = useState<string | null>(null)
+
+  async function askDocument(documentId: string): Promise<void> {
+    const question = askQuestion.trim()
+    if (!question || askBusy) return
+    setAskBusy(true)
+    setAskNote(null)
+    try {
+      const conversation = await window.klyro.createConversation()
+      await window.klyro.sendChat({ conversationId: conversation.id, content: question, pinnedDocumentId: documentId })
+      setAskNote('Sent — the answer is streaming in your chat history.')
+      setAskQuestion('')
+    } catch (error) {
+      setAskNote((error as Error).message)
+    } finally {
+      setAskBusy(false)
+    }
+  }
+
   const github = knowledge.integrations.find((entry) => entry.id === 'github')
   const shownMemories = filter
     ? knowledge.memories.filter((record) => record.text.toLowerCase().includes(filter.toLowerCase()))
@@ -305,6 +328,37 @@ export function KnowledgePanel({ onClose }: Props) {
                         <Trash2 className="icon icon--xs" aria-hidden="true" />
                       </button>
                     </div>
+                    {askDocId === document.id ? (
+                      <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <textarea
+                          className="field"
+                          rows={2}
+                          autoFocus
+                          placeholder={`Ask anything about ${document.name} — the whole document is attached`}
+                          value={askQuestion}
+                          onChange={(event) => setAskQuestion(event.target.value)}
+                        />
+                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                          <button className="btn btn--ghost btn--sm" onClick={() => setAskDocId(null)}>
+                            <span>Cancel</span>
+                          </button>
+                          <button
+                            className="btn btn--primary btn--sm"
+                            disabled={!askQuestion.trim() || askBusy}
+                            onClick={() => void askDocument(document.id)}
+                          >
+                            {askBusy ? <Loader2 className="icon icon--xs spin" aria-hidden="true" /> : <MessageSquare className="icon icon--xs" aria-hidden="true" />}
+                            <span>Ask in chat</span>
+                          </button>
+                        </div>
+                        {askNote && <div className="muted" style={{ fontSize: 11 }}>{askNote}</div>}
+                      </div>
+                    ) : (
+                      <button className="btn btn--ghost btn--sm" style={{ marginTop: 10 }} onClick={() => { setAskDocId(document.id); setAskQuestion(''); setAskNote(null) }}>
+                        <MessageSquare className="icon icon--xs" aria-hidden="true" />
+                        <span>Ask about this</span>
+                      </button>
+                    )}
                     <div className="card__text muted">{document.excerpt}</div>
                   </div>
                 ))

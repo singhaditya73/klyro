@@ -66,10 +66,6 @@ export const IPC = {
   githubIssues: 'integration:github:issues',
   githubCreateIssue: 'integration:github:createIssue',
 
-  projectStatus: 'project:status',
-  projectIndex: 'project:index',
-  projectClear: 'project:clear',
-  codeAssist: 'code:assist',
 
   meetingList: 'meeting:list',
   meetingSave: 'meeting:save',
@@ -88,14 +84,33 @@ export const IPC = {
   workflowCancel: 'workflow:cancel',
   workflowEvent: 'workflow:event',
 
-  patchList: 'patch:list',
-  patchPropose: 'patch:propose',
-  patchApply: 'patch:apply',
-  patchRevert: 'patch:revert',
-  patchDiscard: 'patch:discard',
 
   windowHideOverlay: 'window:hideOverlay',
-  windowToggleOverlay: 'window:toggleOverlay'
+  windowToggleOverlay: 'window:toggleOverlay',
+  windowPrivateModeStatus: 'window:privateModeStatus',
+  overlaySetRecordingSticky: 'overlay:setRecordingSticky',
+
+  /* MCP connector */
+  mcpServers: 'mcp:servers',
+  mcpAddServer: 'mcp:addServer',
+  mcpRemoveServer: 'mcp:removeServer',
+  mcpRefreshTools: 'mcp:refreshTools',
+  mcpCallTool: 'mcp:callTool',
+
+  /* Post-meeting action agent + output ledger */
+  meetingProposeActions: 'meetings:proposeActions',
+  meetingExecuteActions: 'meetings:executeActions',
+
+  /* Audit log */
+  auditList: 'audit:list',
+  auditClear: 'audit:clear',
+
+  /* Tool approvals (chat MCP loop) */
+  chatRespondTool: 'chat:respondTool',
+
+  /* Local usage ledger */
+  usageRows: 'usage:rows',
+  usageClear: 'usage:clear'
 } as const
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC]

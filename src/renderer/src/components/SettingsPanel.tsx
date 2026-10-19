@@ -10,7 +10,7 @@ import type {
   SecurityStatus
 } from '@shared/types'
 import { useModal } from '../hooks/useModal'
-import { Loader2, CheckCircle, AlertCircle, Shield, ShieldQuestion, HardDrive, Trash2, Broom, Database, Key, Zap, X, ExternalLink } from 'lucide-react'
+import { Loader2, CheckCircle, AlertCircle, Shield, ShieldQuestion, HardDrive, Trash2, Download, Broom, Database, Key, Zap, X, ExternalLink } from 'lucide-react'
 import KlyroMark from '../assets/logo/klyro-mark.svg'
 
 interface Props {
@@ -21,6 +21,138 @@ function formatBytesLocal(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+/** Local per-provider request ledger: BYOK users deserve an honest counter. */
+function UsageSection() {
+  const [rows, setRows] = useState<Array<{ provider: string; requests: number; toolCalls: number; failures: number }>>([])
+
+  useEffect(() => {
+    void window.klyro.usageRows().then(setRows)
+  }, [])
+
+  const providerLabel = (id: string): string => id.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+
+  return (
+    <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid var(--border-subtle)' }}>
+      <h4>
+        <Zap className="icon icon--sm" aria-hidden="true" />
+        <span style={{ marginLeft: '8px' }}>Provider usage</span>
+      </h4>
+      <div className="muted" style={{ marginTop: '8px', fontSize: '12px' }}>
+        How many model requests Klyro made on each provider's key. Counted locally, reset when you clear it. Transcription chunks are skipped for silence in listen mode, so quiet minutes cost nothing.
+      </div>
+      {rows.length > 0 ? (
+        <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          {rows.map((row) => (
+            <div key={row.provider} className="data-row" style={{ padding: '6px 8px', fontSize: '12px', gap: 8 }}>
+              <span style={{ fontWeight: 600 }}>{providerLabel(row.provider)}</span>
+              <span className="pill">{row.requests} request{row.requests === 1 ? '' : 's'}</span>
+              {row.toolCalls > 0 && <span className="pill">{row.toolCalls} tool call{row.toolCalls === 1 ? '' : 's'}</span>}
+              {row.failures > 0 && <span className="pill">{row.failures} failed</span>}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="muted" style={{ marginTop: '12px', fontSize: '12px' }}>No provider requests counted yet.</div>
+      )}
+      {rows.length > 0 && (
+        <div className="data-row" style={{ marginTop: 12 }}>
+          <span />
+          <button className="btn btn--ghost btn--sm" onClick={() => void window.klyro.usageClear().then(() => setRows([]))}>
+            <Trash2 className="icon icon--xs" aria-hidden="true" />
+            <span>Reset counters</span>
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** The local "what did Klyro do" log — agent actions, MCP tool calls, meeting outputs. */
+function AuditLogSection() {
+  const [entries, setEntries] = useState<Array<{ at: number; kind: string; detail: string; url?: string }>>([])
+  const [limit, setLimit] = useState(25)
+
+  useEffect(() => {
+    let cancelled = false
+    const load = (): void => {
+      void window.klyro.auditList(200).then((all) => {
+        if (!cancelled) setEntries(all.slice(0, limit))
+      })
+    }
+    load()
+    const timer = window.setInterval(load, 10000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [limit])
+
+  return (
+    <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid var(--border-subtle)' }}>
+      <h4>
+        <Shield className="icon icon--sm" aria-hidden="true" />
+        <span style={{ marginLeft: '8px' }}>Audit log</span>
+      </h4>
+      <div className="muted" style={{ marginTop: '8px', fontSize: '12px' }}>
+        Everything consequential Klyro did — agent actions, MCP tool calls, issues filed from meetings. Local only, never sent anywhere, cleared with the button below.
+      </div>
+      {entries.length > 0 && (
+        <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          {entries.map((entry, index) => (
+            <div key={index} className="data-row" style={{ padding: '6px 8px', fontSize: '12px', gap: 8 }}>
+              <span className="muted" style={{ flexShrink: 0 }}>{new Date(entry.at).toLocaleString()}</span>
+              <span className="pill">{entry.kind}</span>
+              <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{entry.detail}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="data-row" style={{ marginTop: 12 }}>
+        <span>
+          {entries.length > 0
+            ? `Showing last ${entries.length} event${entries.length === 1 ? '' : 's'}`
+            : 'No events recorded yet.'}
+        </span>
+        <span style={{ display: 'flex', gap: 8 }}>
+          {entries.length < limit && limit < 200 && (
+            <button className="btn btn--ghost btn--sm" onClick={() => setLimit((previous) => Math.min(200, previous + 50))}>
+              <span>Show more</span>
+            </button>
+          )}
+          <button
+            className="btn btn--ghost btn--sm"
+            disabled={entries.length === 0}
+            onClick={() =>
+              void window.klyro.auditList(2000).then((all) => {
+                const blob = new Blob([JSON.stringify(all, null, 2)], { type: 'application/json' })
+                const url = URL.createObjectURL(blob)
+                const anchor = document.createElement('a')
+                anchor.href = url
+                anchor.download = `klyro-audit-${new Date().toISOString().slice(0, 10)}.json`
+                anchor.click()
+                URL.revokeObjectURL(url)
+              })
+            }
+          >
+            <Download className="icon icon--xs" aria-hidden="true" />
+            <span>Export JSON</span>
+          </button>
+          <button
+            className="btn btn--ghost btn--sm"
+            disabled={entries.length === 0}
+            onClick={() => {
+              void window.klyro.auditClear().then(() => setEntries([]))
+            }}
+          >
+            <Trash2 className="icon icon--xs" aria-hidden="true" />
+            <span>Clear log</span>
+          </button>
+        </span>
+      </div>
+    </div>
+  )
 }
 
 export function SettingsPanel({ onClose }: Props) {
@@ -275,6 +407,25 @@ export function SettingsPanel({ onClose }: Props) {
             <span className="field__label">Quick-ask shortcut</span>
             <input value={settings.toggleShortcut} onChange={(event) => void patch({ toggleShortcut: event.target.value })} className="field" />
           </label>
+          <label className="field" style={{ marginTop: '16px' }}>
+            <span className="field__label">
+              Overlay visibility {settings.overlayOpacity === 100 ? '— solid' : `— ${settings.overlayOpacity}% opacity`}
+              {settings.overlayOpacity < 50 ? ' (very transparent: it may be hard to read while a share excludes it anyway)' : ''}
+            </span>
+            <input
+              type="range"
+              min={20}
+              max={100}
+              step={5}
+              value={settings.overlayOpacity}
+              onChange={(event) => void patch({ overlayOpacity: Number(event.target.value) })}
+              className="field"
+              aria-label="Overlay window opacity percentage"
+            />
+            <span className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+              How see-through the quick-ask overlay is. Capture exclusion (Private mode) is unaffected — the overlay is hidden from shares and captures at any opacity. The top bar and the Klyro wordmark are drag handles.
+            </span>
+          </label>
 
           {permissions && (
             <div className="permissions-section" style={{ marginTop: '16px' }}>
@@ -306,6 +457,20 @@ export function SettingsPanel({ onClose }: Props) {
             <span className="field__label">Max steps per task</span>
             <input type="number" min={1} max={30} value={settings.agentMaxSteps} onChange={(event) => void patch({ agentMaxSteps: Number(event.target.value) || 1 })} className="field" />
           </label>
+
+          <h4 style={{ margin: '24px 0 12px', fontSize: '13px', fontWeight: 600 }}>Tools in chat</h4>
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={settings.chatMcpTools}
+              onChange={(event) => void patch({ chatMcpTools: event.target.checked })}
+            />
+            <span>Let chat call MCP server tools (each call asks Allow / Deny first)</span>
+          </label>
+          <div className="muted" style={{ marginTop: '8px', fontSize: '12px' }}>
+            Configure servers under Integrations → MCP servers. Every approved call is audited locally; nothing runs without your explicit answer.
+          </div>
+
           {automation && (
             <div className="permissions-section" style={{ marginTop: '16px' }}>
               <h4>Automation backend</h4>
@@ -414,13 +579,6 @@ export function SettingsPanel({ onClose }: Props) {
                 </button>
               </div>
               <div className="data-row">
-                <span>Indexed project files: {data.projectFiles}</span>
-                <button className="btn btn--ghost btn--sm" onClick={() => void clearScope('project')}>
-                  <Trash2 className="icon icon--xs" aria-hidden="true" />
-                  <span>Clear</span>
-                </button>
-              </div>
-              <div className="data-row">
                 <span>Meetings: {data.meetings}</span>
                 <button className="btn btn--ghost btn--sm" onClick={() => void clearScope('meetings')}>
                   <Trash2 className="icon icon--xs" aria-hidden="true" />
@@ -496,6 +654,9 @@ export function SettingsPanel({ onClose }: Props) {
                   </div>
                 )}
               </div>
+
+              <UsageSection />
+              <AuditLogSection />
             </div>
           )}
         </section>

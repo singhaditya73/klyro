@@ -3,7 +3,6 @@ import type { StorageReport } from '@shared/types'
 import { logger } from '../logger'
 import { quarantinedFiles } from '../store/json-store'
 import { measureStorage, sweepStorage } from '../store/storage'
-import { patches } from './patches'
 
 /**
  * Housekeeping for what Klyro leaves on disk.
@@ -22,9 +21,7 @@ class MaintenanceDomain {
 
   sweep(): StorageReport {
     const root = app.getPath('userData')
-    // A backup is only needed while an applied patch can still be reverted.
-    const keep = new Set(patches.referencedBackups())
-    const result = sweepStorage(root, keep)
+    const result = sweepStorage(root, new Set<string>())
     if (result.removedTempFiles > 0 || result.removedBackups > 0) {
       logger.info(
         `Storage: removed ${result.removedTempFiles} unfinished write(s) and ${result.removedBackups} stale backup(s), freeing ${result.freedBytes} bytes`

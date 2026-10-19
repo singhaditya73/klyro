@@ -1,6 +1,8 @@
 import type { ChatMessage } from '@shared/types'
 import { Copy, Check } from 'lucide-react'
 import { useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { formatClock } from '../lib/format'
 
 export interface MessageContext {
@@ -50,8 +52,14 @@ export function MessageBubble({ message, context }: { message: ChatMessage; cont
           ))}
         </div>
       )}
-      <div className="message__body">
-        {message.content || (message.role === 'assistant' ? <span className="muted">&#8230;</span> : '')}
+      <div className="message__body message__body--md">
+        {message.content ? (
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+        ) : message.role === 'assistant' ? (
+          <span className="muted">&#8230;</span>
+        ) : (
+          ''
+        )}
       </div>
     </div>
   )

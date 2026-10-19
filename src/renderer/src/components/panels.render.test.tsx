@@ -55,12 +55,12 @@ describe('lazy-loaded panels', () => {
     expect(html).toContain('role="dialog"')
   })
 
-  it('renders the studio panel with all three tabs', () => {
+  it('renders the studio panel as a single meetings surface', () => {
     const html = renderToStaticMarkup(<StudioPanel onClose={noop} />)
-    expect(html).toContain('Studio')
-    expect(html).toContain('Coding')
-    expect(html).toContain('Meetings (0)')
-    expect(html).toContain('Workflows (0)')
+    expect(html).toContain('Meetings')
+    expect(html).toContain('No meetings saved yet')
+    expect(html).not.toContain('Coding')
+    expect(html).not.toContain('Workflows (')
   })
 
   it('renders the settings panel with a loading state while settings load', () => {

@@ -24,6 +24,7 @@ import { withIdleTimeout } from '../util/idle-timeout'
 import { withTimeout } from '../util/with-timeout'
 import { buildKnowledgeContext } from './context'
 import { conversations } from './conversations'
+import { usage } from './usage'
 import { documents } from './documents'
 import { github } from './integrations'
 import { meetings } from './meetings'
@@ -77,30 +78,6 @@ export const BUILTIN_WORKFLOWS: WorkflowRecord[] = [
     ]
   },
   {
-    id: 'builtin:explain-area',
-    version: WORKFLOW_SCHEMA_VERSION,
-    name: 'Explain an area of the codebase',
-    description: 'Explain how a subsystem fits together, citing the indexed files.',
-    builtin: true,
-    createdAt: 0,
-    steps: [
-      {
-        id: 'search',
-        kind: 'projectSearch',
-        name: 'Find the relevant files',
-        query: '{{input}}',
-        output: 'files'
-      },
-      {
-        id: 'explain',
-        kind: 'prompt',
-        name: 'Explain',
-        template:
-          'Relevant project files:\n\n{{steps.files}}\n\nExplain how {{input}} fits together in this project. Cite the specific files and lines shown above, describe the data flow, and call out anything surprising or fragile.'
-      }
-    ]
-  },
-  {
     id: 'builtin:notes-to-actions',
     version: WORKFLOW_SCHEMA_VERSION,
     name: 'Turn notes into action items',
@@ -131,30 +108,6 @@ export const BUILTIN_WORKFLOWS: WorkflowRecord[] = [
         name: 'Review',
         template:
           'Review this diff:\n\n```diff\n{{input}}\n```\n\nList concrete problems (bugs, regressions, unsafe assumptions, missing tests), each with the file and line it concerns and why it matters. Then state what looks fine. Do not invent context you were not given.'
-      }
-    ]
-  },
-  {
-    id: 'builtin:meeting-follow-ups',
-    version: WORKFLOW_SCHEMA_VERSION,
-    name: 'Meeting follow-ups',
-    description: 'Turn a recorded meeting into a recap and concrete follow-ups.',
-    builtin: true,
-    createdAt: 0,
-    steps: [
-      {
-        id: 'transcript',
-        kind: 'meetingSummary',
-        name: 'Read the meeting',
-        meetingId: '{{input}}',
-        output: 'meeting'
-      },
-      {
-        id: 'recap',
-        kind: 'prompt',
-        name: 'Write follow-ups',
-        template:
-          'Meeting material:\n\n{{steps.meeting}}\n\nWrite a short recap for someone who missed the call, then a numbered list of follow-ups with owners where they were mentioned. Use only what the material says.'
       }
     ]
   }
@@ -227,6 +180,7 @@ const WORKFLOW_TOOLS: Record<WorkflowStepKind, WorkflowTool> = {
       )) {
         text += delta
       }
+      usage.record(providerId, 'workflow-step')
       text = text.trim()
 
       conversations.addMessage(context.conversationId, {
@@ -268,20 +222,6 @@ const WORKFLOW_TOOLS: Record<WorkflowStepKind, WorkflowTool> = {
       const summary = `Created #${issue.number} "${issue.title}" in ${repo}\n${issue.url}`
       context.note(context.step.name, summary)
       return summary
-    }
-  },
-  projectSearch: {
-    kind: 'projectSearch',
-    label: 'Search the indexed project',
-    description: 'Find the indexed files most relevant to a query (read-only).',
-    consequential: false,
-    run: async (context) => {
-      const query = context.rendered.trim()
-      if (!query) throw new Error('This step needs a search query.')
-      const hits = documents.recall(query, 5, 'workspace')
-      if (hits.length === 0) return '(nothing indexed in this project matches that query)'
-      const body = hits.map((hit) => `${formatLocation(hit)}\n${hit.text.slice(0, 700)}`).join('\n\n')
-      return wrapUntrusted(`project search: ${query}`, body)
     }
   },
   knowledge: {

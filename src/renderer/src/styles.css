@@ -557,6 +557,33 @@ a { color: inherit; text-decoration: none; }
 .message__copy:focus-visible { opacity: 1; }
 .message__copy[aria-label='Copied'] { opacity: 1; }
 .message__body { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.65; font-size: 14px; }
+/* Rendered Markdown (chat assistant messages). Blocks manage their own
+   whitespace, so the plain-text pre-wrap above does not apply here. */
+.message__body--md { white-space: normal; }
+.message__body--md > :first-child { margin-top: 0; }
+.message__body--md > :last-child { margin-bottom: 0; }
+.message__body--md h1,
+.message__body--md h2,
+.message__body--md h3,
+.message__body--md h4 { margin: 14px 0 6px; line-height: 1.3; }
+.message__body--md h1 { font-size: 1.25em; }
+.message__body--md h2 { font-size: 1.15em; }
+.message__body--md h3,
+.message__body--md h4 { font-size: 1.05em; }
+.message__body--md p { margin: 8px 0; }
+.message__body--md ul,
+.message__body--md ol { margin: 8px 0; padding-left: 22px; }
+.message__body--md li { margin: 3px 0; }
+.message__body--md blockquote { margin: 8px 0; padding: 2px 12px; border-left: 3px solid var(--border-strong); color: var(--text-muted); }
+.message__body--md code { font-size: 0.92em; background: var(--app-background); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm, 4px); padding: 1px 5px; }
+.message__body--md pre { background: var(--app-background); border: 1px solid var(--border-subtle); border-radius: var(--radius-md, 8px); padding: 10px 12px; overflow-x: auto; margin: 8px 0; }
+.message__body--md pre code { background: none; border: none; padding: 0; }
+.message__body--md hr { border: none; border-top: 1px solid var(--border-subtle); margin: 12px 0; }
+.message__body--md a { color: var(--action-primary-bg); }
+.message__body--md table { border-collapse: collapse; margin: 10px 0; width: 100%; display: block; overflow-x: auto; font-size: 0.95em; }
+.message__body--md th,
+.message__body--md td { border: 1px solid var(--border-default); padding: 6px 10px; text-align: left; vertical-align: top; }
+.message__body--md th { background: var(--app-background); font-weight: 600; }
 .message__attachments { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .message__attachments img { max-width: 280px; max-height: 180px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); }
 
@@ -818,11 +845,37 @@ a { color: inherit; text-decoration: none; }
 
 /* ---- Overlay Window ---- */
 .overlay { height: 100vh; display: flex; flex-direction: column; gap: 10px; padding: 16px; background: var(--surface-base); border: 1px solid var(--border-strong); border-radius: 14px; }
-.overlay__bar { display: flex; align-items: center; gap: 10px; }
+/* Visual confirmation that private mode is on (like the solid border, dashed
+   only marks the state — the hiding itself is OS-level capture exclusion). */
+.overlay--private { border-style: dashed; border-color: var(--border-strong); opacity: 0.92; }
+.overlay__bar { display: flex; align-items: center; gap: 10px; -webkit-app-region: drag; }
+/* Everything interactive inside the drag bar must opt back out of dragging,
+   otherwise the private-mode eye and the voice buttons would swallow clicks.
+   The brand mark stays part of the drag region: grab Klyro anywhere on the
+   empty bar space or the wordmark and the whole overlay follows. */
+.overlay__bar button,
+.overlay__bar input,
+.overlay__bar label { -webkit-app-region: no-drag; }
+.overlay__bar .overlay__brand { padding: 2px 6px; cursor: grab; }
+.overlay__bar .overlay__brand:active { cursor: grabbing; }
 .overlay__brand { font-weight: 700; font-size: 14px; color: var(--action-primary-bg); }
 .overlay__input { flex: 1; padding: 10px 12px; background: var(--surface-raised); border: 1px solid var(--border-default); border-radius: var(--radius-md); outline: none; }
 .overlay__input:focus { border-color: var(--border-strong); }
 .overlay__answer { flex: 1; overflow-y: auto; white-space: pre-wrap; line-height: 1.55; font-size: 13px; }
+
+/* ---- Meeting assist (overlay) ---- */
+.overlay__assist { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.overlay__auto { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); cursor: pointer; }
+.overlay__source { font-size: 11px; color: var(--text-muted); border: 1px solid var(--border-subtle); border-radius: 999px; padding: 2px 8px; }
+.overlay__recdot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); display: inline-block; animation: recpulse 1.2s infinite; }
+.overlay__spin { color: var(--text-muted); animation: spin 0.9s linear infinite; }
+.overlay__transcript { max-height: 64px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--text-secondary); border-left: 2px solid var(--border-subtle); padding-left: 8px; }
+.overlay__line { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.4; }
+.overlay__note { color: var(--warning); font-size: 12px; }
+@keyframes recpulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) {
+  .overlay__recdot, .overlay__spin { animation: none; }
+}
 
 /* ---- Desktop Agent Panel ---- */
 .agent-panel {
@@ -976,3 +1029,39 @@ a { color: inherit; text-decoration: none; }
   display: inline-flex;
 }
 .search-clear:hover { color: var(--text-primary); }
+/* Tool-call approval card: an MCP tool waits for an explicit Allow / Deny. */
+.tool-approval {
+  max-width: 640px;
+  width: 100%;
+  margin: 8px auto;
+  padding: 12px 14px;
+  border: 1px solid var(--border, rgba(128, 128, 128, 0.3));
+  border-radius: var(--radius-md, 10px);
+  background: var(--bg-elevated, rgba(128, 128, 128, 0.08));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tool-approval__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+.tool-approval__args {
+  margin: 0;
+  padding: 8px 10px;
+  max-height: 140px;
+  overflow: auto;
+  font-size: 12px;
+  border-radius: var(--radius-sm, 6px);
+  background: rgba(0, 0, 0, 0.25);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.tool-approval__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}

@@ -37,7 +37,7 @@ describe('workflow validation', () => {
     const cases: Array<{ steps: WorkflowRecord['steps']; expected: RegExp }> = [
       { steps: [{ kind: 'prompt', name: 'p', template: '   ' }], expected: /template is required/ },
       { steps: [{ kind: 'githubIssues', name: 'g', repo: '' }], expected: /repository is required/ },
-      { steps: [{ kind: 'projectSearch', name: 's', query: '' }], expected: /query is required/ },
+      { steps: [{ kind: 'knowledge', name: 's', query: '' }], expected: /query is required/ },
       { steps: [{ kind: 'meetingSummary', name: 'm', meetingId: '' }], expected: /meetingId is required/ },
       { steps: [{ kind: 'githubCreateIssue', name: 'c', repo: 'a/b', title: '', body: 'x' }], expected: /title is required/ }
     ]
@@ -153,7 +153,7 @@ describe('describing steps', () => {
       record([
         { kind: 'prompt', name: 'p', template: 'do a thing' },
         { kind: 'githubIssues', name: 'g', repo: 'owner/name' },
-        { kind: 'projectSearch', name: 's', query: 'config' }
+        { kind: 'knowledge', name: 's', query: 'config' }
       ])
     )
     expect(describeStep(steps[0])).toMatch(/Ask the model/)

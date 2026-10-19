@@ -19,6 +19,8 @@ import { assertVisionCapable, resolveRoute } from '../providers/routing'
 import type { ChatTurn } from '../providers/types'
 import { JsonStore } from '../store/json-store'
 import { withIdleTimeout } from '../util/idle-timeout'
+import { audit } from './audit'
+import { usage } from './usage'
 import { coerceAction, describeAction, extractJson, mapCoords } from './agent-plan'
 import { classifyAction, expectsScreenChange, validateAgentAction, type RiskAssessment } from './agent-policy'
 import { assessActionOutcome, frameDiffRatio, type PixelFrame } from './agent-verify'
@@ -52,6 +54,9 @@ Rules:
 - Give coordinates in the screenshot's own pixel space (its size is stated below).
 - Each screenshot is taken BEFORE your action; you get a fresh one after acting.
 - Do exactly one small, verifiable action per response, then wait for the next screenshot.
+- When typing, send the complete text in ONE "type" action — never split words or
+  sentences into single-character actions (that wastes steps and makes typing
+  visibly unreliable).
 - Never type passwords, payment card numbers, or other secrets.
 - Set "requiresConfirmation": true for anything that changes state or is hard to undo: sending messages or email, submitting forms, deleting data, making purchases, accepting dialogs, changing settings.
 - If the goal is already achieved, respond {"type":"done","summary":"..."}.
@@ -335,6 +340,7 @@ export class AgentRunner {
     } finally {
       handle.controller.signal.removeEventListener('abort', forwardAbort)
     }
+    usage.record(providerId, 'agent-step', { failed: false })
 
     const action = coerceAction(extractJson(text))
     const validation = validateAgentAction(action, { width: frame.imageWidth, height: frame.imageHeight })
@@ -477,6 +483,7 @@ export class AgentRunner {
       record.finishedAt = Date.now()
       record.state = state
       record.outcome = outcome
+      audit.record('agent.run', `Agent run "${handle.goal.slice(0, 80)}" finished: ${outcome}`, { runId: handle.runId })
       record.summary = summary
       record.errorCategory = category
       record.steps = steps
@@ -622,6 +629,7 @@ export class AgentRunner {
       history.push(`${describeAction(action)} -> FAILED: ${result.detail}`)
       return
     }
+    audit.record('agent.action', describeAction(action))
 
     // Submitted successfully — now see whether the screen actually changed.
     let assessment: ReturnType<typeof assessActionOutcome>

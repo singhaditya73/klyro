@@ -29,8 +29,10 @@ const TEXT_ONLY_PATTERNS: Partial<Record<ProviderId, RegExp>> = {
   openai: /^(gpt-3\.5|gpt-4(-\d{4})?$|gpt-4-turbo-preview|davinci|babbage|text-|o1-mini|o3-mini)/i,
   anthropic: /^claude-2/i,
   gemini: /(^gemini-1\.0-pro|embedding|^text-)/i,
-  // Groq's gpt-oss and llama-4 line serves text (and tool use) but no vision yet.
-  groq: /(groq\/compound|^playai|^whisper|^guard|^orpheus)/i
+  // Groq's gpt-oss (and its OpenAI-prefixed serving) serves text (and tool
+  // use) but no vision, nor do the compound, playai, whisper, guard or
+  // orpheus lines (llama-4 stays honestly unknown — vision there is per-model).
+  groq: /(groq\/compound|^playai|^whisper|^guard|^orpheus|gpt-oss)/i
 }
 
 /** Models known to accept images, per provider. */

@@ -1,0 +1,44 @@
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { describe, expect, it, vi } from 'vitest'
+
+const userData = mkdtempSync(join(tmpdir(), 'klyro-audit-'))
+
+vi.mock('electron', () => ({
+  app: { getPath: () => userData, on: () => undefined }
+}))
+
+const { audit } = await import('./audit')
+
+describe('audit log', () => {
+  it('records, lists newest-first, and clears', () => {
+    audit.record('agent.action', 'typed "hello" in app', { runId: 'r1' })
+    audit.record('meeting.actions', 'filed 2 issue(s) from "Standup"', { ok: true })
+    audit.record('mcp.tool-call', 'Called echo on an MCP server', { ok: true })
+
+    const entries = audit.list()
+    expect(entries).toHaveLength(3)
+    const atTimes = entries.map((entry) => entry.at)
+    expect(atTimes.every((value, index) => index === 0 || atTimes[index - 1] >= value)).toBe(true)
+    expect(new Set(entries.map((entry) => entry.kind))).toEqual(new Set(['agent.action', 'meeting.actions', 'mcp.tool-call']))
+    expect(entries.every((entry) => entry.at > 0 && entry.id)).toBe(true)
+    expect(entries.find((entry) => entry.kind === 'agent.action')?.meta).toEqual({ runId: 'r1' })
+    expect(entries.find((entry) => entry.kind === 'mcp.tool-call')?.meta).toEqual({ ok: true })
+    expect(entries.find((entry) => entry.kind === 'meeting.actions')?.meta).toEqual({ ok: true })
+
+    const limited = audit.list(1)
+    expect(limited).toHaveLength(1)
+    expect(limited[0]).toEqual(entries[0])
+
+    audit.clear()
+    expect(audit.list()).toHaveLength(0)
+  })
+
+  it('collapses whitespace and truncates very long details', () => {
+    audit.record('test.kind', 'line one\n\tline   two'.repeat(30))
+    const [entry] = audit.list(1)
+    expect(entry.detail).not.toMatch(/\n/)
+    expect(entry.detail.length).toBeLessThanOrEqual(500)
+  })
+})

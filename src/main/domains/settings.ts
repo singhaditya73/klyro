@@ -21,7 +21,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   knowledgeEnabled: true,
   documentRecallCount: 4,
   allowUnencryptedSecrets: false,
-  diagnosticsOptIn: false
+  diagnosticsOptIn: false,
+  overlayPrivateMode: false,
+  overlayOpacity: 100,
+  chatMcpTools: false
 }
 
 class SettingsDomain {

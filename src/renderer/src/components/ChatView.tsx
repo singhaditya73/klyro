@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Attachment, ChatMessage } from '@shared/types'
 import { Composer } from './Composer'
 import { MessageBubble, type MessageContext } from './MessageBubble'
-import { ChevronUp } from 'lucide-react'
+import { Check, ChevronUp, Square } from 'lucide-react'
 import KlyroMark from '../assets/logo/klyro-mark.svg'
 
 interface Props {
@@ -14,6 +14,9 @@ interface Props {
   onSend: (content: string, attachments: Attachment[]) => void | Promise<void>
   onStop: () => void
   onNewChat: () => void | Promise<void>
+  /** A tool call waiting for an explicit Allow / Deny. */
+  pendingTool?: { callId: string; name: string; args: string } | null
+  onRespondTool?: (approved: boolean) => void | Promise<void>
 }
 
 export function ChatView({
@@ -24,7 +27,9 @@ export function ChatView({
   onLoadEarlier,
   onSend,
   onStop,
-  onNewChat
+  onNewChat,
+  pendingTool = null,
+  onRespondTool
 }: Props) {
   const endRef = useRef<HTMLDivElement | null>(null)
   const previous = useRef<{ first?: string; last?: string }>({})
@@ -78,6 +83,29 @@ export function ChatView({
               <span className="message__role">Klyro</span>
             </div>
             <div className="message__body">&nbsp;</div>
+          </div>
+        )}
+        {pendingTool && onRespondTool && (
+          <div className="tool-approval" role="alertdialog" aria-label="Tool call approval">
+            <div className="tool-approval__title">
+              <span className="tool-approval__icon" aria-hidden="true">🔧</span>
+              <span>
+                <strong>{pendingTool.name}</strong> wants to run on a connected MCP server
+              </span>
+            </div>
+            {pendingTool.args.trim() && pendingTool.args.trim() !== '{}' ? (
+              <pre className="tool-approval__args">{pendingTool.args}</pre>
+            ) : null}
+            <div className="tool-approval__actions">
+              <button className="btn btn--ghost" onClick={() => void onRespondTool(false)}>
+                <Square size={13} aria-hidden="true" />
+                <span>Deny</span>
+              </button>
+              <button className="btn btn--primary" onClick={() => void onRespondTool(true)}>
+                <Check size={13} aria-hidden="true" />
+                <span>Allow</span>
+              </button>
+            </div>
           </div>
         )}
         <div ref={endRef} />

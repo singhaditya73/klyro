@@ -15,20 +15,23 @@ const PANEL_VIEWS: Partial<Record<WorkspaceView, string>> = {
   memory: 'knowledge',
 }
 
+// Lazy panels are created once at module scope: a `lazy()` formed inside the
+// component body produces a fresh component identity every render, which
+// unmounts and remounts the whole panel — visibly resetting focus (the agent
+// goal textarea lost its caret after every keystroke) and re-running effects.
+const SettingsPanel = lazy(() => import('./components/SettingsPanel').then((module) => ({ default: module.SettingsPanel })))
+const AgentPanel = lazy(() => import('./components/AgentPanel').then((module) => ({ default: module.AgentPanel })))
+const KnowledgePanel = lazy(() => import('./components/KnowledgePanel').then((module) => ({ default: module.KnowledgePanel })))
+const StudioPanel = lazy(() => import('./components/StudioPanel').then((module) => ({ default: module.StudioPanel })))
+const WorkflowsView = lazy(() => import('./components/WorkflowsView').then((module) => ({ default: module.WorkflowsView })))
+const IntegrationsView = lazy(() => import('./components/IntegrationsView').then((module) => ({ default: module.IntegrationsView })))
+
 export default function App() {
   const chat = useChat()
   const agent = useAgent()
   const [activeView, setActiveView] = useState<WorkspaceView>('home')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-
-  // Panels loaded on demand
-  const SettingsPanel = lazy(() => import('./components/SettingsPanel').then((module) => ({ default: module.SettingsPanel })))
-  const AgentPanel = lazy(() => import('./components/AgentPanel').then((module) => ({ default: module.AgentPanel })))
-  const KnowledgePanel = lazy(() => import('./components/KnowledgePanel').then((module) => ({ default: module.KnowledgePanel })))
-  const StudioPanel = lazy(() => import('./components/StudioPanel').then((module) => ({ default: module.StudioPanel })))
-  const WorkflowsView = lazy(() => import('./components/WorkflowsView').then((module) => ({ default: module.WorkflowsView })))
-  const IntegrationsView = lazy(() => import('./components/IntegrationsView').then((module) => ({ default: module.IntegrationsView })))
 
   // Keep track of open panels
   const [openPanels, setOpenPanels] = useState<Record<string, boolean>>({
@@ -119,6 +122,8 @@ export default function App() {
             onSend={chat.send}
             onStop={chat.stop}
             onNewChat={() => void chat.newConversation()}
+            pendingTool={chat.pendingTool}
+            onRespondTool={(approved) => void chat.respondTool(approved)}
           />
         )
       case 'screen':

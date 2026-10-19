@@ -25,3 +25,8 @@ Thumbs.db
 
 # Test / coverage
 coverage/
+
+# Local runtime data (smoke/dev writes stores next to the repo)
+audit.json
+mcp.json
+usage.json

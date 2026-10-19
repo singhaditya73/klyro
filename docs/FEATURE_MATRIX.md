@@ -6,7 +6,7 @@ Status legend: **✅ done** · **🟡 partial** · **⬜ planned**
 
 | Feature | Status | Notes |
 | --- | --- | --- |
-| 1.1 Floating assistant window | ✅ | Frameless always-on-top overlay window |
+| 1.1 Floating assistant window | ✅ | Frameless always-on-top overlay window; **user-controlled opacity (20–100%, 0.3.3)** via window-level transparency; explicit drag handles (top bar + Klyro wordmark), interactive controls excluded from dragging |
 | 1.2 Global shortcut to show/hide | ✅ | Default `Ctrl/Cmd+Shift+Space` (configurable) |
 | 1.3 Text questions | ✅ | Streaming chat |
 | 1.4 Voice input | 🟡 | Record → transcribe via OpenAI-compatible `/audio/transcriptions`; local Whisper supported |
@@ -19,8 +19,8 @@ Status legend: **✅ done** · **🟡 partial** · **⬜ planned**
 | 2.4 Conversation context across turns | ✅ | Persisted history |
 | 3.1 Microphone capture with consent | ✅ | `getUserMedia` + visible recording state |
 | 3.2 Live transcription | 🟡 | Push-to-talk transcription; continuous streaming planned |
-| 3.3—3.4 Real-time suggestions | ⬜ | No live suggestion overlay yet |
-| 4.1 Meeting transcripts / summaries | 🟡 | Chunked recording → transcript → summary + action items. No live in-call overlay yet |
+| 3.3—3.4 Real-time suggestions | 🟡 | Overlay "Listen" mode: 20s chunked transcription of meeting audio, question heuristic, auto-answers shown in the overlay (rate-limited on free Groq tiers) |
+| 4.1 Meeting transcripts / summaries | ✅ | Chunked recording → transcript → summary + action items; overlay listen/record assist; post-meeting action agent with output ledger |
 | 5.1 Saved + searchable history | ✅ | Local JSON store + search |
 | 5.2 Custom instructions / preferences | ✅ | System prompt + response style |
 | 6.1 Provider abstraction | ✅ | OpenAI-compatible, Anthropic, Gemini, Ollama |
@@ -34,12 +34,13 @@ Status legend: **✅ done** · **🟡 partial** · **⬜ planned**
 | --- | --- | --- |
 | 7. Autonomous desktop agent | 🟡 | Observe → plan → act loop with per-action confirmation, cancellation, and persisted task history. Requires a system input backend (see below). |
 | 8. Persistent personal memory | ✅ | Local store, BM25 recall injected into every prompt, pinning, near-duplicate suppression, optional automatic fact extraction |
-| 9. Integrations (GitHub, Drive, …) | 🟡 | GitHub done (account, repos, issues, create issue). Drive/others planned |
-| 10. AI coding mode | 🟡 | Workspace indexing + grounded code actions (explain, bugs, tests, refactor, docs). No editor integration yet |
-| 11. Reusable skills / workflows | ✅ | Named multi-step workflows (prompt + GitHub steps), 4 built-ins, custom creation, runs land in a real conversation |
-| 12. Document & research intelligence | 🟡 | Local document import (text, code, HTML, PDF via `pdftotext`, Office via `unzip`) + BM25 grounding. Web research planned |
-| 13. Productivity / task management | 🟡 | Meeting action items and workflow runs; no task board yet |
-| 14. Trust, security, reliability | 🟡 | Sandboxed renderer with context isolation, origin-validated IPC, encrypted keys, encrypted-at-rest secrets, navigation guards, locked-down CSP, microphone-only permission policy, idle-timeout on model streams |
+| 9. Integrations (GitHub, Drive, …) | 🟡 | GitHub done (account, repos, issues, create issue). **MCP connector done**: bring-your-own local stdio MCP servers — list tools, invoke tools, every call audited. **Tool-calling in chat done (0.3.2)**: opt-in — chat can call MCP tools through an approval-gated loop (Allow/Deny per call, max 5 tool rounds, audited). Drive/others planned |
+| 10. AI coding mode | ⬜ | Deliberately cut in 0.3.1: "work on code" belongs to the desktop agent (which any editor/index can feed via MCP). No coding surface of its own |
+| 11. Reusable skills / workflows | ✅ | Named multi-step workflows, 3 built-ins (standup, notes-to-actions, diff review), custom creation, runs land in a real conversation — one surface (Workflows view), deduplicated |
+| 12. Document & research intelligence | 🟡 | Local document import (text, code, HTML, PDF via `pdftotext`, Office via `unzip`) + BM25 grounding. **"Ask about this" (0.3.2)**: ground one chat message in the full text of a pinned document. Web research planned |
+| 13. Productivity / task management | 🟡 | Meeting action items, workflow runs, and the **post-meeting action agent**: proposes issues from action items, user approves, Klyro executes, outcomes land in a per-meeting output ledger |
+| 14. Trust, security, reliability | 🟡 | Sandboxed renderer with context isolation, origin-validated IPC, encrypted keys, encrypted-at-rest secrets, navigation guards, locked-down CSP, microphone-only permission policy, idle-timeout on model streams, and a **local audit log** (agent actions, MCP tool calls, meeting outputs — exportable as JSON, clearable, never sent anywhere) |
+| 15. Usage & cost honesty | ✅ | Local per-provider request ledger (Settings → Provider usage): requests, tool calls, failures. **RMS silence gate (0.3.2)**: listen mode skips transcription on silence-only chunks, so quiet meeting minutes cost zero provider calls |
 
 ## Desktop agent (Stage B)
 
@@ -90,13 +91,11 @@ device except as part of the prompt you send to your chosen provider.
 
 ## Studio (Stage D)
 
-**Coding mode** — point Klyro at a project folder and it indexes the source tree
-into the same store as your documents (`node_modules`, build output, lockfiles and
-minified bundles are skipped; 512 KB per file, 1500 files, depth 12). Indexed
-files then ground *all* answers — normal chat, code actions, and workflow prompts.
-Paste a snippet or a diff and choose **Explain / Find bugs / Write tests /
-Refactor / Document**; each answer is produced with the most relevant indexed
-files attached as reference, so it can follow your conventions.
+**Meetings mode** — record a meeting (or use the overlay's live assist), transcribe
+in chunks, save, summarise, and act on the output: the post-meeting action agent
+turns action items into reviewed GitHub issues and records the outcome in a
+per-meeting ledger. *(Coding mode was cut in 0.3.1 — file work now flows through
+the desktop agent rather than a parallel surface.)*
 
 **Meeting intelligence** — record from the microphone; audio is transcribed in
 ~15 second chunks and timestamped live. Saving stores the transcript locally and
@@ -107,8 +106,8 @@ with a bullet-list fallback when a model ignores the format).
 **Workflows** — named, multi-step sequences that run inside a real conversation,
 so you can keep asking follow-ups afterwards. Steps are either a **prompt**
 (`{{input}}` and `{{prev}}` placeholders) or a **GitHub** fetch, and each step's
-output feeds the next. Four built-ins ship: *Standup from GitHub issues*, *Explain
-an area of the codebase*, *Turn notes into action items*, and *Review a diff*.
+output feeds the next. Three built-ins ship: *Standup from GitHub issues*,
+*Turn notes into action items*, and *Review a diff*.
 
 ## Hardening, packaging & release (Stage E)
 
@@ -147,7 +146,7 @@ render, the preload bridge is present, and the renderer logged no errors.
   verification, permissions, cancellation, recovery).
 - **Stage C (done):** personal memory, local document understanding, first
   integrations.
-- **Stage D (done):** coding mode, meeting intelligence, reusable workflows.
+- **Stage D (done):** meeting intelligence, reusable workflows; coding mode later cut (see 0.3.1).
 - **Stage E (done):** performance, security hardening, accessibility, packaging,
   release automation.
 

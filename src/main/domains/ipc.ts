@@ -2,34 +2,34 @@ import { app, ipcMain } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import { z } from 'zod'
 import { IPC } from '@shared/ipc'
-import type { AppSettings, DataScope, DataSummary, PatchRequest, ProviderId, SendChatRequest, SecurityStatus, WorkflowDraft } from '@shared/types'
+import type { AppSettings, DataScope, DataSummary, ProviderId, SendChatRequest, SecurityStatus, WorkflowDraft } from '@shared/types'
 import { logger } from '../logger'
 import { getProvider } from '../providers'
 import { PROVIDER_IDS } from '../providers/defaults'
 import { isTrustedRendererUrl } from '../security/origins'
 import { secrets } from '../security/secrets'
-import { sendChat, abortChat } from './chat'
+import { sendChat, abortChat, respondTool } from './chat'
 import { agentRunner } from './agent'
 import { automation } from './automation'
 import { documents } from './documents'
-import { code } from './code'
 import { diagnostics } from '../diagnostics'
 import { integrationStatuses, github, integrationTest } from './integrations'
 import { meetings } from './meetings'
 import { maintenance } from './maintenance'
 import { memory } from './memory'
 import { privacy } from './privacy'
-import { patches } from './patches'
-import { project } from './project'
 import { workflows } from './workflows'
 import { transcribeAudio } from './audio'
+import { applyOverlayOpacity, applyOverlayPrivateMode, getOverlayWindow, overlayPrivateModeSupported, setOverlayStickyRecording } from './windows'
 import { conversations } from './conversations'
 import { checkPermissions } from './permissions'
 import { grabScreen, listCaptureSources } from './screenshot'
 import { settingsDomain } from './settings'
 import { registerShortcuts } from './shortcuts'
-import { getOverlayWindow } from './windows'
-
+import { mcp } from './mcp'
+import { actions } from './actions'
+import { audit } from './audit'
+import { usage } from './usage'
 /** Reject IPC from any frame that is not Klyro's own renderer. */
 function assertTrusted(event: IpcMainInvokeEvent): void {
   const url = event.senderFrame?.url ?? ''
@@ -72,7 +72,10 @@ const settingsPatchSchema = z
     memoryRecallCount: z.number().int().min(1).max(20).optional(),
     knowledgeEnabled: z.boolean().optional(),
     documentRecallCount: z.number().int().min(1).max(10).optional(),
+    chatMcpTools: z.boolean().optional(),
     allowUnencryptedSecrets: z.boolean().optional(),
+    overlayPrivateMode: z.boolean().optional(),
+    overlayOpacity: z.number().int().min(20).max(100).optional(),
     diagnosticsOptIn: z.boolean().optional(),
     providers: z
       .record(z.string(), z.object({ baseUrl: z.string().max(500), model: z.string().max(200) }))
@@ -93,6 +96,8 @@ const sendChatSchema = z.object({
       })
     )
     .max(8)
+    .optional(),
+  pinnedDocumentId: z.string().min(1).max(80).optional()
     .optional()
 })
 
@@ -112,23 +117,11 @@ const memoryPatchSchema = memoryDraftSchema.partial().strict()
 
 const ownerRepoSchema = z.string().min(3).max(200)
 
-const codeAssistSchema = z.object({
-  kind: z.enum(['explain', 'bugs', 'tests', 'refactor', 'docs']),
-  code: z.string().min(1).max(40000),
-  language: z.string().max(40).optional(),
-  question: z.string().max(2000).optional()
-})
-
 const meetingDraftSchema = z.object({
   title: z.string().max(200),
   startedAt: z.number(),
   endedAt: z.number(),
   segments: z.array(z.object({ at: z.number(), text: z.string().max(4000) })).max(4000)
-})
-
-const patchRequestSchema = z.object({
-  path: z.string().min(1).max(500),
-  content: z.string().max(2 * 1024 * 1024)
 })
 
 const workflowStepOptions = {
@@ -150,7 +143,6 @@ const workflowStepSchema = z.union([
     title: z.string().max(200),
     body: z.string().max(20000)
   }),
-  z.object({ ...workflowStepOptions, kind: z.literal('projectSearch'), query: z.string().max(500) }),
   z.object({ ...workflowStepOptions, kind: z.literal('knowledge'), query: z.string().max(500) }),
   z.object({ ...workflowStepOptions, kind: z.literal('meetingSummary'), meetingId: z.string().max(80) })
 ])
@@ -182,6 +174,8 @@ export function registerIpcHandlers(): void {
       }
     }
     if ('toggleShortcut' in parsed) registerShortcuts()
+    if ('overlayPrivateMode' in parsed) applyOverlayPrivateMode()
+    if ('overlayOpacity' in parsed) applyOverlayOpacity()
     return next
   })
 
@@ -238,7 +232,16 @@ export function registerIpcHandlers(): void {
   )
 
   handle(IPC.transcribe, (_event, audio: unknown, mimeType: unknown) => {
-    const mime = z.string().max(100).regex(/^audio\/[a-z0-9.+-]+$/i).parse(mimeType)
+    // MediaRecorder reports full mime types with codec parameters
+    // ("audio/webm;codecs=opus", "audio/ogg;codecs=opus"). The codec suffix is
+    // dropped here and only the bare type is validated, so the parameter keys
+    // and values never reach anything else.
+    const mime = z
+      .string()
+      .max(100)
+      .transform((value) => value.split(';')[0]?.trim() ?? '')
+      .pipe(z.string().regex(/^audio\/[a-z0-9.+-]+$/i))
+      .parse(mimeType)
     const bytes =
       audio instanceof ArrayBuffer
         ? new Uint8Array(audio)
@@ -348,16 +351,7 @@ export function registerIpcHandlers(): void {
     github.createIssue(ownerRepoSchema.parse(ownerRepo), titleSchema.parse(title ?? ''), bodySchema.parse(body ?? ''))
   )
 
-  handle(IPC.projectStatus, () => project.status())
-  handle(IPC.projectIndex, () => project.index())
-  handle(IPC.projectClear, () => project.clear())
 
-  handle(IPC.patchList, () => patches.list())
-  handle(IPC.patchPropose, (_event, request: unknown) => patches.propose(patchRequestSchema.parse(request) as PatchRequest))
-  handle(IPC.patchApply, (_event, id: unknown) => patches.apply(idSchema.parse(id)))
-  handle(IPC.patchRevert, (_event, id: unknown) => patches.revert(idSchema.parse(id)))
-  handle(IPC.patchDiscard, (_event, id: unknown) => patches.discard(idSchema.parse(id)))
-  handle(IPC.codeAssist, (_event, request: unknown) => code.assist(codeAssistSchema.parse(request)))
 
   handle(IPC.meetingList, () => meetings.list())
   handle(IPC.meetingSave, (_event, draft: unknown) => {
@@ -400,5 +394,89 @@ export function registerIpcHandlers(): void {
   handle(IPC.windowHideOverlay, () => {
     const win = getOverlayWindow()
     win?.hide()
+  })
+
+  handle(IPC.windowPrivateModeStatus, () => ({
+    supported: overlayPrivateModeSupported(),
+    enabled: settingsDomain.get().overlayPrivateMode === true
+  }))
+
+  handle(IPC.overlaySetRecordingSticky, (_event, sticky: unknown) => {
+    setOverlayStickyRecording(sticky === true)
+  })
+
+  /* ---------- MCP connector ---------- */
+  handle(IPC.mcpServers, () => mcp.states())
+
+  const mcpServerSchema = z
+    .object({
+      name: z.string().min(1).max(80),
+      command: z.string().min(1).max(500),
+      args: z.array(z.string().max(500)).max(32).optional()
+    })
+    .strict()
+  handle(IPC.mcpAddServer, (_event, input: unknown) => {
+    const parsed = mcpServerSchema.parse(input)
+    return mcp.add(parsed.name, parsed.command, parsed.args ?? [])
+  })
+
+  handle(IPC.mcpRemoveServer, (_event, id: unknown) => {
+    mcp.remove(z.string().min(1).max(80).parse(id))
+  })
+
+  handle(IPC.mcpRefreshTools, (_event, id: unknown) => mcp.tools(z.string().min(1).max(80).parse(id)))
+
+  handle(IPC.mcpCallTool, (_event, input: unknown) => {
+    const parsed = z
+      .object({ serverId: z.string().min(1).max(80), name: z.string().min(1).max(200), args: z.record(z.string(), z.unknown()).optional() })
+      .strict()
+      .parse(input)
+    return mcp.call(parsed.serverId, parsed.name, parsed.args ?? {})
+  })
+
+  /* ---------- Post-meeting action agent ---------- */
+  handle(IPC.meetingProposeActions, (_event, id: unknown) => actions.propose(z.string().min(1).max(80).parse(id)))
+
+  handle(IPC.meetingExecuteActions, (_event, input: unknown) => {
+    const parsed = z
+      .object({
+        meetingId: z.string().min(1).max(80),
+        proposals: z
+          .array(
+            z
+              .object({
+                kind: z.enum(['github-issue', 'manual']),
+                repo: z.string().max(300).nullable().optional(),
+                title: z.string().min(1).max(200),
+                body: z.string().max(12000),
+                reason: z.string().max(300)
+              })
+              .strict()
+          )
+          .max(20)
+      })
+      .strict()
+      .parse(input)
+    return actions.execute(
+      parsed.meetingId,
+      parsed.proposals.map((proposal) => ({ ...proposal, repo: proposal.repo ?? null }))
+    )
+  })
+
+  /* ---------- Audit log ---------- */
+  handle(IPC.auditList, (_event, limit: unknown) => audit.list(limit === undefined ? 200 : z.number().int().min(1).max(2000).parse(limit)))
+  handle(IPC.auditClear, () => audit.clear())
+
+  handle(IPC.chatRespondTool, (_event, input: unknown) => {
+    const parsed = z
+      .object({ callId: z.string().min(1).max(120), approved: z.boolean() })
+      .strict()
+      .parse(input)
+    respondTool(parsed.callId, parsed.approved)
+  })
+
+  handle(IPC.usageRows, () => usage.rows())
+  handle(IPC.usageClear, () => {
+    usage.clear()
   })
 }

@@ -4,12 +4,14 @@ import { KLYRO_ICON_DATA_URL } from '../assets'
 import { isExternalHttpUrl, isTrustedRendererUrl } from '../security/origins'
 import { diagnostics } from '../diagnostics'
 import { logger } from '../logger'
+import { settingsDomain } from './settings'
 
 const OVERLAY_WIDTH = 640
 const OVERLAY_HEIGHT = 208
 
 let mainWindow: BrowserWindow | null = null
 let overlayWindow: BrowserWindow | null = null
+let overlayStickyRecording = false
 
 function isDev(): boolean {
   return Boolean(process.env.ELECTRON_RENDERER_URL)
@@ -107,13 +109,77 @@ export function createOverlayWindow(): BrowserWindow {
   })
   overlayWindow.setAlwaysOnTop(true, 'screen-saver')
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-  overlayWindow.on('blur', () => overlayWindow?.hide())
+  applyOverlayPrivateMode()
+  applyOverlayOpacity()
+  overlayWindow.on('blur', () => {
+    // While meeting-assist recording is live the overlay must keep running even
+    // when focus returns to the meeting app; private mode has the same need
+    // (reading notes while the meeting has focus) without recording.
+    if (!overlayStickyRecording && !overlayPrivateModeActive()) overlayWindow?.hide()
+  })
   attachNavigationGuards(overlayWindow)
   loadRoute(overlayWindow, 'overlay')
   overlayWindow.on('closed', () => {
     overlayWindow = null
   })
   return overlayWindow
+}
+
+function overlayPrivateModeActive(): boolean {
+  try {
+    return settingsDomain.get().overlayPrivateMode === true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Exclude the overlay from screen captures and shares on platforms that support
+ * per-window capture exclusion (Windows: WDA_EXCLUDEFROMCAPTURE; macOS:
+ * content protection). Linux/X11 has no such API — the overlay stays visible to
+ * captures there, and the UI says so rather than pretending.
+ */
+export function applyOverlayPrivateMode(): boolean {
+  if (!overlayWindow || overlayWindow.isDestroyed()) return false
+  const on = overlayPrivateModeActive()
+  try {
+    overlayWindow.setContentProtection(on)
+  } catch (error) {
+    logger.warn('setContentProtection failed', error)
+  }
+  return on
+}
+
+/** Platform up-front: private mode works on Windows/macOS, not Linux/X11. */
+export function overlayPrivateModeSupported(): boolean {
+  return process.platform === 'win32' || process.platform === 'darwin'
+}
+
+/**
+ * Window-level opacity, so the whole overlay (text included) fades to the
+ * user's taste while staying fully interactive and capture-excluded exactly
+ * as before. Clamped here as well as at the IPC boundary.
+ */
+export function applyOverlayOpacity(): number {
+  if (!overlayWindow || overlayWindow.isDestroyed()) return 100
+  let value = 100
+  try {
+    value = settingsDomain.get().overlayOpacity
+  } catch {
+    return 100
+  }
+  const clamped = Math.min(100, Math.max(20, Math.round(Number(value) || 100)))
+  try {
+    overlayWindow.setOpacity(clamped / 100)
+  } catch (error) {
+    logger.warn('setOpacity failed', error)
+  }
+  return clamped
+}
+
+/** Meeting-assist recording keeps the overlay alive across focus changes. */
+export function setOverlayStickyRecording(sticky: boolean): void {
+  overlayStickyRecording = sticky === true
 }
 
 function positionOverlay(win: BrowserWindow): void {
@@ -133,6 +199,8 @@ export function toggleOverlay(): void {
     return
   }
   positionOverlay(win)
+  applyOverlayPrivateMode()
+  applyOverlayOpacity()
   win.show()
   win.focus()
 }

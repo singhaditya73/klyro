@@ -5,13 +5,11 @@ import type {
   AgentRunRequest,
   AppSettings,
   ChatStreamEvent,
-  CodeAssistRequest,
   ConversationQuery,
   DataScope,
   KlyroApi,
   MeetingDraft,
   MemoryDraft,
-  PatchRequest,
   ProviderId,
   SendChatRequest,
   WorkflowDraft,
@@ -29,6 +27,7 @@ const api: KlyroApi = {
 
   sendChat: (request: SendChatRequest) => ipcRenderer.invoke(IPC.chatSend, request),
   abortChat: () => ipcRenderer.invoke(IPC.chatAbort),
+  chatRespondTool: (callId: string, approved: boolean) => ipcRenderer.invoke(IPC.chatRespondTool, { callId, approved }),
   onChatStream: (listener: (event: ChatStreamEvent) => void) => {
     const wrapped = (_event: unknown, payload: ChatStreamEvent): void => listener(payload)
     ipcRenderer.on(IPC.chatStream, wrapped)
@@ -51,6 +50,22 @@ const api: KlyroApi = {
 
   checkPermissions: () => ipcRenderer.invoke(IPC.permissionsCheck),
   hideOverlay: () => ipcRenderer.invoke(IPC.windowHideOverlay),
+  privateModeStatus: () => ipcRenderer.invoke(IPC.windowPrivateModeStatus),
+  setRecordingSticky: (sticky: boolean) => ipcRenderer.invoke(IPC.overlaySetRecordingSticky, sticky),
+
+  mcpServers: () => ipcRenderer.invoke(IPC.mcpServers),
+  mcpAddServer: (input: { name: string; command: string; args?: string[] }) => ipcRenderer.invoke(IPC.mcpAddServer, input),
+  mcpRemoveServer: (id: string) => ipcRenderer.invoke(IPC.mcpRemoveServer, id),
+  mcpRefreshTools: (id: string) => ipcRenderer.invoke(IPC.mcpRefreshTools, id),
+  mcpCallTool: (input: { serverId: string; name: string; args?: Record<string, unknown> }) => ipcRenderer.invoke(IPC.mcpCallTool, input),
+
+  meetingProposeActions: (meetingId: string) => ipcRenderer.invoke(IPC.meetingProposeActions, meetingId),
+  meetingExecuteActions: (input: { meetingId: string; proposals: unknown[] }) => ipcRenderer.invoke(IPC.meetingExecuteActions, input),
+
+  auditList: (limit?: number) => ipcRenderer.invoke(IPC.auditList, limit),
+  auditClear: () => ipcRenderer.invoke(IPC.auditClear),
+  usageRows: () => ipcRenderer.invoke(IPC.usageRows),
+  usageClear: () => ipcRenderer.invoke(IPC.usageClear),
   securityStatus: () => ipcRenderer.invoke(IPC.securityStatus),
   dataSummary: () => ipcRenderer.invoke(IPC.dataSummary),
   dataClear: (scope: DataScope) => ipcRenderer.invoke(IPC.dataClear, scope),
@@ -97,16 +112,7 @@ const api: KlyroApi = {
   githubCreateIssue: (ownerRepo: string, title: string, body: string) =>
     ipcRenderer.invoke(IPC.githubCreateIssue, ownerRepo, title, body),
 
-  projectStatus: () => ipcRenderer.invoke(IPC.projectStatus),
-  projectIndex: () => ipcRenderer.invoke(IPC.projectIndex),
-  projectClear: () => ipcRenderer.invoke(IPC.projectClear),
 
-  patchList: () => ipcRenderer.invoke(IPC.patchList),
-  patchPropose: (request: PatchRequest) => ipcRenderer.invoke(IPC.patchPropose, request),
-  patchApply: (id: string) => ipcRenderer.invoke(IPC.patchApply, id),
-  patchRevert: (id: string) => ipcRenderer.invoke(IPC.patchRevert, id),
-  patchDiscard: (id: string) => ipcRenderer.invoke(IPC.patchDiscard, id),
-  codeAssist: (request: CodeAssistRequest) => ipcRenderer.invoke(IPC.codeAssist, request),
 
   meetingList: () => ipcRenderer.invoke(IPC.meetingList),
   meetingSave: (draft: MeetingDraft) => ipcRenderer.invoke(IPC.meetingSave, draft),

@@ -1,6 +1,6 @@
-import type { ChatOptions, ChatTurn, Provider, TestOptions, TranscribeOptions } from './types'
+import type { ChatOptions, ChatTurn, Provider, ProviderChunk, ProviderToolSpec, TestOptions, TranscribeOptions } from './types'
 import { sseJson, trimSlash } from './http'
-import { classifyThrown, describeFailure } from './errors'
+import { classifyThrown, describeFailure, isProviderError, ProviderError } from './errors'
 import { openResponse, responseDetail } from './request'
 
 const PROVIDER = 'openai'
@@ -31,6 +31,18 @@ async function enrichNotFound(error: unknown, options: ChatOptions): Promise<unk
     const detail = served
       ? `The endpoint does serve "${wanted}", so the 404 is about something else.`
       : `"${wanted}" is not one of this endpoint's models.`
+    // Keep the original classification (kind, status, retryability) so callers
+    // can still make decisions; only the message is enriched.
+    if (isProviderError(error)) {
+      return new ProviderError(`${error.message} ${detail} Available models here: ${preview}${more}`, {
+        kind: error.kind,
+        provider: error.provider,
+        status: error.status,
+        retryAfterMs: error.retryAfterMs,
+        retryable: error.retryable,
+        detail: error.detail
+      })
+    }
     return new Error(
       `${error.message} ${detail} Available models here: ${preview}${more}`
     )
@@ -40,6 +52,22 @@ async function enrichNotFound(error: unknown, options: ChatOptions): Promise<unk
 }
 
 function toOpenAIMessage(turn: ChatTurn): unknown {
+  // A tool result answers a specific assistant call.
+  if (turn.role === 'tool') {
+    return { role: 'tool', tool_call_id: turn.toolCallId ?? '', content: turn.text }
+  }
+  // An assistant turn that made tool calls carries them alongside any prose.
+  if (turn.toolCalls && turn.toolCalls.length > 0) {
+    return {
+      role: turn.role,
+      content: turn.text.length > 0 ? turn.text : null,
+      tool_calls: turn.toolCalls.map((call) => ({
+        type: 'function',
+        id: call.id,
+        function: { name: call.name, arguments: call.argsJson }
+      }))
+    }
+  }
   if (!turn.images?.length) return { role: turn.role, content: turn.text }
   return {
     role: turn.role,
@@ -50,33 +78,109 @@ function toOpenAIMessage(turn: ChatTurn): unknown {
   }
 }
 
+/** Tool fragments arrive spread across chunks; reassemble them by index. */
+interface PendingCall {
+  id: string
+  name: string
+  args: string
+}
+
 /** OpenAI Chat Completions. Also powers any OpenAI-compatible endpoint. */
 export const openAICompatible: Provider = {
   id: 'openai',
 
-  async *chat(options: ChatOptions): AsyncGenerator<string> {
-    const res = await openResponse(
-      `${trimSlash(options.baseUrl)}/chat/completions`,
-      {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {})
+  /** Streaming chat with function calling (OpenAI-compatible endpoints). */
+  async *chatWithTools(options: ChatOptions & { tools: ProviderToolSpec[] }): AsyncGenerator<ProviderChunk> {
+    let res: Awaited<ReturnType<typeof openResponse>>
+    try {
+      res = await openResponse(
+        `${trimSlash(options.baseUrl)}/chat/completions`,
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {})
+          },
+          body: JSON.stringify({
+            model: options.model,
+            stream: true,
+            temperature: options.temperature ?? 0.7,
+            ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
+            tools: options.tools.map((tool) => ({ type: 'function', function: tool })),
+            messages: [
+              ...(options.system ? [{ role: 'system', content: options.system }] : []),
+              ...options.turns.map(toOpenAIMessage)
+            ]
+          }),
+          signal: options.signal
         },
-        body: JSON.stringify({
-          model: options.model,
-          stream: true,
-          temperature: options.temperature ?? 0.7,
-          ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
-          messages: [
-            ...(options.system ? [{ role: 'system', content: options.system }] : []),
-            ...options.turns.map(toOpenAIMessage)
-          ]
-        }),
-        signal: options.signal
-      },
-      { provider: PROVIDER, signal: options.signal }
-    )
+        { provider: PROVIDER, signal: options.signal }
+      )
+    } catch (error) {
+      throw await enrichNotFound(classifyThrown(error, { provider: PROVIDER }), options)
+    }
+
+    const pending = new Map<number, PendingCall>()
+    try {
+      for await (const event of sseJson(res)) {
+        const choice = event?.choices?.[0]
+        const delta = choice?.delta
+        const content = delta?.content
+        if (typeof content === 'string' && content.length > 0) yield { kind: 'text', text: content }
+        const fragments = delta?.tool_calls
+        if (Array.isArray(fragments)) {
+          for (const fragment of fragments as Array<Record<string, unknown>>) {
+            const index = typeof fragment.index === 'number' ? fragment.index : pending.size
+            const current = pending.get(index) ?? { id: '', name: '', args: '' }
+            if (typeof fragment.id === 'string' && fragment.id) current.id = fragment.id
+            const fn = fragment.function as Record<string, unknown> | undefined
+            if (typeof fn?.name === 'string' && fn.name) current.name = fn.name
+            if (typeof fn?.arguments === 'string') current.args += fn.arguments
+            pending.set(index, current)
+          }
+        }
+        if (choice?.finish_reason === 'tool_calls') break
+      }
+    } catch (error) {
+      throw await enrichNotFound(classifyThrown(error, { provider: PROVIDER }), options)
+    }
+
+    const calls = [...pending.values()]
+      .filter((call) => call.id && call.name)
+      .map((call) => ({ id: call.id, name: call.name, argsJson: call.args.slice(0, 200000) }))
+    if (calls.length > 0) yield { kind: 'tool_calls', calls }
+  },
+
+  async *chat(options: ChatOptions): AsyncGenerator<string> {
+    // openResponse can fail before any stream starts (a wrong model name 404s
+    // here), so it sits in its own try so the same not-found enrichment applies.
+    let res: Awaited<ReturnType<typeof openResponse>>
+    try {
+      res = await openResponse(
+        `${trimSlash(options.baseUrl)}/chat/completions`,
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {})
+          },
+          body: JSON.stringify({
+            model: options.model,
+            stream: true,
+            temperature: options.temperature ?? 0.7,
+            ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
+            messages: [
+              ...(options.system ? [{ role: 'system', content: options.system }] : []),
+              ...options.turns.map(toOpenAIMessage)
+            ]
+          }),
+          signal: options.signal
+        },
+        { provider: PROVIDER, signal: options.signal }
+      )
+    } catch (error) {
+      throw await enrichNotFound(classifyThrown(error, { provider: PROVIDER }), options)
+    }
     try {
       for await (const event of sseJson(res)) {
         const delta = event?.choices?.[0]?.delta?.content

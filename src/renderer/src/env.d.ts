@@ -18,6 +18,7 @@ interface KlyroApi {
 
   sendChat(req: any): Promise<void>
   abortChat(): Promise<void>
+  chatRespondTool(callId: string, approved: boolean): Promise<void>
   onChatStream(listener: (event: any) => void): () => void
 
   listConversations(): Promise<any[]>
@@ -33,6 +34,8 @@ interface KlyroApi {
 
   checkPermissions(): Promise<any>
   hideOverlay(): Promise<void>
+  privateModeStatus(): Promise<{ supported: boolean; enabled: boolean }>
+  setRecordingSticky(sticky: boolean): Promise<void>
   securityStatus(): Promise<any>
   dataSummary(): Promise<any>
   dataClear(scope: string): Promise<any>
@@ -72,16 +75,7 @@ interface KlyroApi {
   githubIssues(ownerRepo: string): Promise<any[]>
   githubCreateIssue(ownerRepo: string, title: string, body: string): Promise<any>
 
-  projectStatus(): Promise<any>
-  projectIndex(): Promise<any>
-  projectClear(): Promise<any>
-
-  codeAssist(req: any): Promise<any>
-  patchPropose(req: any): Promise<any>
-  patchApply(id: string): Promise<any>
-  patchRevert(id: string): Promise<any>
-  patchDiscard(id: string): Promise<any>
-  patchList(): Promise<any[]>
+  /* Workflows */
 
   meetingList(): Promise<any[]>
   meetingStartRecording(): Promise<void>
@@ -93,6 +87,21 @@ interface KlyroApi {
   meetingTranscriptAppend(text: string): Promise<any>
   meetingTranscriptGap(): Promise<any>
   meetingTranscriptDiscard(): Promise<void>
+
+  mcpServers(): Promise<any[]>
+  mcpAddServer(input: { name: string; command: string; args?: string[] }): Promise<any>
+  mcpRemoveServer(id: string): Promise<void>
+  mcpRefreshTools(id: string): Promise<any[]>
+  mcpCallTool(input: { serverId: string; name: string; args?: Record<string, unknown> }): Promise<any>
+
+  meetingProposeActions(meetingId: string): Promise<{ meetingTitle: string; proposals: any[] }>
+  meetingExecuteActions(input: { meetingId: string; proposals: any[] }): Promise<any[]>
+
+  auditList(limit?: number): Promise<any[]>
+  auditClear(): Promise<void>
+
+  usageRows(): Promise<any[]>
+  usageClear(): Promise<void>
 
   workflowList(): Promise<any[]>
   workflowRun(id: string, input: string): Promise<any>

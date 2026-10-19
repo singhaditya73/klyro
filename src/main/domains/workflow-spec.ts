@@ -12,7 +12,6 @@ export const STEP_KINDS: WorkflowStepKind[] = [
   'prompt',
   'githubIssues',
   'githubCreateIssue',
-  'projectSearch',
   'knowledge',
   'meetingSummary'
 ]
@@ -73,7 +72,6 @@ function requiredFieldsOf(step: WorkflowStep): { label: string; value: string }[
         { label: 'title', value: step.title },
         { label: 'body', value: step.body }
       ]
-    case 'projectSearch':
     case 'knowledge':
       return [{ label: 'query', value: step.query }]
     case 'meetingSummary':
@@ -92,7 +90,6 @@ function argumentOf(step: WorkflowStep): string {
       return step.repo
     case 'githubCreateIssue':
       return step.repo
-    case 'projectSearch':
     case 'knowledge':
       return step.query
     case 'meetingSummary':
@@ -223,8 +220,6 @@ export function describeStep(step: ResolvedStep): string {
       return `Fetch open GitHub issues for ${step.argument}`
     case 'githubCreateIssue':
       return `Create a GitHub issue in ${step.argument}`
-    case 'projectSearch':
-      return `Search the indexed project for "${step.argument}"`
     case 'knowledge':
       return `Search local knowledge for "${step.argument}"`
     case 'meetingSummary':

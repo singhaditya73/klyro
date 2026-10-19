@@ -135,7 +135,7 @@ describe('workflows', () => {
   it('describes every step type it can run', () => {
     const catalogue = workflowToolCatalogue()
     expect(catalogue.map((tool) => tool.kind).sort()).toEqual(
-      ['githubCreateIssue', 'githubIssues', 'knowledge', 'meetingSummary', 'projectSearch', 'prompt'].sort()
+      ['githubCreateIssue', 'githubIssues', 'knowledge', 'meetingSummary', 'prompt'].sort()
     )
     for (const tool of catalogue) expect(tool.description.length).toBeGreaterThan(10)
   })
@@ -206,23 +206,6 @@ describe('workflows', () => {
     expect(result.steps[0].ok).toBe(false)
     expect(result.steps[0].output).toMatch(/timed out after 1s/)
   }, 10_000)
-
-  it('grounds a step in the indexed project with file and line citations', async () => {
-    documents.clearGroup('workspace')
-    documents.importText('agent.ts', 'export function runAgent() {\n  // drives the desktop\n}', '/tmp/agent.ts', 'workspace')
-
-    const workflow = workflows.create({
-      name: 'Search',
-      steps: [
-        { kind: 'projectSearch', name: 'find', query: 'runAgent', output: 'files' },
-        { kind: 'prompt', name: 'explain', template: 'explain {{steps.files}}' }
-      ]
-    })
-    const result = await workflows.run(workflow.id, '')
-
-    expect(result.steps[0].output).toContain('agent.ts')
-    expect(result.steps[1].output).toContain('agent.ts')
-  })
 
   it('grounds a step in local memories and documents', async () => {
     memory.clear()

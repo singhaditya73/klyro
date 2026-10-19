@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { BrowserWindow, app, session } from 'electron'
+import { BrowserWindow, app, desktopCapturer, session } from 'electron'
 import { logger } from './logger'
 import { diagnostics } from './diagnostics'
 import { secrets } from './security/secrets'
@@ -10,6 +10,7 @@ import { settingsDomain } from './domains/settings'
 import { createTray } from './domains/tray'
 import { createMainWindow, createOverlayWindow, showMainWindow } from './domains/windows'
 import { maintenance } from './domains/maintenance'
+import { mcp } from './domains/mcp'
 
 app.setName('Klyro')
 
@@ -40,6 +41,34 @@ function applyPermissionPolicy(): void {
   session.defaultSession.setPermissionCheckHandler((_contents, permission) => isAllowedPermission(permission))
 }
 
+/**
+ * Meeting-assist system-audio capture: the overlay's Listen mode asks for
+ * display media with audio so the question audio reaches transcription even
+ * when the user is on headphones (loopback records the output bus, not the
+ * room). The picker is answered automatically with the primary display — only
+ * for a trusted renderer origin, and the video track is discarded by the
+ * caller. No window is ever chosen silently; this is Klyro's own capture
+ * consent flow, not a screen-share interceptor.
+ */
+function applyDisplayMediaPolicy(): void {
+  session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+    if (!isTrustedRendererUrl(request.securityOrigin)) {
+      logger.warn('Display media request from untrusted origin refused', request.securityOrigin)
+      return
+    }
+    void desktopCapturer
+      .getSources({ types: ['screen'] })
+      .then((sources) => {
+        const primary = sources.find((source) => source.id.startsWith('screen:')) ?? sources[0]
+        if (!primary) return
+        // Loopback audio is a Windows-only Chromium capability; elsewhere the
+        // renderer falls back to the microphone.
+        callback({ video: primary, ...(process.platform === 'win32' ? { audio: 'loopback' as const } : {}) })
+      })
+      .catch((error) => logger.warn('Display media source resolution failed', error))
+  })
+}
+
 
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
@@ -56,6 +85,7 @@ if (!gotLock) {
     maintenance.sweep()
     applyContentSecurityPolicy()
     applyPermissionPolicy()
+    applyDisplayMediaPolicy()
     registerIpcHandlers()
     createMainWindow()
     createOverlayWindow()
@@ -75,5 +105,6 @@ if (!gotLock) {
 
   app.on('will-quit', () => {
     unregisterShortcuts()
+    mcp.shutdown()
   })
 }

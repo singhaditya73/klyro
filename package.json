@@ -1,6 +1,6 @@
 {
   "name": "klyro",
-  "version": "0.2.2",
+  "version": "0.3.3",
   "description": "Klyro — Your AI. Your entire computer. Understand. Remember. Act.",
   "homepage": "https://github.com/singhaditya73/klyro#readme",
   "repository": {
@@ -36,6 +36,8 @@
   },
   "dependencies": {
     "lucide-react": "^1.59.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {

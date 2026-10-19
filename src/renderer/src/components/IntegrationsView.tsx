@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Blocks, GitBranch, Plug, CheckCircle, AlertCircle, ExternalLink, ChevronDown, ChevronUp, Trash2, Mail, MessageSquare, FileText } from 'lucide-react'
 import { useKnowledge } from '../hooks/useKnowledge'
+import { McpSection } from './McpSection'
 import KlyroMark from '../assets/logo/klyro-mark.svg'
 
 interface Props {}
@@ -218,6 +219,10 @@ export function IntegrationsView({}: Props) {
               </div>
             </div>
           )}
+
+          <div style={{ marginTop: 32, paddingTop: 24, borderTop: '1px solid var(--border-subtle)' }}>
+            <McpSection />
+          </div>
 
           <div style={{ marginTop: 32, paddingTop: 24, borderTop: '1px solid var(--border-subtle)' }}>
             <h3 style={{ margin: '0 0 16px', fontSize: 14, fontWeight: 600, color: 'var(--text-muted)' }}>Available integrations</h3>
