@@ -8,9 +8,20 @@ interface Props {
   onStop: () => void
   /** `hero` = borderless variant embedded in larger pages (Home). */
   variant?: 'inline' | 'hero'
+  /** Open the screen-source picker as soon as the composer mounts. */
+  captureArmed?: boolean
+  /** Called once the armed capture has been handled (picker opened). */
+  onCaptureHandled?: () => void
 }
 
-export function Composer({ busy, onSend, onStop, variant = 'inline' }: Props) {
+export function Composer({
+  busy,
+  onSend,
+  onStop,
+  variant = 'inline',
+  captureArmed = false,
+  onCaptureHandled
+}: Props) {
   const [text, setText] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [sources, setSources] = useState<any[] | null>(null)
@@ -31,6 +42,13 @@ export function Composer({ busy, onSend, onStop, variant = 'inline' }: Props) {
   useEffect(() => {
     resizeTextarea()
   }, [text])
+
+  // "Ask about my screen" opens chat with the picker ready.
+  useEffect(() => {
+    if (!captureArmed) return
+    onCaptureHandled?.()
+    void openSources()
+  }, [captureArmed, onCaptureHandled])
 
   async function submit(): Promise<void> {
     if (busy) return

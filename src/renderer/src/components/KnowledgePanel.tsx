@@ -468,7 +468,7 @@ export function KnowledgePanel({ onClose }: Props) {
                 </div>
               ) : (
                 <div className="card">
-                  <div className="provider__key" style={{ flexDirection: 'column', gap: 12, alignItems: 'stretch' }}>
+                  <div className="key-row" style={{ flexDirection: 'column', gap: 12, alignItems: 'stretch' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                       <Key className="icon icon--md" style={{ color: 'var(--text-muted)' }} aria-hidden="true" />
                       <div>

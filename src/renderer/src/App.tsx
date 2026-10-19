@@ -4,7 +4,6 @@ import { Sidebar } from './components/Sidebar'
 import { useChat } from './hooks/useChat'
 import { useAgent } from './hooks/useAgent'
 import { HomeView } from './components/HomeView'
-import { ScreenAssistantView } from './components/ScreenAssistantView'
 import { Menu } from 'lucide-react'
 
 type WorkspaceView = 'home' | 'chat' | 'screen' | 'agent' | 'workflows' | 'memory' | 'integrations'
@@ -32,6 +31,9 @@ export default function App() {
   const [activeView, setActiveView] = useState<WorkspaceView>('home')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  // Set when the user asks for a screen capture: chat opens with the source
+  // picker ready, so "ask about my screen" is a two-click path.
+  const [captureArmed, setCaptureArmed] = useState(false)
 
   // Theme: 'system' follows the OS, the others are explicit. The attribute is
   // applied to <html> so the whole design system flips in one paint.
@@ -112,6 +114,13 @@ export default function App() {
       return
     }
     closeAllPanels()
+    // "Screen" is not a separate page any more: it is chat with the screen
+    // picker already open, so the capture and the answer live in one place.
+    if (view === 'screen') {
+      setActiveView('chat')
+      setCaptureArmed(true)
+      return
+    }
     setActiveView(view)
   }, [openPanel, closeAllPanels])
 
@@ -144,6 +153,7 @@ export default function App() {
       case 'home':
         return <HomeView onNewChat={chat.newConversation} onOpenView={handleSidebarAction} />
       case 'chat':
+      case 'screen':
         return (
           <ChatView
             messages={chat.messages}
@@ -156,10 +166,11 @@ export default function App() {
             onNewChat={() => void chat.newConversation()}
             pendingTool={chat.pendingTool}
             onRespondTool={(approved) => void chat.respondTool(approved)}
+            captureArmed={captureArmed}
+            onCaptureHandled={() => setCaptureArmed(false)}
+            onCaptureRequested={() => setCaptureArmed(true)}
           />
         )
-      case 'screen':
-        return <ScreenAssistantView onOpenView={handleSidebarAction} />
       // 'agent' and 'memory' render as side panels/overlays above the active workspace
       case 'workflows':
         return (

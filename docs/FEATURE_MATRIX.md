@@ -13,8 +13,8 @@ Status legend: **✅ done** · **🟡 partial** · **⬜ planned**
 | 1.5 Contextual follow-ups | ✅ | Full conversation history sent to the provider |
 | 1.6 Stays accessible over other apps | ✅ | Overlay window |
 | 1.7 Window controls / keyboard nav | 🟡 | Escape closes panels, dialogs take focus, visible focus rings; full arrow-key navigation still open |
-| 2.1 Permission-gated screen capture | ✅ | `desktopCapturer` + explicit source picker |
-| 2.2 Ask about screen / region | 🟡 | Full screen + window picker; region crop planned |
+| 2.1 Permission-gated screen capture | ✅ | `desktopCapturer` + explicit source picker. **Klyro hides itself while capturing (0.3.5)** so a full-screen shot shows your work, not the app asking about it; Klyro's own windows are filtered out of the source list |
+| 2.2 Ask about screen / region | 🟡 | One flow: chat → "Ask about my screen" (or the Screen shortcut) opens the source picker, the capture attaches to your message, and the answer lands in the same conversation. The separate "Screen Assistant" page was cut in 0.3.5 as a duplicate of this. Region crop planned |
 | 2.3 Understand text/code/UI | ✅ | Vision models (provider-dependent) |
 | 2.4 Conversation context across turns | ✅ | Persisted history |
 | 3.1 Microphone capture with consent | ✅ | `getUserMedia` + visible recording state |
@@ -109,7 +109,7 @@ so you can keep asking follow-ups afterwards. Steps are either a **prompt**
 output feeds the next. Three built-ins ship: *Standup from GitHub issues*,
 *Turn notes into action items*, and *Review a diff*.
 
-## Design system (0.3.4)
+## Design system (0.3.4–0.3.5)
 
 The interface is built from a single token set rather than per-page CSS:
 
@@ -129,6 +129,31 @@ The interface is built from a single token set rather than per-page CSS:
 - **Review tooling** — `scripts/shots.cjs` boots the built app and captures
   every surface (home, chat, workflows, integrations, panels, overlay, light
   theme) so design changes can be judged on the real pixels, not by imagination.
+  `scripts/shot-rail.cjs` measures the collapsed sidebar for overflow.
+
+## Fixes found while reviewing the pixels (0.3.5)
+
+- **Text fields lost the caret after every character.** The panel hook
+  re-focused the panel whenever the app re-rendered (panels are handed a new
+  `onClose` function each time), so the agent's goal box threw the caret out
+  after one keystroke. The close callback now lives in a ref, and there is a
+  regression test that fails on the old behaviour.
+- **The Screen Assistant page was a duplicate** of the composer's share-screen
+  button, and its answer appeared in a different view than the capture. It is
+  now one flow inside Chat: capture attaches to the message, answer lands in
+  the same conversation. The "Screen" shortcut opens chat with the picker ready.
+- **Klyro captured itself.** A full-screen capture included Klyro's own window;
+  Klyro now hides for the moment of the capture, and its own windows are
+  filtered out of the source picker.
+- **The collapsed rail overflowed**: button labels were still rendered in the
+  68 px column. Labels are hidden, the workspace icons sit under the brand, and
+  the rail is now checked for overflow automatically.
+- **The source picker pushed the layout** and could fall off the bottom of the
+  window; it is now a compact popover above the composer.
+- **Empty conversations sat at the top** of a large empty canvas; the empty
+  state is centred and offers "Ask about my screen" directly.
+- **Monospace leaked onto buttons** next to the API-key field; the mono font is
+  now confined to the key itself.
 
 ## Hardening, packaging & release (Stage E)
 

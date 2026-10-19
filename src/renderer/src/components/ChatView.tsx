@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Attachment, ChatMessage } from '@shared/types'
 import { Composer } from './Composer'
 import { MessageBubble, type MessageContext } from './MessageBubble'
-import { Check, ChevronUp, Square } from 'lucide-react'
+import { Check, ChevronUp, Monitor, Square } from 'lucide-react'
 import KlyroMark from '../assets/logo/klyro-mark.svg'
 
 interface Props {
@@ -17,6 +17,11 @@ interface Props {
   /** A tool call waiting for an explicit Allow / Deny. */
   pendingTool?: { callId: string; name: string; args: string } | null
   onRespondTool?: (approved: boolean) => void | Promise<void>
+  /** Open the screen-source picker on mount (the "Screen" shortcut). */
+  captureArmed?: boolean
+  onCaptureHandled?: () => void
+  /** Ask for a screen capture from the empty state. */
+  onCaptureRequested?: () => void
 }
 
 export function ChatView({
@@ -29,7 +34,10 @@ export function ChatView({
   onStop,
   onNewChat,
   pendingTool = null,
-  onRespondTool
+  onRespondTool,
+  captureArmed = false,
+  onCaptureHandled,
+  onCaptureRequested
 }: Props) {
   const endRef = useRef<HTMLDivElement | null>(null)
   const previous = useRef<{ first?: string; last?: string }>({})
@@ -65,10 +73,20 @@ export function ChatView({
               <img src={KlyroMark} alt="" className="empty-state__logo" aria-hidden="true" onError={() => setLogoFailed(true)} />
             )}
             <h1 className="empty-state__title">Klyro</h1>
-            <p className="empty-state__text">Your AI workspace. Ask a question, share your screen, or use your voice.</p>
+            <p className="empty-state__text">
+              Ask a question, share your screen, or use your voice. Klyro answers with your own provider — nothing is stored off this machine.
+            </p>
             <div className="empty-state__actions">
               <button className="btn btn--primary" onClick={() => void onNewChat()}>
                 <span>New chat</span>
+              </button>
+              <button
+                className="btn"
+                onClick={() => onCaptureRequested?.()}
+                aria-label="Capture the screen and ask about it"
+              >
+                <Monitor className="icon icon--sm" aria-hidden="true" />
+                <span>Ask about my screen</span>
               </button>
             </div>
           </div>
@@ -110,7 +128,7 @@ export function ChatView({
         )}
         <div ref={endRef} />
       </div>
-      <Composer busy={streamingId !== null} onSend={onSend} onStop={onStop} />
+      <Composer busy={streamingId !== null} onSend={onSend} onStop={onStop} captureArmed={captureArmed} onCaptureHandled={onCaptureHandled} />
     </section>
   )
 }

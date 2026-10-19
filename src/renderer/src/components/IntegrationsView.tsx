@@ -47,7 +47,7 @@ export function IntegrationsView({}: Props) {
         </div>
       </header>
 
-      <div className="workspace-content" style={{ maxWidth: 920 }}>
+      <div className="workspace-content">
         <section style={sectionStyle}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 16 }}>
             <div className="icon-tile">
@@ -180,7 +180,7 @@ export function IntegrationsView({}: Props) {
                   Personal access tokens. It is stored encrypted by Klyro and is never sent anywhere else,
                   logged, or shown again after saving.
                 </span>
-                <div className="provider__key" style={{ marginTop: 12 }}>
+                <div className="key-row" style={{ marginTop: 12 }}>
                   <input
                     type={showToken ? 'text' : 'password'}
                     aria-label="GitHub personal access token"

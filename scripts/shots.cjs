@@ -28,17 +28,19 @@ app.whenReady().then(async () => {
     return
   }
   // Emulate a normal desktop window even when the virtual display is small.
+  main.setMinimumSize(1180, 780)
   main.setSize(1280, 860)
   main.setPosition(0, 0)
 
   const shot = async (name, win) => {
     if (win === main) {
-      win.setBounds({ x: 0, y: 0, width: 1280, height: 860 })
-      await wait(250)
+      win.setSize(1280, 860)
+      await wait(450)
     }
     const image = await win.webContents.capturePage()
     writeFileSync(join(outDir, `${name}.png`), image.toPNG())
-    console.log('shot', name)
+    const size = image.getSize()
+    console.log('shot', name, `${size.width}x${size.height}`)
   }
 
   const clickByLabel = async (label) => {
@@ -101,13 +103,37 @@ app.whenReady().then(async () => {
   await clickByLabel('agent')
   await wait(1400)
   await shot('10-agent-panel', main)
-  await main.webContents.executeJavaScript("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))")
+
+  // Typing in the agent's goal box must not steal the caret.
+  const typing = await main.webContents.executeJavaScript(`(() => {
+    const field = document.querySelector('.agent-panel textarea')
+    if (!field) return { ok: false, reason: 'no field' }
+    field.focus()
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
+    setter.call(field, 'Open the calculator')
+    field.dispatchEvent(new Event('input', { bubbles: true }))
+    return {
+      ok: document.activeElement === field,
+      value: field.value,
+      active: document.activeElement && document.activeElement.tagName
+    }
+  })()`)
+  console.log('agent typing check:', JSON.stringify(typing))
+
+  await main.webContents.executeJavaScript("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))")
   await wait(600)
   await clickByLabel('memory')
   await wait(1400)
   await shot('11-knowledge-panel', main)
-  await main.webContents.executeJavaScript("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))")
+  await main.webContents.executeJavaScript("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))")
   await wait(400)
+
+  // Collapsed rail: every item must fit and stay reachable.
+  await clickByLabel('collapse sidebar')
+  await wait(900)
+  await shot('12-collapsed-rail', main)
+  await clickByLabel('expand sidebar')
+  await wait(600)
 
   // Light theme: the same surfaces, flipped.
   await main.webContents.executeJavaScript("document.documentElement.dataset.theme = 'light'")

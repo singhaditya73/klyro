@@ -222,7 +222,7 @@ export function McpSection() {
             <span className="muted" style={{ fontSize: 12 }}>
               A local executable that speaks MCP over stdio — e.g. <code>npx @modelcontextprotocol/server-github</code>. The command is spawned directly (no shell) and only talks to Klyro on this machine.
             </span>
-            <div className="provider__key" style={{ marginTop: 12 }}>
+            <div className="key-row" style={{ marginTop: 12 }}>
               <input
                 value={name}
                 onChange={(event) => setName(event.target.value)}

@@ -109,6 +109,7 @@
   --header-height: 60px;
   --composer-min-height: 92px;
   --content-max: 860px;
+  --content-wide: 1120px;
   --reading-max: 760px;
 
   color-scheme: dark;
@@ -305,6 +306,9 @@ h1, h2, h3, h4, p { margin: 0; }
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  width: 100%;
+  max-width: var(--content-wide);
+  margin-inline: auto;
   padding: var(--space-6) var(--space-8) var(--space-10);
 }
 
@@ -481,6 +485,13 @@ h1, h2, h3, h4, p { margin: 0; }
 .nav-item__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar--collapsed .nav-item { justify-content: center; padding: 0; }
 .sidebar--collapsed .nav-item__label { display: none; }
+/* In the rail, buttons are icons only: labels would overflow the 68px column. */
+.sidebar--collapsed .btn__label { display: none; }
+.sidebar--collapsed .sidebar__actions .btn,
+.sidebar--collapsed .sidebar__footer-row .btn { width: 100%; padding: 0; }
+.sidebar--collapsed .sidebar__brand { justify-content: center; padding-left: 0; padding-right: 0; }
+.sidebar--collapsed .sidebar__section--workspaces { margin-top: 0; padding-top: var(--space-2); }
+.sidebar--collapsed .sidebar__search-wrapper { display: none; }
 
 .sidebar__footer {
   padding: var(--space-3);
@@ -966,6 +977,7 @@ input[type='range']::-moz-range-thumb {
   scroll-behavior: smooth;
 }
 .chat__earlier { text-align: center; margin-bottom: var(--space-4); }
+.chat__messages:has(.empty-state) { justify-content: center; }
 
 .message {
   width: 100%;
@@ -1330,23 +1342,38 @@ input[type='range']::-moz-range-thumb {
 .provider-card__key { display: flex; flex-direction: column; gap: var(--space-2); }
 .provider-card__warning { font-size: var(--text-sm); color: var(--warning); margin-top: var(--space-2); }
 .provider__actions { display: flex; gap: var(--space-2); }
+/* The mono font belongs to the key itself, never to the buttons around it. */
 .provider__key { font-family: var(--font-mono); font-size: var(--text-sm); }
+.key-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.key-row .field { flex: 1; min-width: 200px; font-family: var(--font-sans); }
 
 .source-picker {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: auto;
+  width: min(480px, 100%);
+  z-index: 20;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   background: var(--surface-elevated);
   padding: var(--space-3);
   box-shadow: var(--shadow-lg);
-  animation: panel-in var(--duration-2) var(--ease-out);
+  animation: picker-in var(--duration-2) var(--ease-out);
 }
+@keyframes picker-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .source-picker__head { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
 .source-picker__head strong { flex: 1; font-size: var(--text-sm); }
 .source-picker__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: var(--space-2);
-  max-height: 320px;
+  max-height: 260px;
   overflow-y: auto;
 }
 .source-card {

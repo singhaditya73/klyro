@@ -7,6 +7,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    // DOM tests opt in per file with `@vitest-environment jsdom`.
     include: ['src/**/*.test.{ts,tsx}'],
     globals: false
   }

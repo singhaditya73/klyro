@@ -1,6 +1,6 @@
 {
   "name": "klyro",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Klyro — Your AI. Your entire computer. Understand. Remember. Act.",
   "homepage": "https://github.com/singhaditya73/klyro#readme",
   "repository": {
@@ -44,6 +44,8 @@
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.8",
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
@@ -51,6 +53,7 @@
     "electron": "^44.9.0",
     "electron-builder": "^26.15.3",
     "electron-vite": "^6.0.0",
+    "jsdom": "^30.1.3",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "typescript": "^5.9.3",

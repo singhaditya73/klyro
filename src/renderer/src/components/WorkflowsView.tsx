@@ -29,7 +29,7 @@ export function WorkflowsView() {
         </div>
       </header>
 
-      <div className="workspace-content" style={{ maxWidth: 1040 }}>
+      <div className="workspace-content">
         <section style={sectionStyle}>
           <h2 style={h2Style}>Run a workflow</h2>
           <div className="field" style={{ marginBottom: 16 }}>
