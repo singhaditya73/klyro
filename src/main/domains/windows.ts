@@ -73,10 +73,10 @@ function baseWebPreferences(): Electron.WebPreferences {
 export function createMainWindow(): BrowserWindow {
   if (mainWindow && !mainWindow.isDestroyed()) return mainWindow
   mainWindow = new BrowserWindow({
-    width: 1080,
-    height: 720,
-    minWidth: 760,
-    minHeight: 520,
+    width: 1280,
+    height: 820,
+    minWidth: 880,
+    minHeight: 560,
     show: false,
     title: 'Klyro',
     icon: nativeImage.createFromDataURL(KLYRO_ICON_DATA_URL),

@@ -109,6 +109,27 @@ so you can keep asking follow-ups afterwards. Steps are either a **prompt**
 output feeds the next. Three built-ins ship: *Standup from GitHub issues*,
 *Turn notes into action items*, and *Review a diff*.
 
+## Design system (0.3.4)
+
+The interface is built from a single token set rather than per-page CSS:
+
+- **Type** — bundled Inter Variable for the interface and JetBrains Mono for code
+  (no dependence on whatever fonts a machine happens to have).
+- **Colour** — one graphite palette, plus a *real* light theme: `system`, `dark`
+  and `light` now paint an actual light palette instead of an inverted dark one.
+  The theme is applied to `<html>`, so the whole app flips in a single paint.
+- **Surfaces** — a five-step elevation scale (base → secondary → raised →
+  active → elevated) with layered shadows and hairline borders.
+- **Controls** — switches instead of raw checkboxes, custom radios, a styled
+  range slider, focus rings on every interactive element, and consistent
+  hover/press motion (120–280 ms, and none of it when the OS asks for reduced
+  motion).
+- **Responsive shell** — the sidebar is a persistent rail on wide windows and a
+  drawer below 980 px; the window now opens at 1280 × 820.
+- **Review tooling** — `scripts/shots.cjs` boots the built app and captures
+  every surface (home, chat, workflows, integrations, panels, overlay, light
+  theme) so design changes can be judged on the real pixels, not by imagination.
+
 ## Hardening, packaging & release (Stage E)
 
 **Security.** Beyond the Stage A baseline (sandboxed renderer, `contextIsolation`,

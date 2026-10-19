@@ -121,6 +121,7 @@ export function Sidebar(props: Props) {
               >
                 <div className="conversation-item__header">
                   <span className="conversation-item__title">{summary.title || 'New chat'}</span>
+                  <time className="conversation-item__time">{timeAgo(summary.updatedAt)}</time>
                   <div className="conversation-item__actions">
                     <button
                       className={`btn btn--icon btn--icon-sm${summary.id === armedDelete ? ' btn--danger' : ''}`}
@@ -145,10 +146,7 @@ export function Sidebar(props: Props) {
                     </button>
                   </div>
                 </div>
-                <div className="conversation-item__preview">{summary.preview || `${summary.messageCount} messages`}</div>
-                <div className="conversation-item__meta">
-                  <time>{timeAgo(summary.updatedAt)}</time>
-                </div>
+                {summary.preview && <div className="conversation-item__preview">{summary.preview}</div>}
               </div>
             ))}
             {props.summaries.length === 0 ? (

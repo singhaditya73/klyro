@@ -1,6 +1,8 @@
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import OverlayApp from './OverlayApp'
+import '@fontsource-variable/inter'
+import '@fontsource-variable/jetbrains-mono'
 import './styles.css'
 
 const container = document.getElementById('root')

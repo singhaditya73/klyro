@@ -190,7 +190,19 @@ export function SettingsPanel({ onClose }: Props) {
   }, [])
 
   async function patch(next: Partial<AppSettings>): Promise<void> {
-    setSettings(await window.klyro.updateSettings(next))
+    const updated = await window.klyro.updateSettings(next)
+    setSettings(updated)
+    // The theme is applied to <html>; apply it the moment it changes so the
+    // switch feels instant instead of waiting for a restart.
+    if (next.theme) {
+      const resolved =
+        next.theme === 'system'
+          ? window.matchMedia('(prefers-color-scheme: light)').matches
+            ? 'light'
+            : 'dark'
+          : next.theme
+      document.documentElement.dataset.theme = resolved
+    }
   }
 
   async function updateProviderField(id: ProviderId, field: 'baseUrl' | 'model', value: string): Promise<void> {

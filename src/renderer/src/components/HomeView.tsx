@@ -11,6 +11,7 @@ import {
 import { timeAgo } from '../lib/format'
 import { useChat } from '../hooks/useChat'
 import { Composer } from './Composer'
+import KlyroMark from '../assets/logo/klyro-mark.svg'
 
 interface Props {
   onNewChat: () => Promise<void>
@@ -78,18 +79,17 @@ export function HomeView({ onNewChat, onOpenView }: Props) {
       </header>
 
       <div className="workspace-content">
-        <section style={{ textAlign: 'center', margin: '32px auto 28px', maxWidth: '720px' }}>
-          <h2 style={{ margin: '0 0 8px', fontSize: '28px', fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
-            Good {getTimeOfDay()}.
-          </h2>
-          <p style={{ margin: 0, fontSize: '15px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-            What would you like to get done?
-          </p>
+        <section className="hero">
+          <div className="hero__badge" aria-hidden="true">
+            <img src={KlyroMark} alt="" className="hero__mark" />
+          </div>
+          <h1 className="hero__title">Good {getTimeOfDay()}.</h1>
+          <p className="hero__sub">Ask anything, share your screen, or let Klyro work while you stay in control.</p>
         </section>
 
         {/* The send action of the hero composer starts the conversation; the
             user is then taken to the Chat workspace where the answer streams. */}
-        <section style={{ width: '100%', maxWidth: '760px', margin: '0 auto 36px' }}>
+        <section className="hero__composer">
           <Composer
             variant="hero"
             busy={false}
@@ -103,7 +103,7 @@ export function HomeView({ onNewChat, onOpenView }: Props) {
 
         <section style={{ width: '100%', marginBottom: '40px' }}>
           <h2 className="section-label">Quick actions</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '10px' }}>
+          <div className="quick-action-grid">
             {quickActions.map((action) => (
               <button key={action.id} className="quick-action" onClick={action.action}>
                 <span className="quick-action__icon" aria-hidden="true">
@@ -144,25 +144,23 @@ export function HomeView({ onNewChat, onOpenView }: Props) {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {chat.summaries.slice(0, 8).map((summary) => (
-                <div
-                  key={summary.id}
-                  className="card"
-                  onClick={() => { chat.openConversation(summary.id); onOpenView('chat'); }}
+                <div key={summary.id} className="card hit recent-card" onClick={() => { chat.openConversation(summary.id); onOpenView('chat'); }}
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); chat.openConversation(summary.id); onOpenView('chat'); } }}
-                  style={{ cursor: 'pointer', margin: 0, padding: '12px 16px' }}
                 >
                   <div className="card__row" style={{ flexWrap: 'nowrap' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div className="card__title" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {summary.title || 'New chat'}
                       </div>
-                      <div className="card__subtitle" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {summary.preview || `${summary.messageCount} messages`}
-                      </div>
+                      {summary.preview && (
+                        <div className="card__subtitle" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {summary.preview}
+                        </div>
+                      )}
                     </div>
-                    <time style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap', marginLeft: 12 }}>
+                    <time style={{ fontSize: '11px', color: 'var(--text-disabled)', whiteSpace: 'nowrap', marginLeft: 12 }}>
                       {timeAgo(summary.updatedAt)}
                     </time>
                   </div>

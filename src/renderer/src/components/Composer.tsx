@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Attachment } from '@shared/types'
 import { Mic, Monitor, X, Send, StopCircle } from 'lucide-react'
 
@@ -18,6 +18,19 @@ export function Composer({ busy, onSend, onStop, variant = 'inline' }: Props) {
   const [error, setError] = useState<string | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+
+  /** Grow the input with its content, up to the CSS max-height. */
+  function resizeTextarea(): void {
+    const node = textareaRef.current
+    if (!node) return
+    node.style.height = 'auto'
+    node.style.height = `${node.scrollHeight}px`
+  }
+
+  useEffect(() => {
+    resizeTextarea()
+  }, [text])
 
   async function submit(): Promise<void> {
     if (busy) return
@@ -107,6 +120,7 @@ export function Composer({ busy, onSend, onStop, variant = 'inline' }: Props) {
       {error && <div className="composer__error">{error}</div>}
 
       <textarea
+        ref={textareaRef}
         className="composer__textarea"
         value={text}
         aria-label="Message Klyro"
@@ -118,15 +132,15 @@ export function Composer({ busy, onSend, onStop, variant = 'inline' }: Props) {
             void submit()
           }
         }}
-        rows={3}
+        rows={1}
       />
 
       <div className="composer__actions">
-        <button className="btn" onClick={openSources} title="Share your screen" aria-label="Share screen">
+        <button className="btn btn--icon btn--ghost" onClick={openSources} title="Share your screen" aria-label="Share screen">
           <Monitor className="icon icon--md" aria-hidden="true" />
         </button>
         <button
-          className={`btn${recording ? ' btn--danger' : ''}`}
+          className={`btn btn--ghost${recording ? ' btn--danger' : ''}`}
           onClick={() => recording ? stopRecording() : void startRecording()}
           title={recording ? 'Stop recording' : 'Voice input'}
           aria-label={recording ? 'Stop recording' : 'Voice input'}
@@ -146,7 +160,7 @@ export function Composer({ busy, onSend, onStop, variant = 'inline' }: Props) {
         <div className="spacer" />
         <span className="composer__hint" aria-hidden="true">Enter to send · Shift+Enter for a new line</span>
         {busy ? (
-          <button className="btn btn--danger" onClick={onStop} aria-label="Stop generation">
+          <button className="btn btn--danger btn--stop" onClick={onStop} aria-label="Stop generation">
             <StopCircle className="icon icon--sm" aria-hidden="true" />
             <span>Stop</span>
           </button>

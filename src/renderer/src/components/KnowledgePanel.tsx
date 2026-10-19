@@ -369,7 +369,7 @@ export function KnowledgePanel({ onClose }: Props) {
           {tab === 'integrations' && (
             <section>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                <div className="icon icon--lg" style={{ background: 'var(--surface-raised)', borderRadius: 'var(--radius-md)', padding: 10, color: 'var(--text-secondary)' }}>
+                <div className="icon-tile">
                   <GitBranch aria-hidden="true" />
                 </div>
                 <div>

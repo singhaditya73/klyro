@@ -109,7 +109,7 @@ export function McpSection() {
   return (
     <div style={{ marginTop: 32, paddingTop: 24, borderTop: '1px solid var(--border-subtle)' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 16 }}>
-        <div className="icon icon--lg" style={{ background: 'var(--surface-raised)', borderRadius: 'var(--radius-md)', padding: 10, color: 'var(--text-secondary)' }}>
+        <div className="icon-tile">
           <Blocks aria-hidden="true" />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>

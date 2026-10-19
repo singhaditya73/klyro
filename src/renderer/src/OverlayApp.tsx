@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Eye, EyeOff, Headphones, Loader2, Mic, Square } from 'lucide-react'
 import { createSilenceWatcher, isNoAnswer, listenPrompt, looksLikeQuestion, pickRecordMimeType, snippetPrompt, type SilenceWatcher } from './lib/listen'
+import KlyroMark from './assets/logo/klyro-mark.svg'
 
 type AssistMode = 'idle' | 'recording' | 'listening'
 
@@ -284,6 +285,7 @@ export default function OverlayApp() {
   return (
     <div className={`overlay${privateMode?.enabled ? ' overlay--private' : ''}`}>
       <div className="overlay__bar">
+        <img src={KlyroMark} alt="" className="overlay__mark" aria-hidden="true" />
         <span className="overlay__brand">Klyro</span>
         {privateMode && (
           <button

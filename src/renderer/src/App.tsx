@@ -33,6 +33,38 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
+  // Theme: 'system' follows the OS, the others are explicit. The attribute is
+  // applied to <html> so the whole design system flips in one paint.
+  useEffect(() => {
+    let cancelled = false
+    const media = window.matchMedia('(prefers-color-scheme: light)')
+    const apply = (theme: 'system' | 'dark' | 'light'): void => {
+      if (cancelled) return
+      const resolved = theme === 'system' ? (media.matches ? 'light' : 'dark') : theme
+      document.documentElement.dataset.theme = resolved
+    }
+    void window.klyro.getSettings().then((settings) => apply(settings?.theme ?? 'system')).catch(() => apply('system'))
+    const onChange = (): void => {
+      void window.klyro.getSettings().then((settings) => apply(settings?.theme ?? 'system')).catch(() => undefined)
+    }
+    media.addEventListener('change', onChange)
+    return () => {
+      cancelled = true
+      media.removeEventListener('change', onChange)
+    }
+  }, [])
+
+  // Below 1080px the sidebar is a drawer: it is always shown expanded, and
+  // the rail (collapsed) mode is a desktop-only affordance.
+  const [narrow, setNarrow] = useState(false)
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 980px)')
+    const update = (): void => setNarrow(media.matches)
+    update()
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
+
   // Keep track of open panels
   const [openPanels, setOpenPanels] = useState<Record<string, boolean>>({
     settings: false,
@@ -147,7 +179,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app${openPanels.agent ? ' app--agent' : ''}`}>
+    <div className={`app${openPanels.agent ? ' app--agent' : ''}${sidebarOpen ? ' app--nav-open' : ''}`}>
       {/* Mobile sidebar toggle */}
       <button
         className="sidebar-toggle"
@@ -170,7 +202,12 @@ export default function App() {
         activeId={chat.activeId}
         search={chat.search}
         setSearch={chat.setSearch}
-        openConversation={chat.openConversation}
+        openConversation={async (id: string) => {
+          // Opening a chat from the sidebar should take you to it — loading a
+          // conversation without changing the view looks like nothing happened.
+          await chat.openConversation(id)
+          setActiveView('chat')
+        }}
         newConversation={chat.newConversation}
         deleteConversation={chat.deleteConversation}
         onOpenHome={() => handleSidebarAction('home')}
@@ -182,7 +219,7 @@ export default function App() {
         onOpenIntegrations={() => handleSidebarAction('integrations')}
         onOpenSettings={() => openPanel('settings')}
         activeView={activeView}
-        collapsed={sidebarCollapsed}
+        collapsed={sidebarCollapsed && !narrow}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
 
