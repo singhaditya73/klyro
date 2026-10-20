@@ -1,6 +1,6 @@
 {
   "name": "klyro",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Klyro — Your AI. Your entire computer. Understand. Remember. Act.",
   "homepage": "https://github.com/singhaditya73/klyro#readme",
   "repository": {
@@ -37,6 +37,7 @@
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "lucide-react": "^1.59.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",

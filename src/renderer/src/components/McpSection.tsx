@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Blocks, Loader2, Plug, RefreshCcw, Trash2, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Play } from 'lucide-react'
+import { Blocks, Loader2, Plug, RefreshCcw, Trash2, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Play, Eye, FileText, MessageSquare } from 'lucide-react'
 
 /**
  * Bring-your-own tools via local MCP (Model Context Protocol) servers. A server
@@ -12,6 +12,8 @@ interface MCPServerState {
   config: { id: string; name: string; command: string; args: string[] }
   running: boolean
   tools: { name: string; description?: string }[]
+  resources?: { uri?: string; name?: string; description?: string; mimeType?: string }[]
+  prompts?: { name?: string; description?: string }[]
   lastError: string | null
 }
 
@@ -28,6 +30,21 @@ export function McpSection() {
   const [callPrompt, setCallPrompt] = useState<{ serverId: string; tool: string } | null>(null)
   const [callArgs, setCallArgs] = useState('{}')
   const [callResult, setCallResult] = useState<string | null>(null)
+  const [resourcePreview, setResourcePreview] = useState<{ uri: string; text: string } | null>(null)
+
+  const readResource = useCallback(async (serverId: string, uri: string): Promise<void> => {
+    if (!uri) return
+    setBusy(true)
+    setError(null)
+    try {
+      const result = await window.klyro.mcpReadResource({ serverId, uri })
+      setResourcePreview({ uri, text: result.text })
+    } catch (readError) {
+      setError((readError as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }, [])
 
   const load = useCallback(async (): Promise<void> => {
     setLoading(true)
@@ -149,6 +166,8 @@ export function McpSection() {
                 <strong style={{ flex: 1, minWidth: 0 }}>{server.config.name}</strong>
                 <span className={`pill ${server.running ? 'pill--ok' : 'pill--warn'}`}>{server.running ? 'Running' : 'Idle'}</span>
                 <span className="pill">{server.tools.length} tools</span>
+                {(server.resources?.length ?? 0) > 0 && <span className="pill">{server.resources?.length} resources</span>}
+                {(server.prompts?.length ?? 0) > 0 && <span className="pill">{server.prompts?.length} prompts</span>}
                 <button className="btn btn--icon btn--icon-sm btn--ghost" onClick={() => setOpenTools((previous) => ({ ...previous, [server.config.id]: !previous[server.config.id] }))} aria-expanded={Boolean(openTools[server.config.id])} aria-label={`Toggle tools for ${server.config.name}`}>
                   {openTools[server.config.id] ? <ChevronUp className="icon icon--sm" aria-hidden="true" /> : <ChevronDown className="icon icon--sm" aria-hidden="true" />}
                 </button>
@@ -171,6 +190,39 @@ export function McpSection() {
               )}
               {openTools[server.config.id] && (
                 <div style={{ marginTop: 12 }}>
+                  {(server.resources?.length ?? 0) > 0 && (
+                    <div style={{ marginBottom: 12 }}>
+                      <div className="section-label" style={{ marginBottom: 6 }}>Resources</div>
+                      {server.resources?.map((resource) => (
+                        <div key={resource.uri ?? resource.name} className="card__row" style={{ alignItems: 'center', gap: 8, fontSize: 12, padding: '4px 0' }}>
+                          <FileText className="icon icon--xs" aria-hidden="true" />
+                          <span style={{ fontWeight: 500 }}>{resource.name ?? resource.uri}</span>
+                          <span className="muted" style={{ flex: 1, minWidth: 0 }}>{resource.description ?? resource.uri ?? ''}</span>
+                          <button
+                            className="btn btn--ghost btn--sm"
+                            disabled={busy || !resource.uri}
+                            onClick={() => { void readResource(server.config.id, resource.uri ?? '') }}
+                            aria-label={'Read ' + (resource.name ?? resource.uri)}
+                          >
+                            <Eye className="icon icon--xs" aria-hidden="true" />
+                            <span>Read</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {(server.prompts?.length ?? 0) > 0 && (
+                    <div style={{ marginBottom: 12 }}>
+                      <div className="section-label" style={{ marginBottom: 6 }}>Prompts</div>
+                      {server.prompts?.map((prompt) => (
+                        <div key={prompt.name} className="card__row" style={{ alignItems: 'center', gap: 8, fontSize: 12, padding: '4px 0' }}>
+                          <MessageSquare className="icon icon--xs" aria-hidden="true" />
+                          <span style={{ fontWeight: 500 }}>{prompt.name}</span>
+                          <span className="muted" style={{ flex: 1, minWidth: 0 }}>{prompt.description ?? ''}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {server.tools.length === 0 ? (
                     <div className="muted" style={{ fontSize: 12 }}>No tools listed — refresh, or check the command runs outside Klyro.</div>
                   ) : (
@@ -195,6 +247,21 @@ export function McpSection() {
           <div className="muted" style={{ fontSize: 13 }}>
             {loading ? 'Listing servers…' : 'No MCP servers yet — add one below to bring your own tools into Klyro.'}
           </div>
+        </div>
+      )}
+
+      {resourcePreview && (
+        <div className="card" style={{ marginTop: 12 }}>
+          <div className="card__row">
+            <FileText className="icon icon--sm" aria-hidden="true" />
+            <strong style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {resourcePreview.uri}
+            </strong>
+            <button className="btn btn--ghost btn--sm" onClick={() => setResourcePreview(null)}>
+              <span>Close</span>
+            </button>
+          </div>
+          <pre className="transcript" style={{ marginTop: 10, whiteSpace: 'pre-wrap' }}>{resourcePreview.text}</pre>
         </div>
       )}
 

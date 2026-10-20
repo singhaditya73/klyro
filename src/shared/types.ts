@@ -541,7 +541,26 @@ export interface MCPServerState {
   config: MCPServerConfig
   running: boolean
   tools: MCPTool[]
+  /** Resources the server exposes (files, notes, rows — whatever it offers). */
+  resources: MCPResource[]
+  /** Prompts the server exposes as reusable templates. */
+  prompts: MCPPrompt[]
   lastError: string | null
+}
+
+/** A resource published by an MCP server. */
+export interface MCPResource {
+  uri?: string
+  name?: string
+  description?: string
+  mimeType?: string
+}
+
+/** A prompt template published by an MCP server. */
+export interface MCPPrompt {
+  name?: string
+  description?: string
+  arguments?: Array<{ name?: string; description?: string; required?: boolean }>
 }
 
 export interface MCPCallResult {
@@ -763,6 +782,8 @@ export interface KlyroApi {
   mcpRemoveServer(id: string): Promise<void>
   mcpRefreshTools(id: string): Promise<MCPTool[]>
   mcpCallTool(input: { serverId: string; name: string; args?: Record<string, unknown> }): Promise<MCPCallResult>
+  /** Read a resource published by an MCP server. */
+  mcpReadResource(input: { serverId: string; uri: string }): Promise<{ text: string }>
 
   /* Post-meeting action agent */
   meetingProposeActions(meetingId: string): Promise<{ meetingTitle: string; proposals: ActionProposal[] }>

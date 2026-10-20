@@ -105,6 +105,8 @@ interface KlyroApi {
 
   screenListDisplays(): Promise<Array<{ index: number; label: string; primary: boolean; bounds: { x: number; y: number; width: number; height: number } }>>
 
+  mcpReadResource(input: { serverId: string; uri: string }): Promise<{ text: string }>
+
   privacyProbeOverlay(): Promise<{
     excluded: boolean
     changedRatio: number

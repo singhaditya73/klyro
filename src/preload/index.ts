@@ -58,6 +58,7 @@ const api: KlyroApi = {
   mcpRemoveServer: (id: string) => ipcRenderer.invoke(IPC.mcpRemoveServer, id),
   mcpRefreshTools: (id: string) => ipcRenderer.invoke(IPC.mcpRefreshTools, id),
   mcpCallTool: (input: { serverId: string; name: string; args?: Record<string, unknown> }) => ipcRenderer.invoke(IPC.mcpCallTool, input),
+  mcpReadResource: (input: { serverId: string; uri: string }) => ipcRenderer.invoke(IPC.mcpReadResource, input),
 
   meetingProposeActions: (meetingId: string) => ipcRenderer.invoke(IPC.meetingProposeActions, meetingId),
   meetingExecuteActions: (input: { meetingId: string; proposals: unknown[] }) => ipcRenderer.invoke(IPC.meetingExecuteActions, input),

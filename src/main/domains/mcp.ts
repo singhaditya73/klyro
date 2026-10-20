@@ -1,7 +1,15 @@
 import { app } from 'electron'
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import type { MCPServerConfig, MCPServerState, MCPTool, ToolSpec } from '@shared/types'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import type {
+  MCPPrompt,
+  MCPResource,
+  MCPServerConfig,
+  MCPServerState,
+  MCPTool,
+  ToolSpec
+} from '@shared/types'
 import { isExternalHttpUrl } from '../security/origins'
 import { logger } from '../logger'
 import { JsonStore } from '../store/json-store'
@@ -9,30 +17,31 @@ import { audit } from './audit'
 
 /**
  * Bring-your-own tools via the Model Context Protocol. Servers are user-defined
- * stdio commands (the standard local MCP transport): Klyro spawns the command,
- * speaks newline-delimited JSON-RPC (initialize → initialized → tools/list →
- * tools/call), and never runs a shell — the command and args are passed
- * directly to the OS. Child processes are kept alive while the app runs and are
- * killed when the app exits or the server is removed.
+ * stdio commands (the standard local MCP transport): Klyro spawns the command
+ * directly — never through a shell — and speaks the protocol with the
+ * official client SDK, so handshake, framing, capability negotiation and
+ * timeouts behave exactly as the specification says.
+ *
+ * The protocol client is the official `@modelcontextprotocol/sdk`; the agent
+ * loop, the approval gates and the audit trail around it are ours.
  */
-
-interface ServerConnection {
-  child: ChildProcessWithoutNullStreams
-  handshaken: boolean
-  lastError: string | null
-  /** Serialise requests; MCP stdio sessions are single-request at a time. */
-  queue: Promise<unknown>
-  nextId: number
-}
-
-const PROTOCOL_VERSION = '2025-06-18'
-const REQUEST_TIMEOUT_MS = 20000
-const MAX_BUFFER_BYTES = 2 * 1024 * 1024
-const MAX_TOOLS = 200
 
 interface McpState {
   servers: MCPServerConfig[]
 }
+
+interface ServerConnection {
+  client: Client
+  transport: StdioClientTransport
+  /** Serialise requests; MCP stdio sessions are single-request at a time. */
+  queue: Promise<unknown>
+}
+
+const REQUEST_TIMEOUT_MS = 20000
+const CONNECT_TIMEOUT_MS = 15000
+const MAX_TOOLS = 200
+const MAX_RESOURCES = 100
+const MAX_PROMPTS = 100
 
 function safeCommand(command: string): boolean {
   const trimmed = command.trim()
@@ -40,6 +49,21 @@ function safeCommand(command: string): boolean {
   // URL-style commands (http:, ssh:) are refused: MCP here is local stdio only.
   if (isExternalHttpUrl(trimmed)) return false
   return true
+}
+
+/** Turn an SDK error into something a person can act on. */
+function friendlyError(error: unknown): Error {
+  const message = error instanceof Error ? error.message : String(error)
+  if (/timed out|timeout/i.test(message)) {
+    return new Error('The MCP server did not answer in time.')
+  }
+  if (/ENOENT|spawn|not found|ENOENT/i.test(message)) {
+    return new Error(`Could not launch the MCP server: ${message}`)
+  }
+  if (/Connection closed|not connected/i.test(message)) {
+    return new Error(`Could not launch the MCP server: ${message}`)
+  }
+  return new Error(message)
 }
 
 class McpDomain {
@@ -80,169 +104,146 @@ class McpDomain {
     return await Promise.all(
       configs.map(async (config) => {
         let tools: MCPTool[] = []
+        let resources: MCPResource[] = []
+        let prompts: MCPPrompt[] = []
         let lastError: string | null = null
         try {
-          tools = await this.tools(config.id)
+          const listing = await this.describe(config.id)
+          tools = listing.tools
+          resources = listing.resources
+          prompts = listing.prompts
         } catch (error) {
           lastError = (error as Error).message
         }
-        return { config, running: this.connections.has(config.id), tools: tools.slice(0, MAX_TOOLS), lastError }
+        return {
+          config,
+          running: this.connections.has(config.id),
+          tools,
+          resources,
+          prompts,
+          lastError
+        }
       })
     )
   }
 
+  /** Tools, resources and prompts a server offers. */
+  async describe(id: string): Promise<{ tools: MCPTool[]; resources: MCPResource[]; prompts: MCPPrompt[] }> {
+    const client = await this.connect(id)
+    const request = { timeout: REQUEST_TIMEOUT_MS }
+    const tools = await client.listTools(undefined, request)
+    let resources: MCPResource[] = []
+    let prompts: MCPPrompt[] = []
+    // A server may implement only part of the protocol; missing capabilities
+    // are normal, not an error.
+    try {
+      const listed = await client.listResources(undefined, request)
+      resources = (listed.resources ?? []).slice(0, MAX_RESOURCES) as MCPResource[]
+    } catch {
+      resources = []
+    }
+    try {
+      const listed = await client.listPrompts(undefined, request)
+      prompts = (listed.prompts ?? []).slice(0, MAX_PROMPTS) as MCPPrompt[]
+    } catch {
+      prompts = []
+    }
+    return {
+      tools: (tools.tools ?? []).slice(0, MAX_TOOLS),
+      resources,
+      prompts
+    }
+  }
+
   async tools(id: string): Promise<MCPTool[]> {
-    const result = await this.request<{ tools?: MCPTool[] }>(id, {
-      method: 'tools/list',
-      params: {}
-    })
-    return (result.tools ?? []).slice(0, MAX_TOOLS)
+    return (await this.describe(id)).tools
+  }
+
+  /** Read a resource's contents (a file, a note, a database row — whatever the server exposes). */
+  async readResource(id: string, uri: string): Promise<string> {
+    const client = await this.connect(id)
+    const result = await client.readResource({ uri }, { timeout: REQUEST_TIMEOUT_MS })
+    const contents = result.contents ?? []
+    const text = contents
+      .map((entry) => {
+        const record = entry as { text?: string; blob?: string; uri?: string }
+        if (typeof record.text === 'string') return record.text
+        if (typeof record.blob === 'string') return `[binary resource ${record.uri ?? uri}]`
+        return ''
+      })
+      .filter(Boolean)
+      .join('\n')
+      .slice(0, 100000)
+    audit.record('mcp.resource-read', `Read resource ${uri} from an MCP server`, { serverId: id })
+    return text
   }
 
   async call(id: string, name: string, args: Record<string, unknown>): Promise<{ ok: boolean; text: string }> {
-    const result = await this.request<{ content?: Array<{ type?: string; text?: string }>; isError?: boolean }>(id, {
-      method: 'tools/call',
-      params: { name, arguments: args ?? {} }
-    })
-    const text = (result.content ?? [])
+    const client = await this.connect(id)
+    const result = await client.callTool({ name, arguments: args ?? {} }, undefined, { timeout: REQUEST_TIMEOUT_MS })
+    const payload = result as {
+      content?: Array<{ type?: string; text?: string }>
+      isError?: boolean
+      structuredContent?: unknown
+    }
+    const text = (payload.content ?? [])
       .filter((entry) => entry.type === 'text' || typeof entry.text === 'string')
       .map((entry) => entry.text ?? '')
       .join('\n')
       .slice(0, 100000)
-    const ok = result.isError !== true && Boolean(text.trim())
+    const ok = payload.isError !== true && Boolean(text.trim())
     audit.record('mcp.tool-call', `Called ${name} on an MCP server`, { serverId: id, ok })
     return { ok, text: text || (ok ? '(empty result)' : '(the tool reported an error)') }
   }
 
-  /** One JSON-RPC request/response turn on a server connection. */
-  private request<T>(id: string, body: { method: string; params: unknown }): Promise<T> {
+  /** Connect (or reuse) a server and return its MCP client. */
+  private async connect(id: string): Promise<Client> {
     const config = this.list().find((server) => server.id === id)
     if (!config) throw new Error('Unknown MCP server.')
     let connection = this.connections.get(id)
-    if (!connection || connection.child.exitCode !== null) {
-      connection = this.connect(config)
-      this.connections.set(id, connection)
-    }
-    // Every new child must handshake (initialize → initialized) before any
-    // other call; established children skip straight to the method.
-    const run = connection.queue.then(
-      () => this.doRequest<T>(connection as ServerConnection, body),
-      () => this.doRequest<T>(connection as ServerConnection, body)
+    if (connection) return connection.client
+
+    const transport = new StdioClientTransport({
+      command: config.command,
+      args: config.args,
+      // The full environment, so servers can find node/npx and their own
+      // tooling; plus anything the user configured for this server.
+      env: { ...process.env, ...(config.env ?? {}) } as Record<string, string>,
+      stderr: 'pipe'
+    })
+    const client = new Client(
+      { name: 'Klyro', version: app.getVersion() },
+      { capabilities: {} }
     )
-    connection.queue = run.catch(() => undefined)
-    return run
-  }
-
-  private async doRequest<T>(connection: ServerConnection, body: { method: string; params: unknown }): Promise<T> {
-    await this.handshaken(connection)
-    return await this.exchange<T>(connection, {
-      jsonrpc: '2.0',
-      id: ++connection.nextId,
-      method: body.method,
-      params: body.params
-    })
-  }
-
-  private connect(config: MCPServerConfig): ServerConnection {
-    const child = spawn(config.command, config.args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, ...(config.env ?? {}) }
-    }) as ChildProcessWithoutNullStreams
-    const connection: ServerConnection = { child, handshaken: false, lastError: null, queue: Promise.resolve(), nextId: 0 }
-    child.on('exit', () => {
-      if (this.connections.get(config.id) === connection) this.connections.delete(config.id)
-    })
-    return connection
-  }
-
-  /** Performs the MCP handshake exactly once per child process. */
-  private async handshaken(connection: ServerConnection): Promise<void> {
-    if (connection.handshaken) return
-    await this.exchange(connection, {
-      jsonrpc: '2.0',
-      id: ++connection.nextId,
-      method: 'initialize',
-      params: {
-        protocolVersion: PROTOCOL_VERSION,
-        capabilities: {},
-        clientInfo: { name: 'Klyro', version: app.getVersion() }
-      }
-    })
-    connection.child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n')
-    connection.handshaken = true
-  }
-
-  /** Low-level write-one, read-until-matching-id RPC with a hard timeout. */
-  private exchange<T>(connection: ServerConnection, message: { id?: number; jsonrpc: string; method: string; params?: unknown }): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
-      const child = connection.child
-      let buffer = ''
-      const timer = setTimeout(() => {
-        cleanup()
-        reject(new Error('The MCP server did not answer in time.'))
-      }, REQUEST_TIMEOUT_MS)
-      const lines: Array<(payload: Record<string, unknown>) => void> = []
-
-      function cleanup(): void {
-        clearTimeout(timer)
-        child.stdout.off('data', onData)
-      }
-
-      function onData(chunk: Buffer): void {
-        buffer += chunk.toString('utf8')
-        if (buffer.length > MAX_BUFFER_BYTES) {
-          cleanup()
-          reject(new Error('The MCP server produced too much output.'))
-          return
-        }
-        let index = buffer.indexOf('\n')
-        while (index !== -1) {
-          const line = buffer.slice(0, index).trim()
-          buffer = buffer.slice(index + 1)
-          if (!line) continue
-          let payload: Record<string, unknown> | null = null
-          try {
-            payload = JSON.parse(line) as Record<string, unknown>
-          } catch {
-            continue // Hands handshake noise / logs straight to the void.
-          }
-          if (payload.error) {
-            cleanup()
-            reject(new Error(`MCP server error: ${String((payload.error as Record<string, unknown>).message ?? 'unknown')}`))
-            return
-          }
-          if (payload.id && payload.result) {
-            cleanup()
-            resolve(payload.result as T)
-            return
-          }
-          void lines
-        }
-      }
-
-      child.stdout.on('data', onData)
-      child.once('error', (error) => {
-        cleanup()
-        reject(new Error(`Could not launch the MCP server: ${(error as Error).message}`))
-      })
-
-      const payload = message.params === undefined ? { jsonrpc: '2.0', id: message.id, method: message.method } : message
+    try {
+      await client.connect(transport, { timeout: CONNECT_TIMEOUT_MS })
+    } catch (error) {
       try {
-        child.stdin.write(JSON.stringify(payload) + '\n')
-      } catch (error) {
-        cleanup()
-        reject(new Error(`Could not send to the MCP server: ${(error as Error).message}`))
+        await client.close()
+      } catch {
+        // The transport may never have started.
       }
-    })
+      throw friendlyError(error)
+    }
+    connection = { client, transport, queue: Promise.resolve() }
+    this.connections.set(id, connection)
+    // A server that dies takes its connection with it.
+    client.onclose = () => {
+      if (this.connections.get(id) === connection) this.connections.delete(id)
+    }
+    client.onerror = (error: Error) => {
+      logger.warn('MCP client error', error)
+    }
+    return client
   }
 
   private kill(id: string): void {
     const connection = this.connections.get(id)
     if (!connection) return
     try {
-      connection.child.kill()
+      void connection.client.close()
     } catch (error) {
-      logger.warn('Failed to kill MCP child', error)
+      logger.warn('Failed to close MCP client', error)
     }
     this.connections.delete(id)
   }

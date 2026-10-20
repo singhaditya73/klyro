@@ -13,14 +13,16 @@ rl.on('line', (line) => {
   } catch {
     return
   }
-  if (!message.id && message.method) return // notifications need no reply
+  // A request has an id; notifications do not. (Note: id 0 is a valid id, so
+  // it must be compared against undefined rather than tested for truthiness.)
+  if (message.id === undefined && message.method) return
 
   let result = null
   switch (message.method) {
     case 'initialize':
       result = {
         protocolVersion: '2025-06-18',
-        capabilities: { tools: {} },
+        capabilities: { tools: {}, resources: {}, prompts: {} },
         serverInfo: { name: 'fake-mcp', version: '0.0.1' }
       }
       break
@@ -38,6 +40,34 @@ rl.on('line', (line) => {
     case 'tools/call':
       result = {
         content: [{ type: 'text', text: `echo:${JSON.stringify(message.params.arguments ?? {})}` }]
+      }
+      break
+    case 'resources/list':
+      result = {
+        resources: [
+          {
+            uri: 'file:///notes/today.md',
+            name: 'today.md',
+            description: "Today's notes",
+            mimeType: 'text/markdown'
+          }
+        ]
+      }
+      break
+    case 'resources/read':
+      result = {
+        contents: [{ uri: message.params.uri, mimeType: 'text/plain', text: 'the note body' }]
+      }
+      break
+    case 'prompts/list':
+      result = {
+        prompts: [
+          {
+            name: 'summarise',
+            description: 'Summarise the given text.',
+            arguments: [{ name: 'text', description: 'Text to summarise', required: true }]
+          }
+        ]
       }
       break
     default:

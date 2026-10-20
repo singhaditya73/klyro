@@ -32,6 +32,17 @@ describe('MCP stdio client', () => {
     expect(tools[0]).toMatchObject({ name: 'echo', description: expect.stringContaining('Echoes') })
   }, 30000)
 
+  it('lists the resources and prompts a server publishes', async () => {
+    const described = await mcp.describe(serverId)
+    expect(described.resources[0]).toMatchObject({ uri: 'file:///notes/today.md', name: 'today.md' })
+    expect(described.prompts[0]).toMatchObject({ name: 'summarise' })
+  }, 30000)
+
+  it('reads a resource through the protocol', async () => {
+    const text = await mcp.readResource(serverId, 'file:///notes/today.md')
+    expect(text).toContain('the note body')
+  }, 30000)
+
   it('serialises a second request on the same connection and calls a tool', async () => {
     const [tools, called] = await Promise.all([mcp.tools(serverId), mcp.call(serverId, 'echo', { message: 'hi' })])
     expect(tools).toBeTruthy()

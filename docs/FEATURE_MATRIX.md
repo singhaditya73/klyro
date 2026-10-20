@@ -87,6 +87,12 @@ device except as part of the prompt you send to your chosen provider.
   delimited data block with instructions to treat it as reference, not
   instructions. The chat bubble shows how many memories/excerpts grounded the
   answer.
+- **MCP** — the protocol client is the official `@modelcontextprotocol/sdk`
+  (0.4.1), so handshake, framing, capability negotiation and timeouts behave
+  exactly as the specification says. Klyro lists a server's **tools**,
+  **resources** and **prompts**, can read a resource, and calls tools through
+  an approval-gated loop. The agent loop, the approval gates and the audit
+  trail around it remain ours.
 - **Integrations** — GitHub via a personal access token held in the encrypted
   secret store: identify the account, list repositories and open issues
   (PRs flagged), and create issues. Repository identifiers are validated before

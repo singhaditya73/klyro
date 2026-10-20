@@ -12,6 +12,12 @@ files:
   - '!node_modules/**/*.{d.ts,d.cts,d.mts}'
   - '!node_modules/**/{src,test,tests,__tests__,docs,doc,example,examples,benchmark,benchmarks}/**'
   - '!node_modules/**/{.eslintrc*,.prettierrc*,tsconfig*.json,readme*,README*,changelog*,CHANGELOG*}'
+  # The MCP SDK ships an ESM copy and a server half with its own HTTP stack
+  # that Klyro never loads: Klyro is a protocol *client* on CommonJS. The
+  # SDK's server folder stays (the client imports a shared helper from it),
+  # but its Express/Hono stack does not ship.
+  - '!node_modules/@modelcontextprotocol/sdk/dist/esm/**'
+  - '!node_modules/{express,raw-body,jose,cors,@hono}/**'
 asar: true
 compression: normal
 artifactName: ${productName}-${version}-${arch}.${ext}

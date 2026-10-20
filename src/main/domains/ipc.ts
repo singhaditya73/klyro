@@ -483,6 +483,13 @@ export function registerIpcHandlers(): void {
 
   handle(IPC.usageRows, () => usage.rows())
   handle(IPC.privacyProbeOverlay, () => probeOverlayVisibility())
+  handle(IPC.mcpReadResource, async (_event, input: unknown) => {
+    const parsed = z
+      .object({ serverId: z.string().min(1).max(80), uri: z.string().min(1).max(2000) })
+      .strict()
+      .parse(input)
+    return { text: await mcp.readResource(parsed.serverId, parsed.uri) }
+  })
   handle(IPC.screenListDisplays, () => listDisplays())
   handle(IPC.usageClear, () => {
     usage.clear()

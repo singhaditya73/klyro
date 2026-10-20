@@ -112,6 +112,9 @@ export const IPC = {
   usageRows: 'usage:rows',
   usageClear: 'usage:clear',
 
+  /* MCP resources */
+  mcpReadResource: 'mcp:readResource',
+
   /* Privacy: does this machine exclude the overlay from screen captures? */
   privacyProbeOverlay: 'privacy:probeOverlay',
   screenListDisplays: 'screen:listDisplays'
