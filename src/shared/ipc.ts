@@ -115,6 +115,9 @@ export const IPC = {
   /* MCP resources */
   mcpReadResource: 'mcp:readResource',
 
+  /* Antigravity: the local agent IDE, read directly from its own service */
+  antigravityStatus: 'antigravity:status',
+
   /* Import MCP servers from tools the user already runs */
   mcpImportDiscover: 'mcp:importDiscover',
   mcpImportAdd: 'mcp:importAdd',

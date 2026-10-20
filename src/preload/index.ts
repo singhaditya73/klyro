@@ -71,6 +71,7 @@ const api: KlyroApi = {
   mcpImportAdd: (input: { name: string; command: string; args?: string[]; env?: Record<string, string> }) =>
     ipcRenderer.invoke(IPC.mcpImportAdd, input),
   localAgentsDetect: () => ipcRenderer.invoke(IPC.localAgentsDetect),
+  antigravityStatus: () => ipcRenderer.invoke(IPC.antigravityStatus),
   localAgentStartOpenCode: () => ipcRenderer.invoke(IPC.localAgentStartOpenCode),
   localAgentConnectOpenCode: () => ipcRenderer.invoke(IPC.localAgentConnectOpenCode),
   localAgentOpenCodeInstalled: () => ipcRenderer.invoke(IPC.localAgentOpenCodeInstalled),

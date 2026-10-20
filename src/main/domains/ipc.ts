@@ -28,6 +28,7 @@ import { settingsDomain } from './settings'
 import { registerShortcuts } from './shortcuts'
 import { mcp } from './mcp'
 import { mcpImport } from './mcp-import'
+import { antigravity } from './antigravity'
 import { actions } from './actions'
 import { audit } from './audit'
 import { usage } from './usage'
@@ -503,6 +504,7 @@ export function registerIpcHandlers(): void {
     return mcp.add(parsed.name, parsed.command, parsed.args ?? [], parsed.env)
   })
   handle(IPC.localAgentsDetect, () => localAgents.detect())
+  handle(IPC.antigravityStatus, () => antigravity.status())
   handle(IPC.localAgentStartOpenCode, () => localAgentLauncher.startOpenCode())
   handle(IPC.localAgentConnectOpenCode, () => localAgentLauncher.connectOpenCode())
   handle(IPC.localAgentOpenCodeInstalled, () => ({ installed: Boolean(findOpenCodeBinary()) }))

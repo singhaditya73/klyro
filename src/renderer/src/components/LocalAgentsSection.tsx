@@ -36,6 +36,14 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
   const [notice, setNotice] = useState<string | null>(null)
   const [installed, setInstalled] = useState(false)
   const [clis, setClis] = useState<Array<{ id: string; name: string; installed: boolean; providerId: string; note: string }>>([])
+  const [antigravity, setAntigravity] = useState<{
+    supported: boolean
+    running: boolean
+    plan: string | null
+    models: Array<{ id: string; name: string; provider: string; quota: number | null }>
+    endpoint: string | null
+    error: string | null
+  } | null>(null)
 
   const scan = useCallback(async (): Promise<void> => {
     setScanning(true)
@@ -52,6 +60,7 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
     void scan()
     void window.klyro.localAgentOpenCodeInstalled().then((result) => setInstalled(result.installed)).catch(() => setInstalled(false))
     void window.klyro.localAgentClis().then(setClis).catch(() => setClis([]))
+    void window.klyro.antigravityStatus().then(setAntigravity).catch(() => setAntigravity(null))
   }, [scan])
 
   /**
@@ -202,6 +211,44 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
               )}
               <span>{starting ? 'Starting…' : 'Start it'}</span>
             </button>
+          </div>
+        </div>
+      )}
+
+      {antigravity?.running && (
+        <div className="card" style={{ marginTop: 12, borderColor: 'var(--border-default)' }}>
+          <div className="card__row" style={{ flexWrap: 'wrap' }}>
+            <span className="icon-tile">
+              <Server className="icon icon--sm" aria-hidden="true" />
+            </span>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div className="card__title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                Antigravity
+                <span className="pill pill--ok">Connected</span>
+                {antigravity.plan && <span className="pill pill--accent">{antigravity.plan} plan</span>}
+              </div>
+              <div className="card__subtitle">
+                Read directly from the Antigravity agent on this machine — {antigravity.models.length} models, no
+                key and no bridge. Endpoint {antigravity.endpoint}.
+              </div>
+            </div>
+            <button className="btn btn--ghost btn--sm" onClick={() => void scan()}>
+              <RefreshCcw className="icon icon--xs" aria-hidden="true" />
+              <span>Refresh</span>
+            </button>
+          </div>
+          <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {antigravity.models.slice(0, 8).map((model) => (
+              <span key={model.id} className="pill" title={`${model.id} · ${model.provider}`}>
+                {model.name}
+                {model.quota !== null && model.quota < 1 ? ` · ${Math.round(model.quota * 100)}%` : ''}
+              </span>
+            ))}
+            {antigravity.models.length > 8 && (
+              <span className="muted" style={{ fontSize: 11, alignSelf: 'center' }}>
+                +{antigravity.models.length - 8} more
+              </span>
+            )}
           </div>
         </div>
       )}

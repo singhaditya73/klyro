@@ -120,6 +120,15 @@ interface KlyroApi {
   }>
   localAgentOpenCodeInstalled(): Promise<{ installed: boolean }>
   localAgentClis(): Promise<Array<{ id: string; name: string; installed: boolean; providerId: string; note: string }>>
+  antigravityStatus(): Promise<{
+    supported: boolean
+    running: boolean
+    plan: string | null
+    account: string | null
+    models: Array<{ id: string; name: string; provider: string; quota: number | null }>
+    endpoint: string | null
+    error: string | null
+  }>
 
   mcpImportDiscover(): Promise<Array<{
     source: string

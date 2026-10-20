@@ -15,7 +15,6 @@ function writeFakeBinary(): string {
 
 describe('Codex CLI provider', () => {
   it('finds the binary and answers with the agent output', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'klyro-fakecodex-path-'))
     const binary = writeFakeBinary()
     // The fake lives in its own directory; put that on PATH.
     process.env.PATH = `${binary.slice(0, binary.lastIndexOf('/'))}:${process.env.PATH ?? ''}`
