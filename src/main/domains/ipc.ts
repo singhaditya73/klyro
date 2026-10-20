@@ -31,6 +31,7 @@ import { actions } from './actions'
 import { audit } from './audit'
 import { usage } from './usage'
 import { localAgents } from './local-agents'
+import { findOpenCodeBinary, localAgentLauncher } from './local-agent-launcher'
 import { listOpenCodeModels } from '../providers/opencode'
 import { trimSlash } from '../providers/http'
 /** Reject IPC from any frame that is not Klyro's own renderer. */
@@ -488,6 +489,8 @@ export function registerIpcHandlers(): void {
   handle(IPC.usageRows, () => usage.rows())
   handle(IPC.privacyProbeOverlay, () => probeOverlayVisibility())
   handle(IPC.localAgentsDetect, () => localAgents.detect())
+  handle(IPC.localAgentStartOpenCode, () => localAgentLauncher.startOpenCode())
+  handle(IPC.localAgentOpenCodeInstalled, () => ({ installed: Boolean(findOpenCodeBinary()) }))
   handle(IPC.providerDetectModels, (_event, input: unknown) => {
     const parsed = z
       .object({ baseUrl: z.string().max(300), kind: z.enum(['opencode', 'openai-compatible']) })

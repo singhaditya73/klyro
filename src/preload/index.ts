@@ -68,6 +68,8 @@ const api: KlyroApi = {
   usageRows: () => ipcRenderer.invoke(IPC.usageRows),
   privacyProbeOverlay: () => ipcRenderer.invoke(IPC.privacyProbeOverlay),
   localAgentsDetect: () => ipcRenderer.invoke(IPC.localAgentsDetect),
+  localAgentStartOpenCode: () => ipcRenderer.invoke(IPC.localAgentStartOpenCode),
+  localAgentOpenCodeInstalled: () => ipcRenderer.invoke(IPC.localAgentOpenCodeInstalled),
   providerDetectModels: (input: { baseUrl: string; kind: 'opencode' | 'openai-compatible' }) =>
     ipcRenderer.invoke(IPC.providerDetectModels, input),
   screenListDisplays: () => ipcRenderer.invoke(IPC.screenListDisplays),

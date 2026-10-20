@@ -117,6 +117,8 @@ export const IPC = {
 
   /* Local agents: what is already running on this machine */
   localAgentsDetect: 'local-agents:detect',
+  localAgentStartOpenCode: 'local-agents:startOpenCode',
+  localAgentOpenCodeInstalled: 'local-agents:openCodeInstalled',
   providerDetectModels: 'provider:detectModels',
 
   /* Privacy: does this machine exclude the overlay from screen captures? */

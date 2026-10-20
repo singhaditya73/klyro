@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { CheckCircle2, Circle, Cpu, Key, RefreshCcw, Server } from 'lucide-react'
+import { CheckCircle2, Circle, Cpu, Key, Loader2, Play, RefreshCcw, Server } from 'lucide-react'
 
 /**
  * What is already running on this machine.
@@ -32,6 +32,9 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
   const [agents, setAgents] = useState<LocalAgent[] | null>(null)
   const [scanning, setScanning] = useState(false)
   const [connected, setConnected] = useState<string | null>(null)
+  const [starting, setStarting] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [installed, setInstalled] = useState(false)
 
   const scan = useCallback(async (): Promise<void> => {
     setScanning(true)
@@ -46,10 +49,52 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
 
   useEffect(() => {
     void scan()
+    void window.klyro.localAgentOpenCodeInstalled().then((result) => setInstalled(result.installed)).catch(() => setInstalled(false))
+  }, [scan])
+
+  /**
+   * Start the user's own OpenCode server and connect to it. Klyro reads the
+   * password the server prints and keeps it encrypted, so the user never has
+   * to copy anything.
+   */
+  const startOpenCode = useCallback(async (): Promise<void> => {
+    setStarting(true)
+    setNotice(null)
+    try {
+      const result = await window.klyro.localAgentStartOpenCode()
+      if (!result.started) {
+        setNotice(result.error ?? 'OpenCode did not start.')
+        return
+      }
+      setNotice(
+        result.spawned
+          ? `OpenCode is running on ${result.baseUrl} and connected. No key needed.`
+          : 'OpenCode was already running — connected. No key needed.'
+      )
+      // Point the provider at the server that is actually listening.
+      await onConnect(
+        {
+          id: 'opencode',
+          kind: 'opencode',
+          name: 'OpenCode',
+          baseUrl: result.baseUrl,
+          healthy: true,
+          needsAuth: false,
+          models: [],
+          note: 'Your OpenCode account, its free models and its limits — no key needed.'
+        },
+        ''
+      )
+      await scan()
+    } finally {
+      setStarting(false)
+    }
   }, [scan])
 
   const healthy = (agents ?? []).filter((agent) => agent.healthy)
   const others = (agents ?? []).filter((agent) => !agent.healthy)
+  // OpenCode that is installed but not answering: we can start it ourselves.
+  const openCodeRunning = (agents ?? []).some((agent) => agent.kind === 'opencode' && agent.healthy)
 
   return (
     <section style={{ marginTop: 32, paddingTop: 24, borderTop: '1px solid var(--border-subtle)' }}>
@@ -131,7 +176,35 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
         </div>
       )}
 
-      {healthy.length === 0 && agents !== null && (
+      {notice && (
+        <div className="notice notice--info" style={{ marginTop: 12 }}>
+          <span className="notice__body">{notice}</span>
+        </div>
+      )}
+
+      {installed && !openCodeRunning && agents !== null && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <div className="card__row" style={{ flexWrap: 'wrap' }}>
+            <Server className="icon icon--sm" style={{ color: 'var(--text-secondary)' }} aria-hidden="true" />
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div className="card__title">OpenCode is installed here</div>
+              <div className="card__subtitle">
+                Start it and Klyro will use your OpenCode account — its free models, its limits — with no key.
+              </div>
+            </div>
+            <button className="btn btn--primary btn--sm" onClick={() => void startOpenCode()} disabled={starting}>
+              {starting ? (
+                <Loader2 className="icon icon--xs spin" aria-hidden="true" />
+              ) : (
+                <Play className="icon icon--xs" aria-hidden="true" />
+              )}
+              <span>{starting ? 'Starting…' : 'Start it'}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {healthy.length === 0 && agents !== null && !installed && (
         <div className="card" style={{ marginTop: 16 }}>
           <div className="muted" style={{ fontSize: 13 }}>
             Nothing local found. Start <code>opencode serve</code> (free models, no key), or run Ollama, LM Studio,
