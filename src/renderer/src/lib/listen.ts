@@ -75,6 +75,38 @@ export function chunkHasSpeech(lastVoicedAt: number, now: number, chunkMs: numbe
   return now - lastVoicedAt <= chunkMs + graceMs
 }
 
+/* -----------------------------------------------------------------------
+ * Conversation mode: voice activity detection.
+ *
+ * A duplex assistant should start talking when you start talking, and stop
+ * when you stop. Without a streaming transcription provider there is no
+ * partial text to show, so the detection is done on the audio level: the
+ * analyser reports the loudness of the microphone, and an utterance begins
+ * when the level crosses the speech floor and ends after a short silence.
+ * -------------------------------------------------------------------- */
+
+/** The level above which the microphone is treated as speech. */
+export const VOICE_SPEECH_THRESHOLD = 0.014
+/** Silence after the last voiced sample that ends an utterance. */
+export const VOICE_SILENCE_MS = 750
+/** An utterance shorter than this is a cough, a click or a keyboard. */
+export const VOICE_MIN_UTTERANCE_MS = 450
+
+/** Is this level speech rather than room noise? */
+export function isSpeech(rms: number, threshold = VOICE_SPEECH_THRESHOLD): boolean {
+  return rms >= threshold
+}
+
+/** Has the pause after the last voiced sample been long enough to end it? */
+export function utteranceEnded(speaking: boolean, msSinceLastVoice: number, silenceMs = VOICE_SILENCE_MS): boolean {
+  return speaking && msSinceLastVoice >= silenceMs
+}
+
+/** Was there enough speech in this utterance to be worth transcribing? */
+export function utteranceWorthAsking(durationMs: number, minDurationMs = VOICE_MIN_UTTERANCE_MS): boolean {
+  return durationMs >= minDurationMs
+}
+
 export interface SilenceWatcher {
   /** True when the chunk being assembled is silence-only and can be skipped. */
   isSilentChunk(chunkMs: number): boolean

@@ -6,7 +6,7 @@ Status legend: **✅ done** · **🟡 partial** · **⬜ planned**
 
 | Feature | Status | Notes |
 | --- | --- | --- |
-| 1.1 Floating assistant window | ✅ | Frameless always-on-top overlay window; **user-controlled opacity (20–100%, 0.3.3)** via window-level transparency; explicit drag handles (top bar + Klyro wordmark), interactive controls excluded from dragging |
+| 1.1 Floating assistant window | ✅ | Frameless always-on-top overlay window; **user-controlled opacity (20–100%, 0.3.3)** via window-level transparency; explicit drag handles (top bar + Klyro wordmark), interactive controls excluded from dragging. **0.6.0: it appears the way a native panel does** — the window is created at launch (so the hotkey pays only for the animation), it fades in with an ease-out curve while the content settles behind it, it fades out instead of vanishing, and the window background matches the glass surface so there is no colour flash |
 | 1.2 Global shortcut to show/hide | ✅ | Default `Ctrl/Cmd+Shift+Space` (configurable) |
 | 1.2c Keep the overlay out of a share | ✅ | Three supported routes: (1) **Private mode** excludes the window from captures and live shares on Windows/macOS; (2) **Overlay screen** (0.3.9) puts the overlay on a second display you are not sharing — the shared framebuffer simply does not contain it; (3) **privacy check** (0.3.7) measures the exclusion on your own machine. Linux capture now prefers a compositor-native tool (grim / GNOME Shell D-Bus / ImageMagick) so the xdg-desktop-portal dialog never appears on your screen mid-meeting |
 | 1.2b Capture exclusion, verified | ✅ | **Private mode** excludes the overlay from screen captures and live screen shares on Windows and macOS (`WDA_EXCLUDEFROMCAPTURE` / `NSWindow.sharingType = .none`) — the same supported APIs password managers use. **0.3.7: a privacy check measures it on your machine** — two captures, one with the overlay up and one without, compared pixel by pixel — and reports the number instead of claiming it. macOS permission is requested at launch so the system prompt never appears mid-meeting. Linux/X11 has no per-window exclusion API; the check says so plainly |
@@ -20,7 +20,7 @@ Status legend: **✅ done** · **🟡 partial** · **⬜ planned**
 | 2.3 Understand text/code/UI | ✅ | Vision models (provider-dependent) |
 | 2.4 Conversation context across turns | ✅ | Persisted history |
 | 3.1 Microphone capture with consent | ✅ | `getUserMedia` + visible recording state |
-| 3.2 Live transcription | 🟡 | Push-to-talk transcription; continuous streaming planned |
+| 3.2 Live transcription | 🟡 | Push-to-talk transcription; **conversation mode (0.6.0)**: the microphone stays open, voice activity detection starts and ends your utterance, and Klyro answers when you stop speaking — with the screen attached, so the answer is about what you are looking at while you say it. **Speak again mid-answer and the answer is cut off**: you interrupted, and the new words are the question |
 | 3.3—3.4 Real-time suggestions | 🟡 | Overlay "Listen" mode: 20s chunked transcription of meeting audio, question heuristic, auto-answers shown in the overlay (rate-limited on free Groq tiers) |
 | 4.1 Meeting transcripts / summaries | ✅ | Chunked recording → transcript → summary + action items; overlay listen/record assist; post-meeting action agent with output ledger |
 | 5.1 Saved + searchable history | ✅ | Local JSON store + search |

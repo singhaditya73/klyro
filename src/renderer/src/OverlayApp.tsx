@@ -1,6 +1,18 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Eye, EyeOff, Headphones, Loader2, Mic, Monitor, Square, X } from 'lucide-react'
-import { createSilenceWatcher, isNoAnswer, listenPrompt, looksLikeQuestion, pickRecordMimeType, snippetPrompt, type SilenceWatcher } from './lib/listen'
+import {
+  createSilenceWatcher,
+  isNoAnswer,
+  isSpeech,
+  listenPrompt,
+  looksLikeQuestion,
+  pickRecordMimeType,
+  rmsFromTimeDomain,
+  snippetPrompt,
+  utteranceEnded,
+  utteranceWorthAsking,
+  type SilenceWatcher
+} from './lib/listen'
 import type { Attachment } from '@shared/types'
 import KlyroMark from './assets/logo/klyro-mark.svg'
 
@@ -21,6 +33,9 @@ export default function OverlayApp() {
   const [assistSource, setAssistSource] = useState<'System audio' | 'Microphone' | null>(null)
   // A screen capture waiting to be sent with the next question.
   const [capture, setCapture] = useState<{ dataUrl: string; name: string } | null>(null)
+  // Conversation mode: continuous listening, speech-triggered answers.
+  const [talkState, setTalkState] = useState<'idle' | 'listening' | 'hearing' | 'thinking'>('idle')
+  const [level, setLevel] = useState(0)
   // Screens and windows to choose from (instant capture turned off).
   const [overlaySources, setOverlaySources] = useState<Array<{ id: string; name: string; thumbnail: string }> | null>(null)
   // True while a capture is in flight — the shot takes a moment, so say so.
@@ -46,10 +61,14 @@ export default function OverlayApp() {
     return window.klyro.onChatStream((event) => {
       if (event.type === 'start') {
         setAnswer('')
+        talkRef.current.answering = true
+        setTalkState((current) => (current === 'listening' ? current : 'thinking'))
       } else if (event.type === 'delta') {
         setAnswer((prev) => prev + event.text)
       } else if (event.type === 'done' || event.type === 'error') {
         setBusy(false)
+        talkRef.current.answering = false
+        if (talkRef.current.timer !== null) setTalkState('listening')
         if (event.type === 'done') {
           setTiming({ ms: event.ms ?? 0, totalMs: event.totalMs ?? 0, model: event.model, cached: event.cached })
         }
@@ -85,6 +104,9 @@ export default function OverlayApp() {
   }
 
   function teardownRecording(): void {
+    // Conversation mode holds an open microphone: it must be released with the
+    // overlay, or the mic stays hot after the window is gone.
+    stopTalking()
     recorderRef.current?.state === 'recording' && recorderRef.current.stop()
     streamRef.current?.getTracks().forEach((track) => track.stop())
     streamRef.current = null
@@ -250,6 +272,182 @@ export default function OverlayApp() {
       setAssistNote((error as Error).message)
     }
   }
+
+  /* ---------------------------------------------------------------------
+   * Conversation mode: talk to Klyro like a person.
+   *
+   * The microphone stays open; a level watcher decides when an utterance
+   * starts and ends. When it ends, the clip is transcribed and answered —
+   * with the screen attached, so the answer is about what you are looking at
+   * while you say it. Speak again while the answer is still streaming and the
+   * answer is cut off: you interrupted, and the new words are the question.
+   * -------------------------------------------------------------------- */
+
+  const talkRef = useRef<{
+    stream: MediaStream | null
+    recorder: MediaRecorder | null
+    analyser: AnalyserNode | null
+    context: AudioContext | null
+    buffer: Uint8Array<ArrayBuffer> | null
+    chunks: Blob[]
+    mark: number
+    speaking: boolean
+    lastVoiceAt: number
+    startedAt: number
+    timer: number | null
+    answering: boolean
+  }>({
+    stream: null,
+    recorder: null,
+    analyser: null,
+    context: null,
+    buffer: null,
+    chunks: [],
+    mark: 0,
+    speaking: false,
+    lastVoiceAt: 0,
+    startedAt: 0,
+    timer: null,
+    answering: false
+  })
+
+  /** Answer a spoken question, with the screen attached when possible. */
+  const askSpoken = useCallback(async (spoken: string): Promise<void> => {
+    if (!spoken.trim()) return
+    setAnswer('')
+    setTiming(null)
+    setTalkState('thinking')
+    try {
+      let id = conversationId
+      if (!id) {
+        const conversation = await window.klyro.createConversation()
+        id = conversation.id
+        setConversationId(id)
+      }
+      let attachments: Attachment[] | undefined
+      try {
+        const shot = await window.klyro.grabScreen()
+        attachments = [{ kind: 'image', mime: 'image/png', dataUrl: shot.dataUrl, label: shot.name }]
+      } catch {
+        // No screen? Answer from the words alone.
+      }
+      await window.klyro.sendChat({ conversationId: id, content: spoken, attachments, useFastModel: true })
+    } catch (error) {
+      setTalkState('listening')
+      setAssistNote((error as Error).message)
+    }
+  }, [conversationId])
+
+  /** Transcribe the finished utterance and ask it. */
+  const flushUtterance = useCallback(async (): Promise<void> => {
+    const talk = talkRef.current
+    const duration = Date.now() - talk.startedAt
+    const pieces = talk.chunks.slice(talk.mark)
+    talk.chunks.length = 0
+    talk.mark = 0
+    talk.speaking = false
+    if (!utteranceWorthAsking(duration) || pieces.length === 0) {
+      setTalkState('listening')
+      return
+    }
+    const blob = new Blob(pieces, { type: talk.recorder?.mimeType || 'audio/webm' })
+    try {
+      const buffer = await blob.arrayBuffer()
+      const result = await window.klyro.transcribe(buffer, blob.type)
+      const spoken = result.text.trim()
+      if (!spoken) {
+        setTalkState('listening')
+        return
+      }
+      setTranscript((previous) => [...previous, spoken].slice(-8))
+      await askSpoken(spoken)
+    } catch (error) {
+      setTalkState('listening')
+      setAssistNote((error as Error).message)
+    }
+  }, [askSpoken])
+
+  const stopTalking = useCallback((): void => {
+    const talk = talkRef.current
+    if (talk.timer !== null) window.clearInterval(talk.timer)
+    talk.timer = null
+    talk.recorder?.state === 'recording' && talk.recorder.stop()
+    talk.recorder = null
+    talk.stream?.getTracks().forEach((track) => track.stop())
+    talk.stream = null
+    void talk.context?.close().catch(() => undefined)
+    talk.context = null
+    talk.analyser = null
+    talk.chunks = []
+    talk.speaking = false
+    setTalkState('idle')
+    setLevel(0)
+  }, [])
+
+  const startTalking = useCallback(async (): Promise<void> => {
+    setAssistNote(null)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const talk = talkRef.current
+      talk.stream = stream
+
+      // Level watcher for speech detection.
+      const AudioCtor = window.AudioContext
+      if (AudioCtor) {
+        const context = new AudioCtor()
+        const analyser = context.createAnalyser()
+        analyser.fftSize = 2048
+        context.createMediaStreamSource(stream).connect(analyser)
+        talk.context = context
+        talk.analyser = analyser
+        talk.buffer = new Uint8Array(new ArrayBuffer(analyser.fftSize))
+      }
+
+      // Continuous recorder: chunks are sliced per utterance by the mark.
+      const mimeType = pickRecordMimeType()
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+      talk.recorder = recorder
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) talk.chunks.push(event.data)
+      }
+      recorder.start(250)
+
+      setTalkState('listening')
+      talk.timer = window.setInterval(() => {
+        if (!talk.analyser || !talk.buffer) return
+        talk.analyser.getByteTimeDomainData(talk.buffer)
+        const rms = rmsFromTimeDomain(talk.buffer)
+        setLevel(Math.min(1, rms * 12))
+        const now = Date.now()
+        if (isSpeech(rms)) {
+          if (!talk.speaking) {
+            // An utterance starts: remember where the audio begins.
+            talk.speaking = true
+            talk.startedAt = now
+            talk.mark = talk.chunks.length
+            setTalkState('hearing')
+          }
+          talk.lastVoiceAt = now
+          return
+        }
+        if (talk.speaking) {
+          if (utteranceEnded(true, now - talk.lastVoiceAt)) {
+            void flushUtterance()
+            return
+          }
+        }
+        // Barge-in: speaking while the answer is still streaming cuts it off.
+        if (talk.answering && isSpeech(rms)) {
+          talk.answering = false
+          void window.klyro.abortChat()
+        }
+        if (!talk.speaking && talk.answering === false) setTalkState((current) => (current === 'hearing' ? current : current))
+      }, 100)
+    } catch (error) {
+      setAssistNote(`Microphone unavailable: ${(error as Error).message}`)
+      stopTalking()
+    }
+  }, [flushUtterance, stopTalking])
 
   async function transcribeBlob(blob: Blob): Promise<string> {
     const buffer = await blob.arrayBuffer()
@@ -441,11 +639,24 @@ export default function OverlayApp() {
                 </>
               )}
             </button>
-            <button className="btn btn--sm" onClick={() => void startSnippet()} disabled={busy}>
+            <button
+              className={`btn btn--sm${talkState !== 'idle' ? ' btn--primary' : ''}`}
+              onClick={() => {
+                if (talkState === 'idle') void startTalking()
+                else stopTalking()
+              }}
+              disabled={busy}
+              title="Talk to Klyro — it answers when you stop speaking"
+              aria-label="Talk to Klyro"
+            >
+              <Mic className="icon icon--sm" aria-hidden="true" />
+              <span>{talkState === 'idle' ? 'Talk' : 'Stop talking'}</span>
+            </button>
+            <button className="btn btn--sm" onClick={() => void startSnippet()} disabled={busy || talkState !== 'idle'}>
               <Mic className="icon icon--sm" aria-hidden="true" />
               <span>Record question</span>
             </button>
-            <button className="btn btn--sm" onClick={() => void startListening()} disabled={busy}>
+            <button className="btn btn--sm" onClick={() => void startListening()} disabled={busy || talkState !== 'idle'}>
               <Headphones className="icon icon--sm" aria-hidden="true" />
               <span>Listen to meeting</span>
             </button>
@@ -483,6 +694,18 @@ export default function OverlayApp() {
 
         {(mode !== 'idle' || busy) && <Loader2 className="icon icon--sm overlay__spin" aria-hidden="true" />}
       </div>
+
+      {talkState !== 'idle' && (
+        <div className="overlay__talk" aria-live="polite">
+          <span className={`overlay__talk-dot overlay__talk-dot--${talkState}`} aria-hidden="true" />
+          <span className="overlay__talk-label">
+            {talkState === 'listening' ? 'Listening — speak whenever you like' : talkState === 'hearing' ? 'Hearing you…' : 'Thinking…'}
+          </span>
+          <span className="overlay__meter" aria-hidden="true">
+            <span className="overlay__meter-fill" style={{ width: `${Math.round(Math.min(1, level) * 100)}%` }} />
+          </span>
+        </div>
+      )}
 
       {transcript.length > 0 && (
         <div className="overlay__transcript" aria-live="polite">

@@ -8,6 +8,8 @@ import { settingsDomain } from './settings'
 
 const OVERLAY_WIDTH = 640
 const OVERLAY_HEIGHT = 208
+/** How long the show/hide animation runs, in milliseconds. */
+const OVERLAY_ANIMATION_MS = 150
 
 let mainWindow: BrowserWindow | null = null
 let overlayWindow: BrowserWindow | null = null
@@ -104,7 +106,9 @@ export function createOverlayWindow(): BrowserWindow {
     alwaysOnTop: true,
     skipTaskbar: true,
     fullscreenable: false,
-    backgroundColor: '#0b0d12',
+    // Matched to the renderer's glass surface so the window never flashes a
+    // different colour on the way in.
+    backgroundColor: '#14171b',
     webPreferences: baseWebPreferences()
   })
   overlayWindow.setAlwaysOnTop(true, 'screen-saver')
@@ -115,7 +119,7 @@ export function createOverlayWindow(): BrowserWindow {
     // While meeting-assist recording is live the overlay must keep running even
     // when focus returns to the meeting app; private mode has the same need
     // (reading notes while the meeting has focus) without recording.
-    if (!overlayStickyRecording && !overlayPrivateModeActive()) overlayWindow?.hide()
+    if (!overlayStickyRecording && !overlayPrivateModeActive()) void hideOverlayAnimated()
   })
   attachNavigationGuards(overlayWindow)
   loadRoute(overlayWindow, 'overlay')
@@ -227,18 +231,96 @@ export function applyOverlayDisplay(): void {
 export function toggleOverlay(): void {
   const win = createOverlayWindow()
   if (win.isVisible()) {
-    win.hide()
+    void hideOverlayAnimated()
     return
   }
   positionOverlay(win)
   applyOverlayPrivateMode()
   applyOverlayOpacity()
+  showOverlayAnimated(win)
+}
+
+/** The user's chosen opacity, as a 0..1 number. */
+function overlayOpacityValue(): number {
+  try {
+    const raw = settingsDomain.get().overlayOpacity
+    return Math.min(100, Math.max(20, Math.round(Number(raw) || 100))) / 100
+  } catch {
+    return 1
+  }
+}
+
+/**
+ * Show the overlay the way a native panel appears: fade in with a slight
+ * lift instead of popping onto the screen. The window is already created at
+ * launch, so the hotkey only pays for the animation.
+ */
+function showOverlayAnimated(win: BrowserWindow): void {
+  const target = overlayOpacityValue()
+  const started = Date.now()
+  try {
+    win.setOpacity(0)
+  } catch {
+    // Some Linux compositors refuse opacity changes; the overlay still shows.
+  }
   win.show()
   win.focus()
+  const step = (): void => {
+    if (!overlayWindow || overlayWindow.isDestroyed()) return
+    const elapsed = Date.now() - started
+    // An ease-out curve: fast at first, settling gently.
+    const progress = Math.min(1, elapsed / OVERLAY_ANIMATION_MS)
+    const eased = 1 - Math.pow(1 - progress, 3)
+    try {
+      win.setOpacity(target * eased)
+    } catch {
+      // Ignore: the window is visible either way.
+    }
+    if (progress < 1) setTimeout(step, 16)
+  }
+  step()
+}
+
+/** Fade out, then hide — the mirror of the entrance. */
+export function hideOverlayAnimated(): Promise<void> {
+  const win = overlayWindow
+  if (!win || win.isDestroyed() || !win.isVisible()) {
+    win?.hide()
+    return Promise.resolve()
+  }
+  const target = overlayOpacityValue()
+  const started = Date.now()
+  return new Promise((resolve) => {
+    const step = (): void => {
+      if (!overlayWindow || overlayWindow.isDestroyed()) {
+        resolve()
+        return
+      }
+      const elapsed = Date.now() - started
+      const progress = Math.min(1, elapsed / OVERLAY_ANIMATION_MS)
+      try {
+        win.setOpacity(target * (1 - progress))
+      } catch {
+        // Ignore.
+      }
+      if (progress < 1) {
+        setTimeout(step, 16)
+        return
+      }
+      win.hide()
+      try {
+        win.setOpacity(target)
+      } catch {
+        // Ignore.
+      }
+      resolve()
+    }
+    step()
+  })
 }
 
 export function hideOverlay(): void {
-  overlayWindow?.hide()
+  void hideOverlayAnimated()
 }
 
 export function showMainWindow(): void {
