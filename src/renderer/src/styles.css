@@ -1301,6 +1301,15 @@ input[type='range']::-moz-range-thumb {
   background: var(--surface-elevated);
 }
 .modal__body { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-5); }
+.modal__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-elevated);
+}
 
 .sidebar-overlay { display: none; }
 
@@ -1659,6 +1668,130 @@ input[type='range']::-moz-range-thumb {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ==========================================================================
+   First-run tour
+   ========================================================================== */
+
+.onboarding { max-width: 620px; }
+.onboarding__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-md);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.onboarding__mark { width: 20px; height: 20px; border-radius: var(--radius-xs); }
+.onboarding__body { padding: var(--space-6) var(--space-6) var(--space-5); }
+.onboarding__title {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+.onboarding__lede {
+  margin-top: var(--space-2);
+  font-size: var(--text-md);
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+.onboarding__points {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+.onboarding__point { display: flex; gap: var(--space-3); align-items: flex-start; }
+.onboarding__point-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+.onboarding__point div { display: flex; flex-direction: column; gap: 1px; }
+.onboarding__point strong { font-size: var(--text-base); font-weight: 550; }
+.onboarding__point span { font-size: var(--text-sm); color: var(--text-muted); }
+.onboarding__notice { margin-top: var(--space-5); }
+.onboarding__suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.onboarding__suggestions .btn {
+  border-color: var(--border-subtle);
+  background: var(--surface-base);
+  color: var(--text-secondary);
+}
+.onboarding__suggestions .btn:hover { color: var(--text-primary); border-color: var(--border-default); }
+.onboarding__cta { margin-top: var(--space-5); width: 100%; height: 40px; }
+.onboarding__thinking {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+.onboarding__answer {
+  margin-top: var(--space-5);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-base);
+}
+.onboarding__answer-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.onboarding__answer-label .icon { color: var(--success); }
+.onboarding__answer-time {
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.onboarding__answer p {
+  margin-top: var(--space-3);
+  font-size: var(--text-md);
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+.onboarding__done { text-align: center; padding: var(--space-10) var(--space-6); }
+.onboarding__done-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-pill);
+  background: var(--success-soft);
+  color: var(--success);
+  margin-bottom: var(--space-4);
+}
+.onboarding kbd {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border-default);
+  background: var(--surface-raised);
+  color: var(--text-primary);
 }
 
 /* ==========================================================================

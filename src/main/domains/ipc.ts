@@ -77,6 +77,7 @@ const settingsPatchSchema = z
     screenPreWarm: z.boolean().optional(),
     overlayDisplay: z.union([z.literal('primary'), z.number().int().min(0).max(7)]).optional(),
     overlayAnswerCache: z.boolean().optional(),
+    onboardingComplete: z.boolean().optional(),
     allowUnencryptedSecrets: z.boolean().optional(),
     overlayPrivateMode: z.boolean().optional(),
     overlayOpacity: z.number().int().min(20).max(100).optional(),

@@ -118,6 +118,23 @@ so you can keep asking follow-ups afterwards. Steps are either a **prompt**
 output feeds the next. Three built-ins ship: *Standup from GitHub issues*,
 *Turn notes into action items*, and *Review a diff*.
 
+## First run (0.5.0)
+
+A first-time user does not read feature lists — they need to *see* the product
+work. The welcome tour is three steps and about twenty seconds:
+
+1. **Welcome** — what Klyro is, the hotkey (shown as a human-readable
+   accelerator), and the three things that matter. If no model is configured
+   yet, it says so plainly and offers to add a key, with a link to the
+   provider list.
+2. **Try it** — the tour captures the screen, asks a suggested question about
+   it, and shows the answer with the real latency badge. The question is
+   editable, with one-tap suggestions.
+3. **Done** — the tour closes and the app is ready.
+
+It never blocks: skip at any point, and Settings has *Show the welcome tour
+again* for anyone who wants it later.
+
 ## Design system (0.3.4–0.3.5)
 
 The interface is built from a single token set rather than per-page CSS:

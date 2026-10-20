@@ -19,6 +19,7 @@ const PANEL_VIEWS: Partial<Record<WorkspaceView, string>> = {
 // unmounts and remounts the whole panel — visibly resetting focus (the agent
 // goal textarea lost its caret after every keystroke) and re-running effects.
 const SettingsPanel = lazy(() => import('./components/SettingsPanel').then((module) => ({ default: module.SettingsPanel })))
+const Onboarding = lazy(() => import('./components/Onboarding').then((module) => ({ default: module.Onboarding })))
 const AgentPanel = lazy(() => import('./components/AgentPanel').then((module) => ({ default: module.AgentPanel })))
 const KnowledgePanel = lazy(() => import('./components/KnowledgePanel').then((module) => ({ default: module.KnowledgePanel })))
 const StudioPanel = lazy(() => import('./components/StudioPanel').then((module) => ({ default: module.StudioPanel })))
@@ -241,6 +242,10 @@ export default function App() {
       </main>
 
       <Suspense fallback={null}>
+        <Onboarding
+          onOpenSettings={() => openPanel('settings')}
+          onOpenIntegrations={() => handleSidebarAction('integrations')}
+        />
         {openPanels.settings && <SettingsPanel onClose={() => togglePanel('settings')} />}
         {openPanels.agent && <AgentPanel agent={agent} onClose={() => togglePanel('agent')} />}
         {openPanels.knowledge && <KnowledgePanel onClose={() => togglePanel('knowledge')} />}

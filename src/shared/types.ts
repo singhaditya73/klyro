@@ -76,6 +76,8 @@ export interface AppSettings {
   overlayDisplay: 'primary' | number
   /** Replay an answer instantly when the same question meets the same screen. */
   overlayAnswerCache: boolean
+  /** The welcome tour has been completed (or skipped). */
+  onboardingComplete: boolean
 }
 
 /** Whether a model can read images; `unknown` is honest for local/custom endpoints. */

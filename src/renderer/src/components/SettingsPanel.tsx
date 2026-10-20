@@ -10,7 +10,7 @@ import type {
   SecurityStatus
 } from '@shared/types'
 import { useModal } from '../hooks/useModal'
-import { Loader2, CheckCircle, CheckCircle2, AlertCircle, Shield, ShieldCheck, ShieldQuestion, HardDrive, Trash2, Download, Broom, Database, Key, Zap, X, ExternalLink } from 'lucide-react'
+import { Loader2, CheckCircle, CheckCircle2, AlertCircle, Shield, ShieldCheck, ShieldQuestion, HardDrive, Trash2, Download, Broom, Database, Key, Sparkles, Zap, X, ExternalLink } from 'lucide-react'
 import KlyroMark from '../assets/logo/klyro-mark.svg'
 
 interface Props {
@@ -514,6 +514,16 @@ export function SettingsPanel({ onClose }: Props) {
             <span className="field__label">Quick-ask shortcut</span>
             <input value={settings.toggleShortcut} onChange={(event) => void patch({ toggleShortcut: event.target.value })} className="field" />
           </label>
+          <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+            <button
+              className="btn btn--ghost btn--sm"
+              onClick={() => void patch({ onboardingComplete: false })}
+              style={{ marginTop: 4 }}
+            >
+              <Sparkles className="icon icon--xs" aria-hidden="true" />
+              <span>Show the welcome tour again</span>
+            </button>
+          </div>
           <label className="field" style={{ marginTop: '16px' }}>
             <span className="field__label">
               Overlay visibility {settings.overlayOpacity === 100 ? '— solid' : `— ${settings.overlayOpacity}% opacity`}

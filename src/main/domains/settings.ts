@@ -28,7 +28,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   screenAutoCapture: true,
   screenPreWarm: true,
   overlayDisplay: 'primary',
-  overlayAnswerCache: true
+  overlayAnswerCache: true,
+  onboardingComplete: false
 }
 
 class SettingsDomain {

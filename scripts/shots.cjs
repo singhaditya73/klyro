@@ -108,9 +108,16 @@ app.whenReady().then(async () => {
       inputFocused: document.activeElement && document.activeElement.tagName
     }))()`)
     console.log('overlay capture check:', JSON.stringify(state))
-    const after = await overlayWindow.webContents.capturePage()
-    writeFileSync(join(outDir, '13-overlay-captured.png'), after.toPNG())
-    console.log('shot 13-overlay-captured')
+    const after = await Promise.race([
+      overlayWindow.webContents.capturePage(),
+      wait(8000).then(() => null)
+    ])
+    if (after) {
+      writeFileSync(join(outDir, '13-overlay-captured.png'), after.toPNG())
+      console.log('shot 13-overlay-captured')
+    } else {
+      console.log('overlay capture skipped (window capture timed out)')
+    }
   }
 
   // Settings panel
