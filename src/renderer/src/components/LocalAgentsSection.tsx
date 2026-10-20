@@ -36,9 +36,13 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
   const [notice, setNotice] = useState<string | null>(null)
   const [installed, setInstalled] = useState(false)
   const [clis, setClis] = useState<Array<{ id: string; name: string; installed: boolean; providerId: string; note: string }>>([])
+  const [startingAgent, setStartingAgent] = useState(false)
+  const [agentNote, setAgentNote] = useState<string | null>(null)
   const [antigravity, setAntigravity] = useState<{
     supported: boolean
     running: boolean
+    installed?: boolean
+    service?: 'ide' | 'klyro' | null
     plan: string | null
     models: Array<{ id: string; name: string; provider: string; quota: number | null }>
     endpoint: string | null
@@ -101,6 +105,28 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
       setStarting(false)
     }
   }, [scan])
+
+  const refreshAntigravity = useCallback(async (): Promise<void> => {
+    try {
+      setAntigravity(await window.klyro.antigravityStatus())
+    } catch {
+      setAntigravity(null)
+    }
+  }, [])
+
+  const startAntigravityService = useCallback(async (): Promise<void> => {
+    setStartingAgent(true)
+    setAgentNote(null)
+    try {
+      const result = await window.klyro.antigravityStartService()
+      setAgentNote(result.error ?? result.note ?? null)
+      await refreshAntigravity()
+    } catch (error) {
+      setAgentNote((error as Error).message)
+    } finally {
+      setStartingAgent(false)
+    }
+  }, [refreshAntigravity])
 
   const healthy = (agents ?? []).filter((agent) => agent.healthy)
   const others = (agents ?? []).filter((agent) => !agent.healthy)
@@ -215,6 +241,35 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
         </div>
       )}
 
+      {antigravity && !antigravity.running && antigravity.installed && (
+        <div className="card" style={{ marginTop: 12 }}>
+          <div className="card__row" style={{ flexWrap: 'wrap' }}>
+            <span className="icon-tile">
+              <Server className="icon icon--sm" aria-hidden="true" />
+            </span>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div className="card__title">Antigravity is installed, not running</div>
+              <div className="card__subtitle">
+                Klyro can start the Antigravity agent service itself — no need to open the IDE.
+              </div>
+            </div>
+            <button className="btn btn--primary btn--sm" onClick={() => void startAntigravityService()} disabled={startingAgent}>
+              {startingAgent ? (
+                <Loader2 className="icon icon--xs spin" aria-hidden="true" />
+              ) : (
+                <Cpu className="icon icon--xs" aria-hidden="true" />
+              )}
+              <span>{startingAgent ? 'Starting…' : 'Start the service'}</span>
+            </button>
+          </div>
+          {agentNote && (
+            <div className="notice notice--info" style={{ marginTop: 12 }}>
+              <span className="notice__body">{agentNote}</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {antigravity?.running && (
         <div className="card" style={{ marginTop: 12, borderColor: 'var(--border-default)' }}>
           <div className="card__row" style={{ flexWrap: 'wrap' }}>
@@ -229,7 +284,8 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
               </div>
               <div className="card__subtitle">
                 Read directly from the Antigravity agent on this machine — {antigravity.models.length} models, no
-                key and no bridge. Endpoint {antigravity.endpoint}.
+                key and no bridge. Endpoint {antigravity.endpoint}
+                {antigravity.service === 'klyro' ? ' (the service Klyro started)' : ' (the IDE\'s own service)'}.
               </div>
             </div>
             <button className="btn btn--ghost btn--sm" onClick={() => void scan()}>

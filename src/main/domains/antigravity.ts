@@ -1,5 +1,11 @@
-import { execFileSync } from 'node:child_process'
-import { readFileSync, readdirSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
+import type { ChildProcess } from 'node:child_process'
+import {
+  findAntigravityExtension,
+  findLanguageServerPids,
+  listeningPorts,
+  startLanguageServer
+} from './antigravity-service'
 
 /**
  * Antigravity, the local agent IDE — read directly from its own service.
@@ -37,6 +43,10 @@ export interface AntigravityModel {
 export interface AntigravityStatus {
   supported: boolean
   running: boolean
+  /** Which service answered: the IDE's own, or the one Klyro started. */
+  service?: 'ide' | 'klyro' | null
+  /** The IDE is installed, so Klyro can start it. */
+  installed?: boolean
   plan: string | null
   account: string | null
   models: AntigravityModel[]
@@ -56,69 +66,76 @@ const METADATA = {
 interface Connection {
   port: number
   token: string
+  /** The process the connection belongs to. */
+  pid: string
+  /** True when this service is the one Klyro started. */
+  ours: boolean
 }
 
-/** The CSRF token and pid of a running Antigravity language server. */
-function findLanguageServer(): { pid: string; token: string } | null {
-  if (process.platform !== 'linux') return null
-  let pids: string[] = []
-  try {
-    pids = readdirSync('/proc').filter((name) => /^\d+$/.test(name))
-  } catch {
-    return null
-  }
-  for (const pid of pids) {
+/** Is the Antigravity agent service installed on this machine? */
+export function isAntigravityInstalled(): boolean {
+  return findAntigravityExtension() !== null
+}
+
+/**
+ * Every Antigravity language server on this machine, with the CSRF token the
+ * IDE handed it. The IDE spawns more than one, and each has its own port and
+ * token — so all of them are candidates.
+ */
+function findLanguageServers(): Array<{ pid: string; token: string }> {
+  const servers: Array<{ pid: string; token: string }> = []
+  for (const pid of findLanguageServerPids()) {
     let cmdline = ''
     try {
       cmdline = readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0/g, ' ')
     } catch {
       continue
     }
-    if (!cmdline.includes('language_server_')) continue
-    // Only Antigravity's own server, not some other tool's.
-    if (!cmdline.includes('antigravity')) continue
     const token = cmdline.match(/--csrf_token (\S+)/)?.[1]
-    if (!token) continue
-    return { pid, token }
+    if (token) servers.push({ pid, token })
   }
-  return null
-}
-
-/** The localhost ports that process is listening on. */
-function listeningPorts(pid: string): number[] {
-  try {
-    const output = execFileSync('ss', ['-ltnp'], { encoding: 'utf8', timeout: 4000 })
-    const ports: number[] = []
-    for (const line of output.split('\n')) {
-      if (!line.includes(`pid=${pid},`)) continue
-      const match = line.match(/127\.0\.0\.1:(\d+)/)
-      if (match) ports.push(Number(match[1]))
-    }
-    return ports
-  } catch {
-    return []
-  }
+  return servers
 }
 
 class AntigravityDomain {
   private connection: Connection | null = null
+  /** A language server we started ourselves. */
+  private service: { child: ChildProcess; token: string } | null = null
 
-  /** Talk to the language server, finding the port if we have not yet. */
-  private async connect(): Promise<Connection | null> {
-    if (this.connection) return this.connection
-    const server = findLanguageServer()
-    if (!server) return null
+  /**
+   * Talk to the language server, finding it if we have not yet.
+   *
+   * The port and the token both change every time the IDE starts, so the
+   * connection is never assumed to be good: every call re-checks, and a dead
+   * connection is dropped so the next call discovers the new one.
+   */
+  private async connect(force = false): Promise<Connection | null> {
+    if (this.connection && !force) return this.connection
+    const servers = findLanguageServers()
+    if (servers.length === 0) {
+      this.connection = null
+      return null
+    }
     // The server listens on several ports (one of them is HTTPS); ask them all
     // at once instead of waiting for each timeout in turn.
+    const candidates = servers.flatMap((server) =>
+      listeningPorts(server.pid).map((port) => ({ port, token: server.token, pid: server.pid }))
+    )
     const probes = await Promise.all(
-      listeningPorts(server.pid).map(async (port) => {
-        const probe = await this.rpc(port, server.token, 'GetUserStatus', METADATA, 2500)
-        return probe.ok ? port : null
+      candidates.map(async (candidate) => {
+        const probe = await this.rpc(candidate.port, candidate.token, 'GetUserStatus', METADATA, 2500)
+        return probe.ok ? candidate : null
       })
     )
-    const port = probes.find((value) => value !== null)
-    if (port === undefined || port === null) return null
-    this.connection = { port, token: server.token }
+    const found = probes.find((value) => value !== null)
+    this.connection = found
+      ? {
+          port: found.port,
+          token: found.token,
+          pid: found.pid,
+          ours: this.service !== null && found.pid === String(this.service.child.pid)
+        }
+      : null
     return this.connection
   }
 
@@ -165,6 +182,62 @@ class AntigravityDomain {
     }
   }
 
+  /**
+   * Start our own Antigravity agent service — the same language server the
+   * IDE uses — so Klyro can talk to Antigravity without the IDE being open.
+   *
+   * The server needs an initial-metadata protobuf on stdin (built from the
+   * descriptor in the binary) and, for a signed-in agent, the account token
+   * and the model config that normally come from the IDE's sidecar. This
+   * reports honestly what is missing rather than pretending.
+   */
+  async startService(): Promise<{ started: boolean; error?: string; note?: string }> {
+    if (process.platform !== 'linux') {
+      return { started: false, error: 'Running an Antigravity service is currently Linux-only.' }
+    }
+    const extension = findAntigravityExtension()
+    if (!extension) {
+      return { started: false, error: 'The Antigravity IDE is not installed on this machine.' }
+    }
+    let child: ChildProcess
+    let token: string
+    try {
+      const started = startLanguageServer(extension.serverBinary, extension.extensionPath)
+      child = started.child
+      token = started.token
+    } catch (error) {
+      return { started: false, error: `Could not start the Antigravity service: ${(error as Error).message}` }
+    }
+    this.service = { child, token }
+    // Give the server a moment to bind its ports.
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      const connection = await this.connect(true)
+      if (connection) {
+        return {
+          started: true,
+          note: 'The Antigravity service is running. Sign-in and model configuration still come from the IDE the first time.'
+        }
+      }
+    }
+    return {
+      started: false,
+      error: 'The Antigravity service did not answer. Open the Antigravity IDE once so it can finish signing in.'
+    }
+  }
+
+  /** Stop a service we started. */
+  stopService(): void {
+    if (!this.service) return
+    try {
+      this.service.child.kill()
+    } catch {
+      // Already gone.
+    }
+    this.service = null
+    this.connection = null
+  }
+
   /** The account, plan, quota and model catalogue, if Antigravity is running. */
   async status(): Promise<AntigravityStatus> {
     if (process.platform !== 'linux') {
@@ -178,7 +251,15 @@ class AntigravityDomain {
         error: 'The Antigravity integration is currently Linux-only.'
       }
     }
-    const connection = await this.connect()
+    let connection = await this.connect()
+    if (connection) {
+      // The port and token change when the IDE restarts: if the call fails,
+      // discover the new server instead of trusting the cached one.
+      const probe = await this.rpc(connection.port, connection.token, 'GetUserStatus', METADATA, 4000)
+      if (!probe.ok) {
+        connection = await this.connect(true)
+      }
+    }
     if (!connection) {
       return {
         supported: true,
@@ -212,10 +293,12 @@ class AntigravityDomain {
     return {
       supported: true,
       running: true,
+      installed: isAntigravityInstalled(),
       plan: planInfo.planName ?? null,
       account,
       models: list,
       endpoint: `127.0.0.1:${connection.port}`,
+      service: connection.ours ? 'klyro' : 'ide',
       error: status.error
     }
   }

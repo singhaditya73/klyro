@@ -80,6 +80,57 @@ the shape it expects (`CascadeConfig.planModel` / `requestedModel`, where
 resolves that from its own model picker rather than from the request. Finding
 the exact shape is the next step; everything else is mapped.
 
+## Running the service without the IDE (0.9.1)
+
+The IDE is only the *client* of the agent service. Klyro can run the service
+itself:
+
+- It spawns the same `language_server_*` binary the IDE spawns, with its own
+  CSRF token, and writes the **initial metadata protobuf** the server reads
+  from stdin. Without it the server dies with *"Failed to read initial metadata
+  from stdin"*; with a JSON body it dies with *"cannot parse invalid
+  wire-format data"*. The field numbers come from the message's own descriptor
+  in the binary (`Metadata`, `exa.language_server_pb`):
+
+  | Field | Number | Field | Number |
+  | --- | --- | --- | --- |
+  | extension_path | 1 | device_fingerprint | 24 |
+  | ide_version | 2 | trigger_id | 25 |
+  | locale | 4 | api_key | 26 |
+  | ide_name | 8 | disable_telemetry | 27 |
+  | session_id | 9 | user_tier_id | 29 |
+  | extension_name | 12 | ls_timestamp | 16 |
+
+  `src/main/domains/antigravity-service.ts` builds that message and starts the
+  server; the encoder is covered by a unit test.
+
+- **Verified live**: the headless server boots, binds its ports and answers
+  Connect-RPC. Klyro's own status call finds it and reports it as *"the service
+  Klyro started"*.
+
+- **The one thing still missing** is the *sidecar*: the IDE's own extension
+  server (`--extension_server_port`, `--extension_server_csrf_token`) is where
+  the language server gets the account session and the cascade model config.
+  A headless server with no sidecar answers with
+
+  ```
+  500 {"code":"unknown","message":"GetCascadeModelConfigData() is nil"}
+  ```
+
+  — the account, plan and model catalogue are therefore not available to a
+  Klyro-started service on its own. Closing that gap means Klyro also
+  answering the extension-server calls the language server makes at startup
+  (`GetCascadeModelConfigData`, `GetSecretValue`, …), seeded from a one-time
+  snapshot taken while the IDE is running. That is the remaining piece of work,
+  and it is now precisely specified.
+
+## The port changes on every start
+
+The language server picks a new port (and a new token) every time it starts, so
+Klyro never trusts a cached endpoint: every call re-discovers the running
+servers, probes their ports in parallel, and drops a connection that has gone
+stale. Restarting Antigravity therefore needs no action from the user.
+
 ## How Klyro uses it today
 
 `src/main/domains/antigravity.ts` does exactly the discovery above: find the
