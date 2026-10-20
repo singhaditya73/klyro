@@ -95,6 +95,7 @@ class SettingsDomain {
         id,
         label: PROVIDER_META[id].label,
         requiresKey: PROVIDER_META[id].requiresKey,
+        keyOptional: PROVIDER_META[id].keyOptional,
         keyLabel: PROVIDER_META[id].keyLabel,
         hasKey: secrets.has(id),
         model,

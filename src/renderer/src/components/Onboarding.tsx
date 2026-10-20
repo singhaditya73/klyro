@@ -185,8 +185,9 @@ export function Onboarding({ onOpenSettings, onOpenIntegrations }: Props) {
                   <div className="notice__body">
                     <strong>One thing first: a model.</strong>
                     <div style={{ fontSize: 12, marginTop: 2 }}>
-                      Add a provider key (Groq has a free tier that is fast enough for the overlay), or run Ollama
-                      locally and use it with no key at all.
+                      Add a provider key (Groq has a free tier that is fast enough for the overlay), or use
+                      something already running on this machine — OpenCode, Ollama or LM Studio — with no key at
+                      all.
                     </div>
                     <div className="notice__actions">
                       <button className="btn btn--sm" onClick={onOpenSettings}>

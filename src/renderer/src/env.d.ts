@@ -107,6 +107,20 @@ interface KlyroApi {
 
   mcpReadResource(input: { serverId: string; uri: string }): Promise<{ text: string }>
 
+  providerDetectModels(input: { baseUrl: string; kind: 'opencode' | 'openai-compatible' }): Promise<string[]>
+
+  localAgentsDetect(): Promise<Array<{
+    id: string
+    kind: 'opencode' | 'openai-compatible'
+    name: string
+    baseUrl: string
+    healthy: boolean
+    needsAuth?: boolean
+    version?: string
+    models: string[]
+    note: string
+  }>>
+
   privacyProbeOverlay(): Promise<{
     excluded: boolean
     changedRatio: number

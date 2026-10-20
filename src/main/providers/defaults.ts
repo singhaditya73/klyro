@@ -1,8 +1,19 @@
 import type { ProviderId, ProviderSettings } from '@shared/types'
 
-export const PROVIDER_IDS: ProviderId[] = ['openai', 'anthropic', 'gemini', 'groq', 'ollama', 'openai-compatible']
+export const PROVIDER_IDS: ProviderId[] = [
+  'openai',
+  'anthropic',
+  'gemini',
+  'groq',
+  'ollama',
+  'openai-compatible',
+  'opencode'
+]
 
-export const PROVIDER_META: Record<ProviderId, { label: string; requiresKey: boolean; keyLabel: string }> = {
+export const PROVIDER_META: Record<
+  ProviderId,
+  { label: string; requiresKey: boolean; keyLabel: string; keyOptional?: boolean }
+> = {
   openai: { label: 'OpenAI', requiresKey: true, keyLabel: 'OpenAI API key' },
   anthropic: { label: 'Anthropic (Claude)', requiresKey: true, keyLabel: 'Anthropic API key' },
   gemini: { label: 'Google Gemini', requiresKey: true, keyLabel: 'Google AI Studio API key' },
@@ -12,6 +23,12 @@ export const PROVIDER_META: Record<ProviderId, { label: string; requiresKey: boo
     label: 'OpenAI-compatible endpoint',
     requiresKey: true,
     keyLabel: 'API key (or any value for local servers)'
+  },
+  opencode: {
+    label: 'OpenCode (local server)',
+    requiresKey: false,
+    keyOptional: true,
+    keyLabel: 'Server password (only if you set OPENCODE_SERVER_PASSWORD)'
   }
 }
 
@@ -23,7 +40,10 @@ export const DEFAULT_PROVIDERS: Record<ProviderId, ProviderSettings> = {
   // 2026-08-16; gpt-oss-120b is the current production default.
   groq: { baseUrl: 'https://api.groq.com/openai/v1', model: 'openai/gpt-oss-120b', transcribeModel: 'whisper-large-v3' },
   ollama: { baseUrl: 'http://localhost:11434', model: 'llama3.1' },
-  'openai-compatible': { baseUrl: 'http://localhost:1234/v1', model: 'local-model', transcribeModel: 'whisper-1' }
+  'openai-compatible': { baseUrl: 'http://localhost:1234/v1', model: 'local-model', transcribeModel: 'whisper-1' },
+  // A local `opencode serve` (default 127.0.0.1:4096). The server holds the
+  // user's own OpenCode account, so no key is needed here.
+  opencode: { baseUrl: 'http://127.0.0.1:4096', model: '' }
 }
 
 export const DEFAULT_TRANSCRIBE_MODEL = 'whisper-1'

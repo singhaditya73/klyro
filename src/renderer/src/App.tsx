@@ -182,7 +182,7 @@ export default function App() {
       case 'integrations':
         return (
           <Suspense fallback={null}>
-            <IntegrationsView />
+            <IntegrationsView onOpenSettings={() => openPanel('settings')} />
           </Suspense>
         )
       default:

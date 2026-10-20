@@ -2,11 +2,15 @@ import { useState } from 'react'
 import { Blocks, GitBranch, Plug, CheckCircle, AlertCircle, ExternalLink, ChevronDown, ChevronUp, Trash2, Mail, MessageSquare, FileText } from 'lucide-react'
 import { useKnowledge } from '../hooks/useKnowledge'
 import { McpSection } from './McpSection'
+import { LocalAgentsSection } from './LocalAgentsSection'
 import KlyroMark from '../assets/logo/klyro-mark.svg'
 
-interface Props {}
+interface Props {
+  /** Open Settings (used when a local server needs its password). */
+  onOpenSettings?: () => void
+}
 
-export function IntegrationsView({}: Props) {
+export function IntegrationsView({ onOpenSettings }: Props) {
   const knowledge = useKnowledge()
   const [githubToken, setGithubToken] = useState('')
   const [repo, setRepo] = useState('')
@@ -16,6 +20,34 @@ export function IntegrationsView({}: Props) {
   const [openRepos, setOpenRepos] = useState(false)
   const [showToken, setShowToken] = useState(false)
   const [connecting, setConnecting] = useState(false)
+  const [agentNotice, setAgentNotice] = useState<string | null>(null)
+
+  /** Point Klyro at a service that is already running on this machine. */
+  async function connectLocalAgent(
+    agent: { id: string; kind: 'opencode' | 'openai-compatible'; name: string; baseUrl: string; models: string[] },
+    model: string
+  ): Promise<void> {
+    try {
+      const settings = await window.klyro.getSettings()
+      const providerId = agent.kind === 'opencode' ? 'opencode' : 'openai-compatible'
+      const next = {
+        ...settings,
+        activeProvider: providerId,
+        providers: {
+          ...settings.providers,
+          [providerId]: {
+            ...settings.providers[providerId],
+            baseUrl: agent.baseUrl,
+            model: model || agent.models[0] || ''
+          }
+        }
+      }
+      await window.klyro.updateSettings(next)
+      setAgentNotice(`${agent.name} is now your provider${model ? ` (${model})` : ''}. No key needed.`)
+    } catch (error) {
+      setAgentNotice((error as Error).message)
+    }
+  }
 
   const github = knowledge.integrations.find((entry) => entry.id === 'github')
 
@@ -221,6 +253,17 @@ export function IntegrationsView({}: Props) {
           )}
 
           <div style={{ marginTop: 32, paddingTop: 24, borderTop: '1px solid var(--border-subtle)' }}>
+            <LocalAgentsSection
+              onConnect={(agent, model) => void connectLocalAgent(agent, model)}
+              onOpenSettings={onOpenSettings}
+            />
+            {agentNotice && (
+              <div className="notice notice--success" style={{ marginTop: 12 }}>
+                <span className="icon icon--sm notice__icon" aria-hidden="true"><CheckCircle /></span>
+                <span className="notice__body">{agentNotice}</span>
+              </div>
+            )}
+
             <McpSection />
           </div>
 

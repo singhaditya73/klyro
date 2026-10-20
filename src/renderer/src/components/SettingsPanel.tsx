@@ -10,7 +10,7 @@ import type {
   SecurityStatus
 } from '@shared/types'
 import { useModal } from '../hooks/useModal'
-import { Loader2, CheckCircle, CheckCircle2, AlertCircle, Shield, ShieldCheck, ShieldQuestion, HardDrive, Trash2, Download, Broom, Database, Key, Sparkles, Zap, X, ExternalLink } from 'lucide-react'
+import { Loader2, CheckCircle, CheckCircle2, AlertCircle, Shield, ShieldCheck, ShieldQuestion, HardDrive, Trash2, Download, Broom, Database, Key, RefreshCcw, Sparkles, Zap, X, ExternalLink } from 'lucide-react'
 import KlyroMark from '../assets/logo/klyro-mark.svg'
 
 interface Props {
@@ -249,6 +249,8 @@ export function SettingsPanel({ onClose }: Props) {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [version, setVersion] = useState<string | null>(null)
   const [displays, setDisplays] = useState<Array<{ index: number; label: string; primary: boolean; bounds: { width: number; height: number } }>>([])
+  const [detecting, setDetecting] = useState<string | null>(null)
+  const [detectedModels, setDetectedModels] = useState<Record<string, string[]>>({})
 
   useEffect(() => {
     void (async () => {
@@ -284,6 +286,23 @@ export function SettingsPanel({ onClose }: Props) {
             : 'dark'
           : next.theme
       document.documentElement.dataset.theme = resolved
+    }
+  }
+
+  /** Ask a local server which models it serves, and offer them. */
+  async function detectModels(id: ProviderId, baseUrl: string): Promise<void> {
+    setDetecting(id)
+    try {
+      const kind = id === 'opencode' ? 'opencode' : 'openai-compatible'
+      const models = await window.klyro.providerDetectModels({ baseUrl, kind })
+      setDetectedModels((previous) => ({ ...previous, [id]: models }))
+      if (models.length > 0) {
+        await updateProviderField(id, 'model', models[0])
+      }
+    } catch {
+      setDetectedModels((previous) => ({ ...previous, [id]: [] }))
+    } finally {
+      setDetecting(null)
     }
   }
 
@@ -389,6 +408,35 @@ export function SettingsPanel({ onClose }: Props) {
                   <label className="field">
                     <span className="field__label">Model</span>
                     <input value={config.model} onChange={(event) => void updateProviderField(provider.id, 'model', event.target.value)} className="field" />
+                    {detectedModels[provider.id]?.length ? (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                        {detectedModels[provider.id].slice(0, 8).map((model) => (
+                          <button
+                            key={model}
+                            className="btn btn--ghost btn--sm"
+                            onClick={() => void updateProviderField(provider.id, 'model', model)}
+                            title={`Use ${model}`}
+                          >
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{model}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                    {(provider.id === 'opencode' || provider.id === 'openai-compatible' || provider.id === 'ollama') && (
+                      <button
+                        className="btn btn--ghost btn--sm"
+                        style={{ marginTop: 6, alignSelf: 'flex-start' }}
+                        onClick={() => void detectModels(provider.id, config.baseUrl)}
+                        disabled={detecting === provider.id}
+                      >
+                        {detecting === provider.id ? (
+                          <Loader2 className="icon icon--xs spin" aria-hidden="true" />
+                        ) : (
+                          <RefreshCcw className="icon icon--xs" aria-hidden="true" />
+                        )}
+                        <span>Detect models</span>
+                      </button>
+                    )}
                   </label>
                   <label className="field">
                     <span className="field__label">Base URL</span>
@@ -409,20 +457,24 @@ export function SettingsPanel({ onClose }: Props) {
                   </label>
                 </div>
 
-                {provider.requiresKey && (
+                {(provider.requiresKey || provider.keyOptional) && (
                   <div className="provider-card__key" style={{ marginTop: '12px' }}>
                     <input
                       type="password"
-                      placeholder="Paste API key&hellip;"
+                      placeholder={provider.requiresKey ? 'Paste API key…' : 'Optional — only if the server asks for one'}
                       value={keyDrafts[provider.id] ?? ''}
                       onChange={(event) => setKeyDrafts((prev) => ({ ...prev, [provider.id]: event.target.value }))}
                       className="field"
                       aria-label={`${provider.keyLabel ?? provider.label} key`}
                     />
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      <button className="btn btn--primary" onClick={() => void saveKey(provider.id)} disabled={(keyDrafts[provider.id] ?? '') === ''}>
+                      <button
+                        className="btn btn--primary"
+                        onClick={() => void saveKey(provider.id)}
+                        disabled={!provider.requiresKey && (keyDrafts[provider.id] ?? '') === ''}
+                      >
                         <Key className="icon icon--sm" aria-hidden="true" />
-                        <span>Save key</span>
+                        <span>{provider.requiresKey ? 'Save key' : 'Save password'}</span>
                       </button>
                       <button className="btn btn--ghost" onClick={() => void clearKey(provider.id)}>
                         <Trash2 className="icon icon--sm" aria-hidden="true" />

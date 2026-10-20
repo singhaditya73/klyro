@@ -25,7 +25,8 @@ Status legend: **✅ done** · **🟡 partial** · **⬜ planned**
 | 4.1 Meeting transcripts / summaries | ✅ | Chunked recording → transcript → summary + action items; overlay listen/record assist; post-meeting action agent with output ledger |
 | 5.1 Saved + searchable history | ✅ | Local JSON store + search |
 | 5.2 Custom instructions / preferences | ✅ | System prompt + response style |
-| 6.1 Provider abstraction | ✅ | OpenAI-compatible, Anthropic, Gemini, Ollama |
+| 6.1 Provider abstraction | ✅ | OpenAI-compatible, Anthropic, Gemini, Ollama, and **OpenCode** (0.7.0) |
+| 6.1b Borrow what you already run | ✅ | **0.7.0: "Local models & agents"** — Klyro probes the services already running on the machine and offers one-click connect, with **no API key**: OpenCode (a local `opencode serve`, which answers with *your* OpenCode account, its free models and its limits), Ollama, LM Studio, LiteLLM, vLLM, and local bridges to other IDEs' subscriptions. The OpenCode provider speaks the server's published HTTP API (v1 and v2 generations), so a password-protected server works too |
 | 6.2 Configurable endpoints | ✅ | Per-provider Base URL + model |
 | 6.3 Secure API keys | ✅ | Encrypted at rest via Electron `safeStorage` |
 | 6.4 Error handling / timeouts | ✅ | Errors surfaced per message; a stalled stream fails after 90s of silence instead of hanging |

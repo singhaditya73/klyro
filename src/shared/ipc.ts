@@ -115,6 +115,10 @@ export const IPC = {
   /* MCP resources */
   mcpReadResource: 'mcp:readResource',
 
+  /* Local agents: what is already running on this machine */
+  localAgentsDetect: 'local-agents:detect',
+  providerDetectModels: 'provider:detectModels',
+
   /* Privacy: does this machine exclude the overlay from screen captures? */
   privacyProbeOverlay: 'privacy:probeOverlay',
   screenListDisplays: 'screen:listDisplays'

@@ -4,6 +4,7 @@ import { openAICompatible } from './openai'
 import { anthropic } from './anthropic'
 import { gemini } from './gemini'
 import { ollama } from './ollama'
+import { openCodeProvider } from './opencode'
 
 const registry: Record<ProviderId, Provider> = {
   openai: openAICompatible,
@@ -11,7 +12,8 @@ const registry: Record<ProviderId, Provider> = {
   'openai-compatible': { ...openAICompatible, id: 'openai-compatible' },
   anthropic,
   gemini,
-  ollama
+  ollama,
+  opencode: openCodeProvider
 }
 
 export function getProvider(id: ProviderId): Provider {

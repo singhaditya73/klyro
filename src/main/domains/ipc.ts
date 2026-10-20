@@ -30,6 +30,9 @@ import { mcp } from './mcp'
 import { actions } from './actions'
 import { audit } from './audit'
 import { usage } from './usage'
+import { localAgents } from './local-agents'
+import { listOpenCodeModels } from '../providers/opencode'
+import { trimSlash } from '../providers/http'
 /** Reject IPC from any frame that is not Klyro's own renderer. */
 function assertTrusted(event: IpcMainInvokeEvent): void {
   const url = event.senderFrame?.url ?? ''
@@ -484,6 +487,23 @@ export function registerIpcHandlers(): void {
 
   handle(IPC.usageRows, () => usage.rows())
   handle(IPC.privacyProbeOverlay, () => probeOverlayVisibility())
+  handle(IPC.localAgentsDetect, () => localAgents.detect())
+  handle(IPC.providerDetectModels, (_event, input: unknown) => {
+    const parsed = z
+      .object({ baseUrl: z.string().max(300), kind: z.enum(['opencode', 'openai-compatible']) })
+      .strict()
+      .parse(input)
+    if (parsed.kind === 'opencode') {
+      return listOpenCodeModels(parsed.baseUrl, null).catch(() => [] as string[])
+    }
+    return fetch(`${trimSlash(parsed.baseUrl)}/models`, { signal: AbortSignal.timeout(2500) })
+      .then(async (response) => {
+        if (!response.ok) return [] as string[]
+        const payload = (await response.json()) as { data?: Array<{ id?: string }> }
+        return (payload.data ?? []).map((entry) => entry.id ?? '').filter(Boolean).slice(0, 60)
+      })
+      .catch(() => [] as string[])
+  })
   handle(IPC.mcpReadResource, async (_event, input: unknown) => {
     const parsed = z
       .object({ serverId: z.string().min(1).max(80), uri: z.string().min(1).max(2000) })

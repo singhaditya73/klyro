@@ -3,7 +3,7 @@
  * Keep this file free of Node/Electron/DOM imports.
  */
 
-export type ProviderId = 'openai' | 'anthropic' | 'gemini' | 'groq' | 'ollama' | 'openai-compatible'
+export type ProviderId = 'openai' | 'anthropic' | 'gemini' | 'groq' | 'ollama' | 'openai-compatible' | 'opencode'
 
 export type ResponseStyle = 'concise' | 'balanced' | 'detailed'
 export type ThemeMode = 'system' | 'dark' | 'light'
@@ -87,6 +87,8 @@ export interface ProviderStatus {
   id: ProviderId
   label: string
   requiresKey: boolean
+  /** The credential is optional (a local server that may not ask for one). */
+  keyOptional?: boolean
   /** Hint for the key field ("OpenAI API key", "Groq API key (gsk_…)"). */
   keyLabel: string
   hasKey: boolean
@@ -803,6 +805,20 @@ export interface KlyroApi {
    * Measure — not guess — whether the overlay is excluded from screen
    * captures on this machine.
    */
+  providerDetectModels(input: { baseUrl: string; kind: 'opencode' | 'openai-compatible' }): Promise<string[]>
+
+  localAgentsDetect(): Promise<Array<{
+    id: string
+    kind: 'opencode' | 'openai-compatible'
+    name: string
+    baseUrl: string
+    healthy: boolean
+    needsAuth?: boolean
+    version?: string
+    models: string[]
+    note: string
+  }>>
+
   privacyProbeOverlay(): Promise<{
     excluded: boolean
     changedRatio: number

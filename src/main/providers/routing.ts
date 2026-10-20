@@ -43,7 +43,10 @@ const VISION_PATTERNS: Record<ProviderId, RegExp> = {
   groq: /(vision|llava)/i,
   ollama: /(llava|vision|moondream|minicpm|bakllava|qwen.*vl|gemma3)/i,
   // A custom endpoint could be anything; do not guess.
-  'openai-compatible': /(vision|llava|gpt-4o|gpt-4\.1|gemini|claude)/i
+  'openai-compatible': /(vision|llava|gpt-4o|gpt-4\.1|gemini|claude)/i,
+  // OpenCode serves whatever the user's account reaches, so the model name is
+  // the only signal — the same honest rules as a custom endpoint.
+  opencode: /(vision|llava|gpt-4o|gpt-4\.1|gemini|claude|grok-4|glm-4\.6|kimi)/i
 }
 
 export function visionSupport(providerId: ProviderId, model: string): VisionSupport {
