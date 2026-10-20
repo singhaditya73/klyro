@@ -110,6 +110,14 @@ interface KlyroApi {
   providerDetectModels(input: { baseUrl: string; kind: 'opencode' | 'openai-compatible' }): Promise<string[]>
 
   localAgentStartOpenCode(): Promise<{ started: boolean; baseUrl: string; spawned: boolean; error?: string }>
+  localAgentConnectOpenCode(): Promise<{
+    connected: boolean
+    baseUrl: string
+    model: string
+    models: number
+    free: number
+    error?: string
+  }>
   localAgentOpenCodeInstalled(): Promise<{ installed: boolean }>
 
   localAgentsDetect(): Promise<Array<{

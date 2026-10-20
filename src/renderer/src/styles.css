@@ -1720,6 +1720,25 @@ input[type='range']::-moz-range-thumb {
   white-space: nowrap;
 }
 
+/* The "use what you already have" card on the home screen. */
+.opencode-card {
+  border-color: var(--border-default);
+  background: linear-gradient(180deg, var(--surface-raised) 0%, var(--surface-base) 100%);
+}
+.opencode-card--done { border-color: var(--success-soft); }
+.opencode-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+.opencode-card__icon--done { background: var(--success-soft); color: var(--success); }
+
 /* ==========================================================================
    First-run tour
    ========================================================================== */

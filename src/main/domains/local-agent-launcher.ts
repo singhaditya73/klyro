@@ -5,7 +5,8 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { logger } from '../logger'
 import { secrets } from '../security/secrets'
-import { probeOpenCode } from '../providers/opencode'
+import { listOpenCodeModels, probeOpenCode, type OpenCodeModelInfo } from '../providers/opencode'
+import { settingsDomain } from './settings'
 
 /**
  * Start the user's own OpenCode server, so connecting takes one click.
@@ -37,9 +38,31 @@ interface ServerProcess {
 
 let running: ServerProcess | null = null
 
+/**
+ * The names an OpenCode binary can have. On Windows an npm install produces
+ * `opencode.cmd` (and sometimes `opencode.exe`), and Node will not spawn a
+ * `.cmd` without a shell — which is why the launcher takes the platform into
+ * account rather than assuming a Unix-style executable.
+ */
+function binaryNames(): string[] {
+  if (process.platform === 'win32') return ['opencode.exe', 'opencode.cmd', 'opencode.bat']
+  return ['opencode']
+}
+
 /** Where an OpenCode binary usually lives, beyond PATH. */
 function candidateBinaries(): string[] {
   const home = homedir()
+  if (process.platform === 'win32') {
+    const appData = process.env.APPDATA ?? join(home, 'AppData', 'Roaming')
+    const localAppData = process.env.LOCALAPPDATA ?? join(home, 'AppData', 'Local')
+    return [
+      join(home, '.opencode', 'bin', 'opencode.exe'),
+      join(appData, 'npm', 'opencode.cmd'),
+      join(appData, 'npm', 'opencode.exe'),
+      join(localAppData, 'Programs', 'opencode', 'opencode.exe'),
+      join(localAppData, 'opencode', 'opencode.exe')
+    ]
+  }
   return [
     join(home, '.opencode', 'bin', 'opencode'),
     join(home, '.local', 'bin', 'opencode'),
@@ -53,9 +76,12 @@ function candidateBinaries(): string[] {
 /** Is OpenCode installed on this machine? */
 export function findOpenCodeBinary(): string | null {
   const pathDirs = (process.env.PATH ?? '').split(':').filter(Boolean)
+  const names = binaryNames()
   for (const dir of pathDirs) {
-    const candidate = join(dir, 'opencode')
-    if (existsSync(candidate)) return candidate
+    for (const name of names) {
+      const candidate = join(dir, name)
+      if (existsSync(candidate)) return candidate
+    }
   }
   for (const candidate of candidateBinaries()) {
     if (existsSync(candidate)) return candidate
@@ -157,9 +183,14 @@ class LocalAgentLauncher {
 
     let child: ChildProcess
     try {
-      child = spawn(binary, ['serve', '--port', String(port)], {
+      // On Windows the binary is usually a .cmd shim, which Node only runs
+      // through a shell; the path is quoted because it may contain spaces.
+      const command = process.platform === 'win32' ? `"${binary}"` : binary
+      child = spawn(command, ['serve', '--port', String(port)], {
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: process.env
+        env: process.env,
+        windowsHide: true,
+        shell: process.platform === 'win32'
       })
     } catch (error) {
       return {
@@ -199,6 +230,60 @@ class LocalAgentLauncher {
     })
 
     return { started: true, baseUrl: announced, spawned: true }
+  }
+
+  /**
+   * The whole promise in one action: find OpenCode, start it if needed, and
+   * wire it up as the active provider with a sensible model — so the user
+   * opens Klyro, clicks once, and it just works.
+   */
+  async connectOpenCode(): Promise<{
+    connected: boolean
+    baseUrl: string
+    model: string
+    models: number
+    free: number
+    error?: string
+  }> {
+    const launched = await this.startOpenCode()
+    if (!launched.started) {
+      return { connected: false, baseUrl: launched.baseUrl, model: '', models: 0, free: 0, error: launched.error }
+    }
+    const password = secrets.get(SECRET_ID)
+    const models = await listOpenCodeModels(launched.baseUrl, password).catch(() => [] as OpenCodeModelInfo[])
+    if (models.length === 0) {
+      return {
+        connected: false,
+        baseUrl: launched.baseUrl,
+        model: '',
+        models: 0,
+        free: 0,
+        error: 'OpenCode is running, but it offered no models. Sign in to OpenCode and try again.'
+      }
+    }
+    // Prefer a free model: the whole point is using what the user already has.
+    const preferred = models.find((model) => model.free) ?? models[0]
+
+    const settings = settingsDomain.get()
+    await settingsDomain.update({
+      activeProvider: 'opencode',
+      providers: {
+        ...settings.providers,
+        opencode: {
+          ...settings.providers.opencode,
+          baseUrl: launched.baseUrl,
+          model: preferred.id
+        }
+      }
+    })
+
+    return {
+      connected: true,
+      baseUrl: launched.baseUrl,
+      model: preferred.id,
+      models: models.length,
+      free: models.filter((model) => model.free).length
+    }
   }
 
   /** Stop a server we started. */

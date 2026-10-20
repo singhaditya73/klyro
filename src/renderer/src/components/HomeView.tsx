@@ -11,6 +11,7 @@ import {
 import { timeAgo } from '../lib/format'
 import { useChat } from '../hooks/useChat'
 import { Composer } from './Composer'
+import { OpenCodeConnectCard } from './OpenCodeConnectCard'
 import KlyroMark from '../assets/logo/klyro-mark.svg'
 
 interface Props {
@@ -99,6 +100,10 @@ export function HomeView({ onNewChat, onOpenView }: Props) {
             }}
             onStop={chat.stop}
           />
+        </section>
+
+        <section style={{ width: '100%', marginBottom: '32px' }}>
+          <OpenCodeConnectCard />
         </section>
 
         <section style={{ width: '100%', marginBottom: '40px' }}>

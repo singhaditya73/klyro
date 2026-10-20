@@ -118,6 +118,7 @@ export const IPC = {
   /* Local agents: what is already running on this machine */
   localAgentsDetect: 'local-agents:detect',
   localAgentStartOpenCode: 'local-agents:startOpenCode',
+  localAgentConnectOpenCode: 'local-agents:connectOpenCode',
   localAgentOpenCodeInstalled: 'local-agents:openCodeInstalled',
   providerDetectModels: 'provider:detectModels',
 

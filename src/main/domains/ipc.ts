@@ -490,6 +490,7 @@ export function registerIpcHandlers(): void {
   handle(IPC.privacyProbeOverlay, () => probeOverlayVisibility())
   handle(IPC.localAgentsDetect, () => localAgents.detect())
   handle(IPC.localAgentStartOpenCode, () => localAgentLauncher.startOpenCode())
+  handle(IPC.localAgentConnectOpenCode, () => localAgentLauncher.connectOpenCode())
   handle(IPC.localAgentOpenCodeInstalled, () => ({ installed: Boolean(findOpenCodeBinary()) }))
   handle(IPC.providerDetectModels, (_event, input: unknown) => {
     const parsed = z
