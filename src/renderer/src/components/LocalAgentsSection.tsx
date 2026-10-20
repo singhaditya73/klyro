@@ -35,6 +35,7 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
   const [starting, setStarting] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [installed, setInstalled] = useState(false)
+  const [clis, setClis] = useState<Array<{ id: string; name: string; installed: boolean; providerId: string; note: string }>>([])
 
   const scan = useCallback(async (): Promise<void> => {
     setScanning(true)
@@ -50,6 +51,7 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
   useEffect(() => {
     void scan()
     void window.klyro.localAgentOpenCodeInstalled().then((result) => setInstalled(result.installed)).catch(() => setInstalled(false))
+    void window.klyro.localAgentClis().then(setClis).catch(() => setClis([]))
   }, [scan])
 
   /**
@@ -201,6 +203,39 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
               <span>{starting ? 'Starting…' : 'Start it'}</span>
             </button>
           </div>
+        </div>
+      )}
+
+      {clis.filter((cli) => cli.installed).length > 0 && (
+        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {clis
+            .filter((cli) => cli.installed)
+            .map((cli) => (
+              <div key={cli.id} className="card__row" style={{ gap: 10, fontSize: 12 }}>
+                <span className="pill pill--ok">Installed</span>
+                <span style={{ fontWeight: 550 }}>{cli.name}</span>
+                <span className="muted" style={{ flex: 1, minWidth: 0 }}>{cli.note}</span>
+                <button
+                  className="btn btn--ghost btn--sm"
+                  onClick={() => {
+                    void (async () => {
+                      const settings = await window.klyro.getSettings()
+                      await window.klyro.updateSettings({
+                        activeProvider: cli.providerId,
+                        providers: {
+                          ...settings.providers,
+                          [cli.providerId]: { ...settings.providers[cli.providerId], baseUrl: '', model: '' }
+                        }
+                      })
+                      setNotice(`${cli.name} is now your provider. Ask something and it will answer.`)
+                    })()
+                  }}
+                >
+                  <Cpu className="icon icon--xs" aria-hidden="true" />
+                  <span>Use this</span>
+                </button>
+              </div>
+            ))}
         </div>
       )}
 

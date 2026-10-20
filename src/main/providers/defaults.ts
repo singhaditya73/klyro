@@ -7,7 +7,9 @@ export const PROVIDER_IDS: ProviderId[] = [
   'groq',
   'ollama',
   'openai-compatible',
-  'opencode'
+  'opencode',
+  'claude-code',
+  'codex'
 ]
 
 export const PROVIDER_META: Record<
@@ -29,6 +31,16 @@ export const PROVIDER_META: Record<
     requiresKey: false,
     keyOptional: true,
     keyLabel: 'Server password (only if you set OPENCODE_SERVER_PASSWORD)'
+  },
+  'claude-code': {
+    label: 'Claude Code (local agent)',
+    requiresKey: false,
+    keyLabel: 'Not required — it uses your Claude subscription'
+  },
+  codex: {
+    label: 'Codex CLI (local agent)',
+    requiresKey: false,
+    keyLabel: 'Not required — it uses your Codex login'
   }
 }
 
@@ -43,7 +55,12 @@ export const DEFAULT_PROVIDERS: Record<ProviderId, ProviderSettings> = {
   'openai-compatible': { baseUrl: 'http://localhost:1234/v1', model: 'local-model', transcribeModel: 'whisper-1' },
   // A local `opencode serve` (default 127.0.0.1:4096). The server holds the
   // user's own OpenCode account, so no key is needed here.
-  opencode: { baseUrl: 'http://127.0.0.1:4096', model: '' }
+  opencode: { baseUrl: 'http://127.0.0.1:4096', model: '' },
+  // Claude Code runs headless on this machine; the model is optional (the CLI
+  // picks its own default when empty).
+  'claude-code': { baseUrl: '', model: '' },
+  // The Codex CLI runs headless on this machine; the model is optional.
+  codex: { baseUrl: '', model: '' }
 }
 
 export const DEFAULT_TRANSCRIBE_MODEL = 'whisper-1'

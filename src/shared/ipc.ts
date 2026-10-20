@@ -115,11 +115,16 @@ export const IPC = {
   /* MCP resources */
   mcpReadResource: 'mcp:readResource',
 
+  /* Import MCP servers from tools the user already runs */
+  mcpImportDiscover: 'mcp:importDiscover',
+  mcpImportAdd: 'mcp:importAdd',
+
   /* Local agents: what is already running on this machine */
   localAgentsDetect: 'local-agents:detect',
   localAgentStartOpenCode: 'local-agents:startOpenCode',
   localAgentConnectOpenCode: 'local-agents:connectOpenCode',
   localAgentOpenCodeInstalled: 'local-agents:openCodeInstalled',
+  localAgentClis: 'local-agents:clis',
   providerDetectModels: 'provider:detectModels',
 
   /* Privacy: does this machine exclude the overlay from screen captures? */

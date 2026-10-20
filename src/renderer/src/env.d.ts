@@ -119,6 +119,17 @@ interface KlyroApi {
     error?: string
   }>
   localAgentOpenCodeInstalled(): Promise<{ installed: boolean }>
+  localAgentClis(): Promise<Array<{ id: string; name: string; installed: boolean; providerId: string; note: string }>>
+
+  mcpImportDiscover(): Promise<Array<{
+    source: string
+    name: string
+    command: string
+    args: string[]
+    env?: Record<string, string>
+    alreadyAdded: boolean
+  }>>
+  mcpImportAdd(input: { name: string; command: string; args?: string[]; env?: Record<string, string> }): Promise<any>
 
   localAgentsDetect(): Promise<Array<{
     id: string

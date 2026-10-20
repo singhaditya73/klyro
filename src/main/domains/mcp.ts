@@ -74,14 +74,15 @@ class McpDomain {
     return this.store.get().servers
   }
 
-  add(name: string, command: string, args: string[]): MCPServerConfig {
+  add(name: string, command: string, args: string[], env?: Record<string, string>): MCPServerConfig {
     const cleanName = name.trim().slice(0, 80) || command.trim().slice(0, 40)
     if (!safeCommand(command)) throw new Error('A plain executable command is required (no URLs, no shell strings).')
     const config: MCPServerConfig = {
       id: randomUUID(),
       name: cleanName,
       command: command.trim(),
-      args: args.map((arg) => arg.trim()).filter(Boolean).slice(0, 32)
+      args: args.map((arg) => arg.trim()).filter(Boolean).slice(0, 32),
+      env: env && Object.keys(env).length > 0 ? env : undefined
     }
     this.store.update((state) => {
       // Replace a same-name entry to keep the list human-predictable.

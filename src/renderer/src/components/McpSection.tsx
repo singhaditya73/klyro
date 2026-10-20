@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Blocks, Loader2, Plug, RefreshCcw, Trash2, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Play, Eye, FileText, MessageSquare } from 'lucide-react'
+import { Blocks, Loader2, Plug, RefreshCcw, Trash2, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Play, Eye, FileText, MessageSquare, Plus } from 'lucide-react'
 
 /**
  * Bring-your-own tools via local MCP (Model Context Protocol) servers. A server
@@ -31,6 +31,22 @@ export function McpSection() {
   const [callArgs, setCallArgs] = useState('{}')
   const [callResult, setCallResult] = useState<string | null>(null)
   const [resourcePreview, setResourcePreview] = useState<{ uri: string; text: string } | null>(null)
+  const [importable, setImportable] = useState<Array<{ source: string; name: string; command: string; args: string[]; env?: Record<string, string>; alreadyAdded: boolean }> | null>(null)
+
+  // MCP servers the user already configured in OpenCode, Claude Code and
+  // friends: one click to take them over, with their command and environment.
+  const scanImportable = useCallback(async (): Promise<void> => {
+    try {
+      const found = await window.klyro.mcpImportDiscover()
+      setImportable(found.filter((server) => !server.alreadyAdded))
+    } catch {
+      setImportable([])
+    }
+  }, [])
+
+  useEffect(() => {
+    void scanImportable()
+  }, [scanImportable])
 
   const readResource = useCallback(async (serverId: string, uri: string): Promise<void> => {
     if (!uri) return
@@ -154,6 +170,49 @@ export function McpSection() {
         <div className="notice notice--success" style={{ marginBottom: 16 }}>
           <span className="icon icon--sm notice__icon" aria-hidden="true"><CheckCircle /></span>
           <span className="notice__body">{notice}</span>
+        </div>
+      )}
+
+      {importable && importable.length > 0 && (
+        <div className="card" style={{ marginBottom: 12, borderColor: 'var(--border-default)' }}>
+          <div className="card__row" style={{ flexWrap: 'wrap' }}>
+            <Blocks className="icon icon--sm" style={{ color: 'var(--text-secondary)' }} aria-hidden="true" />
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div className="card__title">MCP servers you already run</div>
+              <div className="card__subtitle">
+                Found in your {importable[0].source === 'opencode' ? 'OpenCode' : 'Claude'} config — import them
+                with their command and environment intact.
+              </div>
+            </div>
+          </div>
+          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {importable.map((server) => (
+              <div key={`${server.source}-${server.name}`} className="card__row" style={{ gap: 8, fontSize: 12 }}>
+                <code>{server.name}</code>
+                <span className="muted" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {server.command} {server.args.join(' ')}
+                </span>
+                <button
+                  className="btn btn--primary btn--sm"
+                  disabled={busy}
+                  onClick={() => {
+                    setBusy(true)
+                    void window.klyro
+                      .mcpImportAdd({ name: server.name, command: server.command, args: server.args, env: server.env })
+                      .then(() => {
+                        setImportable((previous) => (previous ?? []).filter((item) => item.name !== server.name))
+                        void load()
+                      })
+                      .catch((error) => setError((error as Error).message))
+                      .finally(() => setBusy(false))
+                  }}
+                >
+                  <Plus className="icon icon--xs" aria-hidden="true" />
+                  <span>Import</span>
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

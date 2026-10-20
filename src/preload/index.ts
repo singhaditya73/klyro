@@ -67,10 +67,14 @@ const api: KlyroApi = {
   auditClear: () => ipcRenderer.invoke(IPC.auditClear),
   usageRows: () => ipcRenderer.invoke(IPC.usageRows),
   privacyProbeOverlay: () => ipcRenderer.invoke(IPC.privacyProbeOverlay),
+  mcpImportDiscover: () => ipcRenderer.invoke(IPC.mcpImportDiscover),
+  mcpImportAdd: (input: { name: string; command: string; args?: string[]; env?: Record<string, string> }) =>
+    ipcRenderer.invoke(IPC.mcpImportAdd, input),
   localAgentsDetect: () => ipcRenderer.invoke(IPC.localAgentsDetect),
   localAgentStartOpenCode: () => ipcRenderer.invoke(IPC.localAgentStartOpenCode),
   localAgentConnectOpenCode: () => ipcRenderer.invoke(IPC.localAgentConnectOpenCode),
   localAgentOpenCodeInstalled: () => ipcRenderer.invoke(IPC.localAgentOpenCodeInstalled),
+  localAgentClis: () => ipcRenderer.invoke(IPC.localAgentClis),
   providerDetectModels: (input: { baseUrl: string; kind: 'opencode' | 'openai-compatible' }) =>
     ipcRenderer.invoke(IPC.providerDetectModels, input),
   screenListDisplays: () => ipcRenderer.invoke(IPC.screenListDisplays),

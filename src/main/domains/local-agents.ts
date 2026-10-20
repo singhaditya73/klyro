@@ -5,6 +5,8 @@ import {
   probeOpenCode as probeOpenCodeServer,
   type OpenCodeModelInfo
 } from '../providers/opencode'
+import { findClaudeBinary } from '../providers/claude-code'
+import { findCodexBinary } from '../providers/codex'
 
 /**
  * Find the AI services already running on this machine.
@@ -80,6 +82,13 @@ const CANDIDATES: Candidate[] = [
     name: 'Antigravity bridge',
     baseUrl: 'http://127.0.0.1:11435/v1',
     note: 'A local bridge that exposes an Antigravity subscription as an API.'
+  },
+  {
+    id: 'agy2api',
+    kind: 'openai-compatible',
+    name: 'Antigravity CLI bridge',
+    baseUrl: 'http://127.0.0.1:8000/v1',
+    note: 'A local bridge to the Antigravity CLI, exposed as an OpenAI-compatible API.'
   }
 ]
 
@@ -139,6 +148,26 @@ async function probeOpenCodeService(candidate: Candidate): Promise<LocalAgent> {
 }
 
 class LocalAgentDomain {
+  /** The local agent CLIs the user has installed. */
+  agentClis(): Array<{ id: string; name: string; installed: boolean; providerId: string; note: string }> {
+    return [
+      {
+        id: 'claude-code',
+        name: 'Claude Code',
+        installed: Boolean(findClaudeBinary()),
+        providerId: 'claude-code',
+        note: 'Your Claude subscription, run headless — no API key.'
+      },
+      {
+        id: 'codex',
+        name: 'Codex CLI',
+        installed: Boolean(findCodexBinary()),
+        providerId: 'codex',
+        note: 'Your Codex login, run non-interactively — no API key.'
+      }
+    ]
+  }
+
   /** Probe the usual ports; healthy services come first. */
   async detect(): Promise<LocalAgent[]> {
     const results = await Promise.all(

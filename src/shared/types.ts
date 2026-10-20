@@ -3,7 +3,16 @@
  * Keep this file free of Node/Electron/DOM imports.
  */
 
-export type ProviderId = 'openai' | 'anthropic' | 'gemini' | 'groq' | 'ollama' | 'openai-compatible' | 'opencode'
+export type ProviderId =
+  | 'openai'
+  | 'anthropic'
+  | 'gemini'
+  | 'groq'
+  | 'ollama'
+  | 'openai-compatible'
+  | 'opencode'
+  | 'claude-code'
+  | 'codex'
 
 export type ResponseStyle = 'concise' | 'balanced' | 'detailed'
 export type ThemeMode = 'system' | 'dark' | 'light'
@@ -782,6 +791,16 @@ export interface KlyroApi {
 
   /* MCP connector */
   mcpServers(): Promise<MCPServerState[]>
+  /** MCP servers already configured in OpenCode, Claude Code and friends. */
+  mcpImportDiscover(): Promise<Array<{
+    source: string
+    name: string
+    command: string
+    args: string[]
+    env?: Record<string, string>
+    alreadyAdded: boolean
+  }>>
+  mcpImportAdd(input: { name: string; command: string; args?: string[]; env?: Record<string, string> }): Promise<MCPServerConfig>
   mcpAddServer(input: { name: string; command: string; args?: string[] }): Promise<MCPServerConfig>
   mcpRemoveServer(id: string): Promise<void>
   mcpRefreshTools(id: string): Promise<MCPTool[]>
@@ -817,6 +836,7 @@ export interface KlyroApi {
     error?: string
   }>
   localAgentOpenCodeInstalled(): Promise<{ installed: boolean }>
+  localAgentClis(): Promise<Array<{ id: string; name: string; installed: boolean; providerId: string; note: string }>>
 
   localAgentsDetect(): Promise<Array<{
     id: string

@@ -27,6 +27,7 @@ import { grabScreen, listCaptureSources, probeOverlayVisibility } from './screen
 import { settingsDomain } from './settings'
 import { registerShortcuts } from './shortcuts'
 import { mcp } from './mcp'
+import { mcpImport } from './mcp-import'
 import { actions } from './actions'
 import { audit } from './audit'
 import { usage } from './usage'
@@ -488,10 +489,24 @@ export function registerIpcHandlers(): void {
 
   handle(IPC.usageRows, () => usage.rows())
   handle(IPC.privacyProbeOverlay, () => probeOverlayVisibility())
+  handle(IPC.mcpImportDiscover, () => mcpImport.discover(mcp.list()))
+  handle(IPC.mcpImportAdd, (_event, input: unknown) => {
+    const parsed = z
+      .object({
+        name: z.string().min(1).max(80),
+        command: z.string().min(1).max(400),
+        args: z.array(z.string().max(200)).max(32).optional(),
+        env: z.record(z.string(), z.string()).optional()
+      })
+      .strict()
+      .parse(input)
+    return mcp.add(parsed.name, parsed.command, parsed.args ?? [], parsed.env)
+  })
   handle(IPC.localAgentsDetect, () => localAgents.detect())
   handle(IPC.localAgentStartOpenCode, () => localAgentLauncher.startOpenCode())
   handle(IPC.localAgentConnectOpenCode, () => localAgentLauncher.connectOpenCode())
   handle(IPC.localAgentOpenCodeInstalled, () => ({ installed: Boolean(findOpenCodeBinary()) }))
+  handle(IPC.localAgentClis, () => localAgents.agentClis())
   handle(IPC.providerDetectModels, (_event, input: unknown) => {
     const parsed = z
       .object({ baseUrl: z.string().max(300), kind: z.enum(['opencode', 'openai-compatible']) })
