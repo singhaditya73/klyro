@@ -16,149 +16,125 @@ import {
  * even transcribed.
  */
 
+/** How often the overlay looks for a finished question, and records a slice. */
+const POLL_MS = 100
+
 /**
  * A clock the test drives, and a level watcher it controls.
  *
  * The watcher behaves exactly like the real one: a voiced sample after a
  * pause starts a new run of speech, and the run keeps its start until the
- * next one begins.
+ * next one begins. The room's quiet is measured from the last voiced sample.
  */
 function rig(): {
   clock: { now: number }
-  level: LevelWatcher & { speak(): void; quiet(ms: number): void }
+  level: LevelWatcher
+  assembler: UtteranceAssembler
   advance: (ms: number) => void
+  /** Somebody speaks for a while; the audio arrives in slices. */
+  say: (text: string, ms: number) => void
+  /** The room goes quiet. */
+  pause: (ms: number) => void
 } {
   const clock = { now: 0 }
   let speechStartedAt = 0
   let lastVoicedAt = 0
-  const level: LevelWatcher & { speak(): void; quiet(ms: number): void } = {
+  const level: LevelWatcher = {
     msSinceVoice: () => clock.now - lastVoicedAt,
     speechStartedAt: () => speechStartedAt,
-    speak: () => {
-      if (clock.now - lastVoicedAt > NEW_RUN_GAP_MS || speechStartedAt === 0) speechStartedAt = clock.now
-      lastVoicedAt = clock.now
-    },
-    quiet: (ms: number) => {
-      lastVoicedAt = clock.now - ms
-    },
     dispose: () => undefined
   }
+  const assembler = new UtteranceAssembler(() => clock.now)
   return {
     clock,
     level,
+    assembler,
     advance: (ms: number) => {
+      clock.now += ms
+    },
+    say: (text: string, ms: number) => {
+      const steps = Math.max(1, Math.round(ms / POLL_MS))
+      for (let step = 0; step < steps; step += 1) {
+        clock.now += POLL_MS
+        if (clock.now - lastVoicedAt > NEW_RUN_GAP_MS || speechStartedAt === 0) speechStartedAt = clock.now
+        lastVoicedAt = clock.now
+        assembler.push(new Blob([text], { type: 'audio/webm' }))
+      }
+    },
+    pause: (ms: number) => {
       clock.now += ms
     }
   }
 }
 
-function slice(marker: string): Blob {
-  return new Blob([marker], { type: 'audio/webm' })
-}
-
 describe('UtteranceAssembler', () => {
   it('hands over the question as soon as the room goes quiet', () => {
-    const { clock, level, advance } = rig()
-    const assembler = new UtteranceAssembler(() => clock.now)
+    const { level, assembler, say, pause } = rig()
 
-    // Somebody starts talking.
-    advance(1000)
-    level.speak()
-    assembler.push(slice('a'))
-
-    // They keep talking for a few seconds.
-    for (let step = 1; step <= 10; step += 1) {
-      advance(200)
-      level.speak()
-      assembler.push(slice(`w${step}`))
-      expect(assembler.takeEndedUtterance(level)).toBeNull()
-    }
+    // Somebody starts talking and keeps talking.
+    say('w', 2000)
+    expect(assembler.takeEndedUtterance(level)).toBeNull()
 
     // Then they stop: the pause ends the question.
-    advance(200)
-    level.quiet(MEETING_QUESTION_SILENCE_MS)
+    pause(MEETING_QUESTION_SILENCE_MS)
     const utterance = assembler.takeEndedUtterance(level)
     expect(utterance).not.toBeNull()
-    // The whole question is in it: 'a' plus w1..w10.
-    expect(utterance?.size).toBe(22)
+    // The whole question is in it.
+    expect(utterance?.size).toBe(20)
   })
 
   it('does not wait for a recording chunk to end', () => {
     // The old behaviour transcribed a 20-second chunk, so a question that
     // ended after two seconds was not heard until twenty. The new behaviour
     // hears it at the pause.
-    const { clock, level, advance } = rig()
-    const assembler = new UtteranceAssembler(() => clock.now)
-
-    advance(200)
-    level.speak()
-    assembler.push(slice('hello'))
-
-    advance(1200)
-    level.quiet(MEETING_QUESTION_SILENCE_MS)
+    const { clock, level, assembler, say, pause } = rig()
+    say('hello', 1200)
+    const stoppedAt = clock.now
+    pause(MEETING_QUESTION_SILENCE_MS)
     const utterance = assembler.takeEndedUtterance(level)
     expect(utterance).not.toBeNull()
     // Two seconds in, not twenty.
-    expect(clock.now).toBeLessThan(2000)
+    expect(clock.now - stoppedAt).toBeLessThan(2000)
   })
 
   it('ignores a cough or a click', () => {
-    const { clock, level, advance } = rig()
-    const assembler = new UtteranceAssembler(() => clock.now)
-
-    advance(100)
-    level.speak()
-    assembler.push(slice('tock'))
-
-    advance(200)
-    level.quiet(MEETING_QUESTION_SILENCE_MS)
+    const { level, assembler, say, pause } = rig()
+    say('tock', 100)
+    pause(MEETING_QUESTION_SILENCE_MS)
     expect(assembler.takeEndedUtterance(level)).toBeNull()
   })
 
   it('keeps the audio just before the first word, so it is not clipped', () => {
-    const { clock, level, advance } = rig()
-    const assembler = new UtteranceAssembler(() => clock.now)
+    const { clock, level, assembler, say, pause } = rig()
 
-    // The room before the question: some noise, 300 ms earlier.
-    advance(100)
-    assembler.push(slice('noise'))
+    // The room before the question: some noise.
+    clock.now += 100
+    assembler.push(new Blob(['noise'], { type: 'audio/webm' }))
 
     // The question starts a moment later.
-    advance(200)
-    level.speak()
-    assembler.push(slice('what'))
+    clock.now += 200
+    say('what', 600)
 
-    advance(600)
-    level.quiet(MEETING_QUESTION_SILENCE_MS)
+    pause(MEETING_QUESTION_SILENCE_MS)
     const utterance = assembler.takeEndedUtterance(level)
     expect(utterance).not.toBeNull()
     // The noise just before the question is kept, so the first word is whole.
-    expect(utterance?.size).toBe(9)
+    expect(utterance?.size).toBe(5 + 4 * 6)
   })
 
   it('lets the next question follow the first one', () => {
-    const { clock, level, advance } = rig()
-    const assembler = new UtteranceAssembler(() => clock.now)
-
-    advance(100)
-    level.speak()
-    assembler.push(slice('first'))
-
-    advance(700)
-    level.quiet(MEETING_QUESTION_SILENCE_MS)
+    const { level, assembler, say, pause } = rig()
+    say('first', 600)
+    pause(MEETING_QUESTION_SILENCE_MS)
     const first = assembler.takeEndedUtterance(level)
     expect(first).not.toBeNull()
-    expect(first?.size).toBe(5)
+    expect(first?.size).toBe(5 * 6)
 
-    advance(400)
-    level.speak()
-    assembler.push(slice('second'))
-
-    advance(700)
-    level.quiet(MEETING_QUESTION_SILENCE_MS)
+    say('second', 600)
+    pause(MEETING_QUESTION_SILENCE_MS)
     const second = assembler.takeEndedUtterance(level)
     expect(second).not.toBeNull()
-    expect(second?.size).toBe(6)
+    expect(second?.size).toBe(6 * 6)
   })
 
   it('keeps a question that is worth asking', () => {

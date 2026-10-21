@@ -30,6 +30,10 @@ export default function OverlayApp() {
   const [answer, setAnswer] = useState('')
   const [busy, setBusy] = useState(false)
   const [conversationId, setConversationId] = useState<string | null>(null)
+  /** The interview this overlay is recording into, when it is recording one. */
+  const [interviewId, setInterviewId] = useState<string | null>(null)
+  const interviewRef = useRef<string | null>(null)
+  interviewRef.current = interviewId
   const [privateMode, setPrivateMode] = useState<{ supported: boolean; enabled: boolean } | null>(null)
   const [mode, setMode] = useState<AssistMode>('idle')
   const [transcript, setTranscript] = useState<string[]>([])
@@ -247,7 +251,14 @@ export default function OverlayApp() {
     setBusy(true)
     setAssistNote(null)
     try {
-      await window.klyro.sendChat({ conversationId: id, content, attachments: captureAttachments(), useFastModel: true })
+      await window.klyro.sendChat({
+        conversationId: id,
+        content,
+        attachments: captureAttachments(),
+        useFastModel: true,
+        interviewId: interviewRef.current ?? undefined,
+        source: 'text'
+      })
       setCapture(null)
     } catch (error) {
       busyRef.current = false
@@ -362,7 +373,14 @@ export default function OverlayApp() {
       } catch {
         // No screen? Answer from the words alone.
       }
-      await window.klyro.sendChat({ conversationId: id, content: spoken, attachments, useFastModel: true })
+      await window.klyro.sendChat({
+        conversationId: id,
+        content: spoken,
+        attachments,
+        useFastModel: true,
+        interviewId: interviewRef.current ?? undefined,
+        source: 'voice'
+      })
     } catch (error) {
       setTalkState('listening')
       setAssistNote((error as Error).message)
@@ -490,6 +508,12 @@ export default function OverlayApp() {
   // ---------------------------------------------------------------------
   async function startSnippet(): Promise<void> {
     try {
+      // The interview starts first: a snippet is part of an interview, and
+      // the question and the answer are written down.
+      if (!interviewRef.current) {
+        const session = await window.klyro.interviewsStart({})
+        setInterviewId(session.id)
+      }
       await openStream()
       recorderRef.current?.start()
       modeRef.current = 'recording'
@@ -523,6 +547,10 @@ export default function OverlayApp() {
   // ---------------------------------------------------------------------
   async function startListening(): Promise<void> {
     try {
+      // The interview starts here: everything heard from now on is written
+      // down, with the answers Klyro gives.
+      const session = await window.klyro.interviewsStart({})
+      setInterviewId(session.id)
       await openStream()
       modeRef.current = 'listening'
       setMode('listening')
@@ -661,7 +689,14 @@ export default function OverlayApp() {
                 setAnswer('')
                 setBusy(true)
                 setText('')
-                await window.klyro.sendChat({ conversationId: id, content, attachments: captureAttachments(), useFastModel: true })
+                await window.klyro.sendChat({
+        conversationId: id,
+        content,
+        attachments: captureAttachments(),
+        useFastModel: true,
+        interviewId: interviewRef.current ?? undefined,
+        source: 'text'
+      })
                 setCapture(null)
               })()
             }
@@ -684,7 +719,14 @@ export default function OverlayApp() {
             setAnswer('')
             setBusy(true)
             setText('')
-            await window.klyro.sendChat({ conversationId: id, content, attachments: captureAttachments(), useFastModel: true })
+            await window.klyro.sendChat({
+        conversationId: id,
+        content,
+        attachments: captureAttachments(),
+        useFastModel: true,
+        interviewId: interviewRef.current ?? undefined,
+        source: 'text'
+      })
             setCapture(null)
           })()}
           >

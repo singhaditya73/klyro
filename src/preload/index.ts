@@ -59,6 +59,41 @@ const api: KlyroApi = {
   antigravityConnect: () => ipcRenderer.invoke(IPC.antigravityConnect),
   antigravityDisconnect: () => ipcRenderer.invoke(IPC.antigravityDisconnect),
   providerModels: (providerId: string) => ipcRenderer.invoke(IPC.providerModels, providerId),
+  interviewsList: (query?: unknown) => ipcRenderer.invoke(IPC.interviewsList, query),
+  interviewsGet: (id: string) => ipcRenderer.invoke(IPC.interviewsGet, id),
+  interviewsStart: (input?: { company?: string; role?: string }) => ipcRenderer.invoke(IPC.interviewsStart, input),
+  interviewsAddQuestion: (input: {
+    id: string
+    text: string
+    source: 'voice' | 'text'
+    answer?: string
+    answerMs?: number
+  }) => ipcRenderer.invoke(IPC.interviewsAddQuestion, input),
+  interviewsAddTranscript: (input: { id: string; line: string }) => ipcRenderer.invoke(IPC.interviewsAddTranscript, input),
+  interviewsUpdate: (input: {
+    id: string
+    company?: string
+    role?: string
+    notes?: string
+    summary?: string
+    tags?: string[]
+    stage?: 'technical' | 'behavioral' | 'project' | 'general'
+    ephemeral?: boolean
+  }) => ipcRenderer.invoke(IPC.interviewsUpdate, input),
+  interviewsUpdateQuestion: (input: {
+    id: string
+    questionId: string
+    note?: string
+    progress?: 'asked' | 'answered' | 'skipped' | 'followup'
+    answer?: string
+    bookmarked?: boolean
+  }) => ipcRenderer.invoke(IPC.interviewsUpdateQuestion, input),
+  interviewsToggleBookmark: (input: { id: string; questionId?: string }) =>
+    ipcRenderer.invoke(IPC.interviewsToggleBookmark, input),
+  interviewsRemove: (id: string) => ipcRenderer.invoke(IPC.interviewsRemove, id),
+  interviewsClear: () => ipcRenderer.invoke(IPC.interviewsClear),
+  interviewsFacets: () => ipcRenderer.invoke(IPC.interviewsFacets),
+  interviewsSummarize: (id: string) => ipcRenderer.invoke(IPC.interviewsSummarize, id),
   localAgentStartOpenCode: () => ipcRenderer.invoke(IPC.localAgentStartOpenCode),
   localAgentConnectOpenCode: () => ipcRenderer.invoke(IPC.localAgentConnectOpenCode),
   localAgentOpenCodeInstalled: () => ipcRenderer.invoke(IPC.localAgentOpenCodeInstalled),

@@ -175,6 +175,16 @@ export interface SendChatRequest {
   useFastModel?: boolean
   /** When set, replaces BM25 grounding with the full text of that document. */
   pinnedDocumentId?: string
+  /**
+   * The interview this question belongs to, when it was heard in one.
+   *
+   * The session gives the answer its context — the decisions and terms said
+   * earlier in the meeting — and the question and its answer are written into
+   * the history.
+   */
+  interviewId?: string
+  /** How the question was asked, for the history. */
+  source?: 'voice' | 'text'
 }
 
 export type ChatStreamEvent =
@@ -224,6 +234,105 @@ export interface AppInfo {
 
 export interface TranscribeResult {
   text: string
+}
+
+/* ---------- Interview history ---------- */
+
+/** What kind of question it is; the answer is shaped to match. */
+export type QuestionKind = 'technical' | 'behavioral' | 'project' | 'general'
+
+/** How far a question got. */
+export type QuestionProgress = 'asked' | 'answered' | 'skipped' | 'followup'
+
+/** One question in an interview, and the answer that came back. */
+export interface InterviewQuestion {
+  id: string
+  /** What was asked, as it was heard. */
+  text: string
+  /** How it was asked: heard in the meeting, or typed. */
+  source: 'voice' | 'text'
+  askedAt: number
+  kind: QuestionKind
+  progress: QuestionProgress
+  /** The answer Klyro gave, if it gave one. */
+  answer: string
+  answeredAt?: number
+  /** How long the answer took, in milliseconds. */
+  answerMs?: number
+  /** The user's own note about this question. */
+  note: string
+  bookmarked: boolean
+}
+
+/** A decision or a term worth remembering for the rest of the session. */
+export interface InterviewContextNote {
+  text: string
+  kind: 'decision' | 'term'
+  at: number
+}
+
+/** One interview, kept locally. */
+export interface InterviewSession {
+  id: string
+  /** The company, when the user says who it was. */
+  company: string
+  /** The role being interviewed for. */
+  role: string
+  startedAt: number
+  endedAt: number
+  durationMs: number
+  /** Every question, in the order it was asked. */
+  questions: InterviewQuestion[]
+  /** The live transcript, line by line. */
+  transcript: string[]
+  /** The answer Klyro gave, per question. */
+  answers: string[]
+  /** The user's notes about the interview. */
+  notes: string
+  /** The summary Klyro wrote. */
+  summary: string
+  /** Which model wrote the summary. */
+  summaryModel?: string
+  /** Decisions and terms, kept for the rest of the session. */
+  context: InterviewContextNote[]
+  /** Free tags, for filtering. */
+  tags: string[]
+  bookmarked: boolean
+  /** What kind of interview this was, when it can be told. */
+  stage?: QuestionKind
+  /** True when the user asked for this session never to be written down. */
+  ephemeral: boolean
+}
+
+/** The short line the list shows. */
+export interface InterviewSummary {
+  id: string
+  company: string
+  role: string
+  startedAt: number
+  endedAt: number
+  durationMs: number
+  questionCount: number
+  answeredCount: number
+  progress: number
+  bookmarked: boolean
+  stage?: QuestionKind
+  hasSummary: boolean
+  preview: string
+}
+
+/** How the history is filtered. */
+export interface InterviewQuery {
+  /** Words to look for, in the company, the role, the questions and the notes. */
+  search?: string
+  company?: string
+  role?: string
+  /** Only the ones the user bookmarked. */
+  bookmarked?: boolean
+  /** Only the ones with this kind of question. */
+  kind?: QuestionKind
+  /** Only the ones from after this time. */
+  since?: number
 }
 
 /* ---------- Knowledge: memory, documents, integrations ---------- */
@@ -658,6 +767,42 @@ export interface KlyroApi {
   antigravityConnect(): Promise<{ ok: boolean; error?: string; note?: string }>
   /** Forget the saved Antigravity session. */
   antigravityDisconnect(): Promise<{ ok: boolean }>
+  /* ---------- Interview history ---------- */
+  interviewsList(query?: InterviewQuery): Promise<InterviewSummary[]>
+  interviewsGet(id: string): Promise<InterviewSession | null>
+  interviewsStart(input?: { company?: string; role?: string }): Promise<InterviewSession>
+  interviewsAddQuestion(input: {
+    id: string
+    text: string
+    source: 'voice' | 'text'
+    answer?: string
+    answerMs?: number
+  }): Promise<InterviewSession | null>
+  interviewsAddTranscript(input: { id: string; line: string }): Promise<boolean>
+  interviewsUpdate(input: {
+    id: string
+    company?: string
+    role?: string
+    notes?: string
+    summary?: string
+    tags?: string[]
+    stage?: QuestionKind
+    ephemeral?: boolean
+  }): Promise<InterviewSession | null>
+  interviewsUpdateQuestion(input: {
+    id: string
+    questionId: string
+    note?: string
+    progress?: QuestionProgress
+    answer?: string
+    bookmarked?: boolean
+  }): Promise<boolean>
+  interviewsToggleBookmark(input: { id: string; questionId?: string }): Promise<boolean>
+  interviewsRemove(id: string): Promise<boolean>
+  interviewsClear(): Promise<boolean>
+  interviewsFacets(): Promise<{ companies: string[]; roles: string[]; kinds: QuestionKind[] }>
+  interviewsSummarize(id: string): Promise<{ summary: string; model: string } | null>
+
   /** The models a provider can serve — so the user can pick one. */
   providerModels(providerId: ProviderId): Promise<{
     models: Array<{ id: string; name: string; provider: string; quota: number | null; free: boolean }>

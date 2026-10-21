@@ -82,6 +82,20 @@ export const IPC = {
   /** The models a provider can serve, so the user can pick one. */
   providerModels: 'provider:models',
 
+  /* Interview history */
+  interviewsList: 'interviews:list',
+  interviewsGet: 'interviews:get',
+  interviewsStart: 'interviews:start',
+  interviewsAddQuestion: 'interviews:addQuestion',
+  interviewsAddTranscript: 'interviews:addTranscript',
+  interviewsUpdate: 'interviews:update',
+  interviewsUpdateQuestion: 'interviews:updateQuestion',
+  interviewsToggleBookmark: 'interviews:toggleBookmark',
+  interviewsRemove: 'interviews:remove',
+  interviewsClear: 'interviews:clear',
+  interviewsFacets: 'interviews:facets',
+  interviewsSummarize: 'interviews:summarize',
+
   /* Import MCP servers from tools the user already runs */
 
   /* Local agents: what is already running on this machine */

@@ -168,13 +168,17 @@ export class UtteranceAssembler {
 
     const spoken = this.slices.slice(this.utteranceStart)
     const startedAt = this.sliceAt[this.utteranceStart] ?? now
+    // How long the *speech* was, not how long the room was quiet afterwards: a
+    // cough followed by a pause is still a cough.
+    const speechEndedAt = now - watcher.msSinceVoice()
+    const durationMs = speechEndedAt - startedAt
     // Whatever came before the question is not part of it.
     this.slices = this.slices.slice(this.utteranceStart + spoken.length)
     this.sliceAt = this.sliceAt.slice(this.utteranceStart + spoken.length)
     this.utteranceStart = 0
 
     if (spoken.length === 0) return null
-    if (now - startedAt < MEETING_MIN_QUESTION_MS) return null
+    if (durationMs < MEETING_MIN_QUESTION_MS) return null
     return mergeBlobs(spoken)
   }
 

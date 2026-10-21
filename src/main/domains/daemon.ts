@@ -1,8 +1,8 @@
 import { spawn, type ChildProcess } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { createConnection, type Socket } from 'node:net'
+import { Socket } from 'node:net'
 
 /**
  * The Klyro daemon.
@@ -17,7 +17,7 @@ import { createConnection, type Socket } from 'node:net'
  * 4 MB, instead of from a browser runtime that lives in 851 MB.
  */
 
-const SOCKET_NAME = 'klyro-core.sock'
+const STATE_NAME = 'klyro-core.json'
 const CONNECT_TIMEOUT_MS = 1500
 
 export interface DaemonProvider {
@@ -50,9 +50,27 @@ export type DaemonEvent =
   | { kind: 'error'; message: string }
   | { kind: 'pong' }
 
-/** Where the daemon listens. */
-export function daemonSocketPath(): string {
-  return join(process.env.KLYRO_STATE_DIR ?? join(homedir(), '.config', 'klyro'), SOCKET_NAME)
+/** Where the daemon says it is listening. */
+export function daemonStatePath(): string {
+  return join(process.env.KLYRO_STATE_DIR ?? join(homedir(), '.config', 'klyro'), STATE_NAME)
+}
+
+/** What the daemon told us about itself. */
+interface DaemonState {
+  port: number
+  token: string
+  pid: number
+  version: string
+}
+
+function readDaemonState(): DaemonState | null {
+  try {
+    const parsed = JSON.parse(readFileSync(daemonStatePath(), 'utf8')) as DaemonState
+    if (!parsed?.port || !parsed?.token) return null
+    return parsed
+  } catch {
+    return null
+  }
 }
 
 /** Where the built daemon may live. */
@@ -87,7 +105,12 @@ class DaemonClient {
     if (this.socket && !this.socket.destroyed) return Promise.resolve(true)
     if (this.connecting) return this.connecting
     this.connecting = new Promise<boolean>((resolve) => {
-      const socket = createConnection(daemonSocketPath())
+      const state = readDaemonState()
+      if (!state) {
+        resolve(false)
+        return
+      }
+      const socket = new Socket()
       const timer = setTimeout(() => {
         socket.destroy()
         resolve(false)
@@ -96,12 +119,15 @@ class DaemonClient {
         clearTimeout(timer)
         this.socket = socket
         this.attach(socket)
+        // The daemon serves nothing without its token.
+        socket.write(`${JSON.stringify({ kind: 'auth', token: state.token })}\n`)
         resolve(true)
       })
       socket.once('error', () => {
         clearTimeout(timer)
         resolve(false)
       })
+      socket.connect(state.port, '127.0.0.1')
     })
     return this.connecting.finally(() => {
       this.connecting = null
@@ -184,27 +210,42 @@ class DaemonClient {
     return []
   }
 
-  /** Ask a question; the answer streams back through `onEvent`. */
+  /**
+   * Ask a question; the answer streams back through `onEvent`.
+   *
+   * This resolves when the answer is *complete*, not when the request has
+   * been sent — the caller waits for the whole answer.
+   */
   async ask(request: DaemonAsk, onEvent: (event: DaemonEvent) => void): Promise<boolean> {
     if (!(await this.connect())) return false
     const socket = this.socket
     if (!socket) return false
-    const listener = (event: DaemonEvent): void => {
-      if (event.kind === 'delta' || event.kind === 'error' || event.kind === 'done') onEvent(event)
-    }
-    this.listeners.add(listener)
-    socket.write(
-      `${JSON.stringify({
-        kind: 'ask',
-        provider: request.provider,
-        model: request.model,
-        base_url: request.baseUrl ?? '',
-        api_key: request.apiKey ?? null,
-        prompt: request.prompt,
-        images: (request.images ?? []).map((image) => ({ data_url: image.dataUrl, mime: image.mime }))
-      })}\n`
-    )
-    return true
+    return new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => {
+        this.listeners.delete(listener)
+        resolve(false)
+      }, 180000)
+      const listener = (event: DaemonEvent): void => {
+        if (event.kind === 'delta' || event.kind === 'error' || event.kind === 'done') onEvent(event)
+        if (event.kind === 'done' || event.kind === 'error') {
+          clearTimeout(timer)
+          this.listeners.delete(listener)
+          resolve(true)
+        }
+      }
+      this.listeners.add(listener)
+      socket.write(
+        `${JSON.stringify({
+          kind: 'ask',
+          provider: request.provider,
+          model: request.model,
+          base_url: request.baseUrl ?? '',
+          api_key: request.apiKey ?? null,
+          prompt: request.prompt,
+          images: (request.images ?? []).map((image) => ({ data_url: image.dataUrl, mime: image.mime }))
+        })}\n`
+      )
+    })
   }
 
   /** Stop listening to the daemon's events. */

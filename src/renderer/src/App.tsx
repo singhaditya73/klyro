@@ -1,6 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
 import { IntegrationsView } from './components/IntegrationsView'
-import { Keyboard, ShieldCheck } from 'lucide-react'
+import { Clock, Keyboard, ShieldCheck } from 'lucide-react'
 
 /**
  * The control panel.
@@ -16,9 +16,10 @@ import { Keyboard, ShieldCheck } from 'lucide-react'
 // unmounts and remounts the whole panel — visibly resetting focus.
 const SettingsPanel = lazy(() => import('./components/SettingsPanel').then((module) => ({ default: module.SettingsPanel })))
 const KnowledgePanel = lazy(() => import('./components/KnowledgePanel').then((module) => ({ default: module.KnowledgePanel })))
+const Interviews = lazy(() => import('./components/InterviewsPanel').then((module) => ({ default: module.InterviewsPanel })))
 const Onboarding = lazy(() => import('./components/Onboarding').then((module) => ({ default: module.Onboarding })))
 
-type Panel = 'settings' | 'knowledge'
+type Panel = 'settings' | 'knowledge' | 'interviews'
 
 export default function App() {
   const [openPanel, setOpenPanel] = useState<Panel | null>(null)
@@ -82,6 +83,10 @@ export default function App() {
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button className="btn btn--ghost btn--sm" onClick={() => open('interviews')}>
+                  <Clock className="icon icon--xs" aria-hidden="true" />
+                  <span>Interviews</span>
+                </button>
                 <button className="btn btn--ghost btn--sm" onClick={() => open('knowledge')}>
                   <ShieldCheck className="icon icon--xs" aria-hidden="true" />
                   <span>What Klyro knows</span>
@@ -102,6 +107,7 @@ export default function App() {
         <Onboarding onOpenSettings={() => open('settings')} />
         {openPanel === 'settings' && <SettingsPanel onClose={close} />}
         {openPanel === 'knowledge' && <KnowledgePanel onClose={close} />}
+        {openPanel === 'interviews' && <Interviews onClose={close} />}
       </Suspense>
     </div>
   )

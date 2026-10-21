@@ -4,6 +4,41 @@ All notable changes to Klyro are recorded here. Versions follow [SemVer](https:/
 
 ## [Unreleased]
 
+## [0.9.11] — 2026-10-21
+
+Interview history, a session that remembers, and answers that fit the question.
+
+### Added
+- **Interview history.** Every interview that was recorded is kept on this
+  machine: the company, the role, the date, the duration, the questions, the
+  transcript, the answers, your notes and a summary Klyro writes. Search it,
+  filter it by company or role, bookmark what matters, and watch how far you
+  got (answered so far, out of how many questions). One click deletes a
+  session; one click deletes all of them. The panel is in the control panel,
+  under *Interviews*.
+- **Session context memory.** The decisions and the terms said during a
+  meeting are remembered for the rest of it: "we decided to go with the local
+  model" and "we call the gateway…" are kept, and the answers that follow
+  know about them. The panel shows them under *Decisions & terms*.
+- **Answers that fit the question.** A question is read as technical,
+  behavioural, project or general, and the answer is shaped to match — precise
+  for a technical question, situation-and-outcome for a behavioural one, your
+  own role for a project one. It costs nothing: the kind is read off the
+  words, not from a model call.
+- **Latency regression tests.** The pipeline's own budget is now a number:
+  a short question is heard within 1.5 s of the last word, a long pause is
+  not charged to the answer, an interruption costs nothing, and a second
+  question is heard as a second question. The tests live next to the code
+  that has to keep them.
+
+### Fixed
+- **The daemon's answer never arrived.** The app asked the daemon and moved
+  on before the answer came back, so a question answered by the daemon came
+  back empty. The app now waits for the whole answer, and a failure from the
+  daemon is reported as itself.
+- The interview question and its answer are now written down whichever path
+  answered them — the daemon, the app's own client, or an instant replay.
+
 ## [0.9.10] — 2026-10-21
 
 The meeting is heard, and the question is answered the moment it ends.

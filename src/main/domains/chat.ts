@@ -5,7 +5,7 @@ import { IPC } from '@shared/ipc'
 import { logger } from '../logger'
 import { getProvider } from '../providers'
 import { DEFAULT_PROVIDERS, PROVIDER_META } from '../providers/defaults'
-import { classifyThrown, toUserMessage } from '../providers/errors'
+import { classifyThrown, ProviderError, toUserMessage } from '../providers/errors'
 import { providerCarriesImages, resolveRoute } from '../providers/routing'
 import type { ChatTurn } from '../providers/types'
 import type { ProviderId } from '@shared/types'
@@ -13,7 +13,9 @@ import { audit } from './audit'
 import { StreamStalledError, withIdleTimeout } from '../util/idle-timeout'
 import { conversations } from './conversations'
 import { buildKnowledgeContext } from './context'
+import { adviceFor, classifyQuestion, contextBlock } from './interview-model'
 import { daemon } from './daemon'
+import { interviews } from './interviews'
 import { documents } from './documents'
 import { memory } from './memory'
 import { settingsDomain } from './settings'
@@ -130,6 +132,11 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
   })
 
   const turns = buildTurns(conversations.get(conversationId) ?? conversation)
+  // The session this question belongs to: it carries what has been decided and
+  // what the terms mean, and the answer goes back into the history.
+  const session = request.interviewId ? interviews.get(request.interviewId) : null
+  const questionKind = classifyQuestion(request.content)
+  const advice = adviceFor(questionKind)
   // What the assistant knows about the user: their notes, their documents,
   // their resume. This is what makes an answer grounded instead of generic.
   // A pinned document replaces the recall with the document itself.
@@ -145,6 +152,23 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
   const startedAt = Date.now()
   let firstTokenMs: number | null = null
 
+  /**
+   * The history: what was asked, and what came back.
+   *
+   * An interview is what the user is in the middle of; the questions and the
+   * answers belong to it.
+   */
+  const recordInHistory = (answer: string, ms: number): void => {
+    if (!session) return
+    interviews.addQuestion(session.id, {
+      text: request.content,
+      source: request.source ?? 'text',
+      answer,
+      answerMs: ms
+    })
+    interviews.addTranscript(session.id, request.content)
+  }
+
   try {
     // Resolved here so a missing key or an empty model fails with a message that
     // says what to fix, rather than a 401 from the endpoint.
@@ -158,7 +182,14 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
       baseUrl: route.baseUrl,
       apiKey: route.apiKey,
       ...(request.useFastModel ? { maxTokens: 400, temperature: 0.3 } : {}),
-      system: [settings.systemPrompt + styleSuffix(settings.responseStyle), knowledge.block]
+      system: [
+        settings.systemPrompt + styleSuffix(settings.responseStyle),
+        knowledge.block,
+        // What was decided earlier in this conversation, and what the terms mean.
+        session ? contextBlock(session.context) : '',
+        // How this kind of question should be answered.
+        advice.guidance
+      ]
         .filter(Boolean)
         .join('\n\n'),
       signal: abort.signal
@@ -190,6 +221,8 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
         emit({ type: 'done', messageId: assistantId, cached: true, ms: 0, totalMs: 0, model: route.model })
         usage.record(providerId, 'chat', { toolCall: false })
         audit.record('chat.cached', `Replayed a cached answer for "${request.content.slice(0, 80)}"`)
+        // A replay is still an answer: it belongs in the history too.
+        recordInHistory(replay, 0)
         return
       }
     }
@@ -203,6 +236,7 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
     // middle of a meeting. Everything else goes through the app.
     const daemonCanAnswer = request.useFastModel === true && DAEMON_PROVIDERS.has(providerId)
     if (daemonCanAnswer && (await daemon.available())) {
+      let daemonError: string | null = null
       const answered = await daemon.ask(
         {
           provider: providerId,
@@ -223,17 +257,22 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
             return
           }
           if (event.kind === 'error') {
-            throw new Error(event.message)
+            // The daemon said what went wrong; it is raised once the answer
+            // has finished, so the transcript is not left half-written.
+            daemonError = event.message
           }
         }
       )
       if (!answered) {
         // The daemon did not take it: fall through to the app's own client.
+      } else if (daemonError) {
+        throw new ProviderError(daemonError, { kind: 'bad_request', provider: providerId })
       } else {
         conversations.updateMessage(conversationId, assistantId, { content: text })
         const totalMs = Date.now() - startedAt
         emit({ type: 'done', messageId: assistantId, ms: firstTokenMs ?? totalMs, totalMs, model: route.model })
         usage.record(providerId, 'chat')
+        recordInHistory(text, firstTokenMs ?? totalMs)
         return
       }
     }
@@ -250,6 +289,7 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
     const totalMs = Date.now() - startedAt
     emit({ type: 'done', messageId: assistantId, ms: firstTokenMs ?? totalMs, totalMs, model: route.model })
     usage.record(providerId, 'chat')
+    recordInHistory(text, firstTokenMs ?? totalMs)
     // Extraction costs a model call, so only run it for substantive exchanges.
     if (settings.memoryAutoExtract && text.trim().length >= 24 && request.content.trim().length >= 24) {
       const origin = `conversation:${conversation.title || conversationId}`

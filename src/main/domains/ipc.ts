@@ -15,6 +15,8 @@ import { maintenance } from './maintenance'
 import { memory } from './memory'
 import { privacy } from './privacy'
 import { listProviderModels } from './provider-models'
+import { interviews } from './interviews'
+import { summarizeInterview } from './interview-summary'
 import { transcribeAudio } from './audio'
 import { applyOverlayDisplay, applyOverlayOpacity, applyOverlayPrivateMode, listDisplays, overlayPrivateModeSupported, setOverlayStickyRecording } from './windows'
 import { conversations } from './conversations'
@@ -98,8 +100,10 @@ const sendChatSchema = z.object({
     .max(8)
     .optional(),
   pinnedDocumentId: z.string().min(1).max(80).optional(),
-  useFastModel: z.boolean().optional()
-    .optional()
+  useFastModel: z.boolean().optional(),
+  // The interview this question belongs to, when it was heard in one.
+  interviewId: z.string().min(1).max(80).optional(),
+  source: z.enum(['voice', 'text']).optional()
 })
 
 
@@ -297,6 +301,100 @@ export function registerIpcHandlers(): void {
   handle(IPC.localAgentConnectOpenCode, () => localAgentLauncher.connectOpenCode())
   handle(IPC.localAgentOpenCodeInstalled, () => ({ installed: Boolean(findOpenCodeBinary()) }))
   handle(IPC.localAgentClis, () => localAgents.agentClis())
+  /* ---------- Interview history ---------- */
+  handle(IPC.interviewsList, (_event, query: unknown) => {
+    const parsed = z
+      .object({
+        search: z.string().max(200).optional(),
+        company: z.string().max(120).optional(),
+        role: z.string().max(120).optional(),
+        bookmarked: z.boolean().optional(),
+        kind: z.enum(['technical', 'behavioral', 'project', 'general']).optional(),
+        since: z.number().int().min(0).optional()
+      })
+      .strict()
+      .parse(query ?? {})
+    return interviews.list(parsed)
+  })
+  handle(IPC.interviewsGet, (_event, id: unknown) => interviews.get(z.string().min(1).max(80).parse(id)))
+  handle(IPC.interviewsStart, (_event, input: unknown) => {
+    const parsed = z.object({ company: z.string().max(120).optional(), role: z.string().max(120).optional() }).parse(input ?? {})
+    return interviews.start(parsed.company ?? '', parsed.role ?? '')
+  })
+  handle(IPC.interviewsAddQuestion, (_event, input: unknown) => {
+    const parsed = z
+      .object({
+        id: z.string().min(1).max(80),
+        text: z.string().min(1).max(4000),
+        source: z.enum(['voice', 'text']).default('voice'),
+        answer: z.string().max(20000).optional(),
+        answerMs: z.number().int().min(0).optional()
+      })
+      .parse(input)
+    return interviews.addQuestion(parsed.id, parsed)
+  })
+  handle(IPC.interviewsAddTranscript, (_event, input: unknown) => {
+    const parsed = z.object({ id: z.string().min(1).max(80), line: z.string().max(4000) }).parse(input)
+    interviews.addTranscript(parsed.id, parsed.line)
+    return true
+  })
+  handle(IPC.interviewsUpdate, (_event, input: unknown) => {
+    const parsed = z
+      .object({
+        id: z.string().min(1).max(80),
+        company: z.string().max(120).optional(),
+        role: z.string().max(120).optional(),
+        notes: z.string().max(20000).optional(),
+        summary: z.string().max(20000).optional(),
+        tags: z.array(z.string().max(40)).max(20).optional(),
+        stage: z.enum(['technical', 'behavioral', 'project', 'general']).optional(),
+        ephemeral: z.boolean().optional()
+      })
+      .parse(input)
+    const { id, ...patch } = parsed
+    return interviews.update(id, patch)
+  })
+  handle(IPC.interviewsUpdateQuestion, (_event, input: unknown) => {
+    const parsed = z
+      .object({
+        id: z.string().min(1).max(80),
+        questionId: z.string().min(1).max(80),
+        note: z.string().max(4000).optional(),
+        progress: z.enum(['asked', 'answered', 'skipped', 'followup']).optional(),
+        answer: z.string().max(20000).optional(),
+        bookmarked: z.boolean().optional()
+      })
+      .parse(input)
+    const { id, questionId, ...patch } = parsed
+    interviews.updateQuestion(id, questionId, patch)
+    return true
+  })
+  handle(IPC.interviewsToggleBookmark, (_event, input: unknown) => {
+    const parsed = z
+      .object({ id: z.string().min(1).max(80), questionId: z.string().min(1).max(80).optional() })
+      .parse(input)
+    interviews.toggleBookmark(parsed.id, parsed.questionId)
+    return true
+  })
+  handle(IPC.interviewsRemove, (_event, id: unknown) => {
+    interviews.remove(z.string().min(1).max(80).parse(id))
+    return true
+  })
+  handle(IPC.interviewsClear, () => {
+    interviews.clear()
+    return true
+  })
+  handle(IPC.interviewsFacets, () => interviews.facets())
+  handle(IPC.interviewsSummarize, async (_event, id: unknown) => {
+    const sessionId = z.string().min(1).max(80).parse(id)
+    const session = interviews.get(sessionId)
+    if (!session) return null
+    const written = await summarizeInterview(session)
+    if (!written) return null
+    interviews.update(sessionId, { summary: written.summary, summaryModel: written.model })
+    return written
+  })
+
   handle(IPC.providerModels, (_event, input: unknown) => {
     const providerId = z.enum(PROVIDER_IDS).parse(input)
     return listProviderModels(providerId)

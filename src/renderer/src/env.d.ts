@@ -123,6 +123,32 @@ interface KlyroApi {
   antigravityStartService(): Promise<{ started: boolean; error?: string; note?: string }>
   antigravityConnect(): Promise<{ ok: boolean; error?: string; note?: string }>
   antigravityDisconnect(): Promise<{ ok: boolean }>
+  interviewsList(query?: unknown): Promise<Array<{
+    id: string
+    company: string
+    role: string
+    startedAt: number
+    endedAt: number
+    durationMs: number
+    questionCount: number
+    answeredCount: number
+    progress: number
+    bookmarked: boolean
+    stage?: string
+    hasSummary: boolean
+    preview: string
+  }>>
+  interviewsGet(id: string): Promise<any>
+  interviewsStart(input?: { company?: string; role?: string }): Promise<any>
+  interviewsAddQuestion(input: { id: string; text: string; source: 'voice' | 'text'; answer?: string; answerMs?: number }): Promise<any>
+  interviewsAddTranscript(input: { id: string; line: string }): Promise<boolean>
+  interviewsUpdate(input: { id: string; company?: string; role?: string; notes?: string; summary?: string; tags?: string[]; stage?: string; ephemeral?: boolean }): Promise<any>
+  interviewsUpdateQuestion(input: { id: string; questionId: string; note?: string; progress?: string; answer?: string; bookmarked?: boolean }): Promise<boolean>
+  interviewsToggleBookmark(input: { id: string; questionId?: string }): Promise<boolean>
+  interviewsRemove(id: string): Promise<boolean>
+  interviewsClear(): Promise<boolean>
+  interviewsFacets(): Promise<{ companies: string[]; roles: string[]; kinds: string[] }>
+  interviewsSummarize(id: string): Promise<{ summary: string; model: string } | null>
   providerModels(providerId: string): Promise<{
     models: Array<{ id: string; name: string; provider: string; quota: number | null; free: boolean }>
     note: string | null
