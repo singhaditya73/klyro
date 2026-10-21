@@ -34,15 +34,6 @@ export const IPC = {
   diagnosticsList: 'diagnostics:list',
   diagnosticsClear: 'diagnostics:clear',
 
-  agentCapabilities: 'agent:capabilities',
-  agentRun: 'agent:run',
-  agentCancel: 'agent:cancel',
-  agentPause: 'agent:pause',
-  agentResume: 'agent:resume',
-  agentConfirm: 'agent:confirm',
-  agentStatus: 'agent:status',
-  agentTasks: 'agent:tasks',
-  agentEvent: 'agent:event',
 
   memoryList: 'memory:list',
   memoryAdd: 'memory:add',
@@ -57,32 +48,9 @@ export const IPC = {
 
   knowledgeSearch: 'knowledge:search',
 
-  integrationList: 'integration:list',
-  integrationTest: 'integration:test',
-  githubSetToken: 'integration:github:setToken',
-  githubClearToken: 'integration:github:clearToken',
-  githubAccount: 'integration:github:account',
-  githubRepos: 'integration:github:repos',
-  githubIssues: 'integration:github:issues',
-  githubCreateIssue: 'integration:github:createIssue',
 
 
-  meetingList: 'meeting:list',
-  meetingSave: 'meeting:save',
-  meetingSummarize: 'meeting:summarize',
-  meetingDelete: 'meeting:delete',
-  meetingTranscriptAppend: 'meeting:transcript:append',
-  meetingTranscriptGap: 'meeting:transcript:gap',
-  meetingTranscriptGet: 'meeting:transcript:get',
-  meetingTranscriptDiscard: 'meeting:transcript:discard',
 
-  workflowList: 'workflow:list',
-  workflowCreate: 'workflow:create',
-  workflowDelete: 'workflow:delete',
-  workflowRun: 'workflow:run',
-  workflowRuns: 'workflow:runs',
-  workflowCancel: 'workflow:cancel',
-  workflowEvent: 'workflow:event',
 
 
   windowHideOverlay: 'window:hideOverlay',
@@ -91,29 +59,20 @@ export const IPC = {
   overlaySetRecordingSticky: 'overlay:setRecordingSticky',
 
   /* MCP connector */
-  mcpServers: 'mcp:servers',
-  mcpAddServer: 'mcp:addServer',
-  mcpRemoveServer: 'mcp:removeServer',
-  mcpRefreshTools: 'mcp:refreshTools',
-  mcpCallTool: 'mcp:callTool',
 
   /* Post-meeting action agent + output ledger */
-  meetingProposeActions: 'meetings:proposeActions',
-  meetingExecuteActions: 'meetings:executeActions',
 
   /* Audit log */
   auditList: 'audit:list',
   auditClear: 'audit:clear',
 
   /* Tool approvals (chat MCP loop) */
-  chatRespondTool: 'chat:respondTool',
 
   /* Local usage ledger */
   usageRows: 'usage:rows',
   usageClear: 'usage:clear',
 
   /* MCP resources */
-  mcpReadResource: 'mcp:readResource',
 
   /* Antigravity: the local agent IDE, read directly from its own service */
   antigravityStatus: 'antigravity:status',
@@ -124,8 +83,6 @@ export const IPC = {
   providerModels: 'provider:models',
 
   /* Import MCP servers from tools the user already runs */
-  mcpImportDiscover: 'mcp:importDiscover',
-  mcpImportAdd: 'mcp:importAdd',
 
   /* Local agents: what is already running on this machine */
   localAgentsDetect: 'local-agents:detect',

@@ -1,10 +1,8 @@
 import type { DataScope, DataSummary } from '@shared/types'
 import { secrets } from '../security/secrets'
-import { agentRunner } from './agent'
 import { conversations } from './conversations'
 import { documents } from './documents'
 import { maintenance } from './maintenance'
-import { meetings } from './meetings'
 import { memory } from './memory'
 import { settingsDomain } from './settings'
 
@@ -32,8 +30,8 @@ class PrivacyDomain {
       conversations: conversations.list().length,
       memories: memory.list().length,
       documents: documents.stats().documents,
-      meetings: meetings.list().length,
-      agentTasks: agentRunner.tasks().length,
+      meetings: 0,
+      agentTasks: 0,
       credentials: secrets.count(),
       activeProvider: providerId,
       activeProviderIsLocal: local,
@@ -53,10 +51,8 @@ class PrivacyDomain {
         documents.clear()
         break
       case 'meetings':
-        meetings.clear()
-        break
       case 'agentTasks':
-        agentRunner.clearTasks()
+        // Nothing of these is kept any more.
         break
       default:
         throw new Error('Unknown data scope')

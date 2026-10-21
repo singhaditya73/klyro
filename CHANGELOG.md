@@ -4,6 +4,42 @@ All notable changes to Klyro are recorded here. Versions follow [SemVer](https:/
 
 ## [Unreleased]
 
+## [0.9.8] — 2026-10-21
+
+Klyro is now only the thing it is good at.
+
+### Changed
+- **Klyro is a meeting and interview assistant.** The overlay, the global
+  hotkey, screen context, talk mode, listen mode, private mode, the model
+  picker, every provider and every local agent stay. What went is everything
+  that belongs to a different product:
+
+  | Removed | Why |
+  | --- | --- |
+  | The chat workspace (Home, Chat, sidebar, composer) | A conversation app is a different product; the overlay already has its own input and history. |
+  | The desktop agent (mouse and keyboard automation) | Nothing in "answer my question now" needs it, and it is a large attack surface on a machine that is holding a meeting. |
+  | Workflows | A batch feature for a workspace. |
+  | The Meetings/Studio surface | Record-then-act-afterwards is not instant assistance. (It was already unreachable in the shipped UI.) |
+  | The GitHub integration | Filing issues is a workspace action. |
+  | The MCP client and its import | A tool protocol for agents that act on code. It moves to the IDE product, and the chat tool loop goes with it. |
+
+- **The knowledge base stays** — a resume, a project description, a document you
+  were sent. The assistant grounds its answer in what it knows about you, and
+  that is the difference between a useful answer and a generic one.
+- **The main window is now the control panel**: the hotkey, the models and
+  agents you can use, what Klyro knows, and the settings. The overlay is the
+  product; this is what you configure it with.
+- The renderer bundle went from 1,250 kB to 667 kB, and the stylesheet from
+  77 kB to 48 kB. Less to start, less to keep safe.
+
+### Kept, deliberately
+Every model and agent integration is untouched: OpenAI, Anthropic, Gemini,
+Groq, Ollama, any OpenAI-compatible server, **OpenCode**, **Claude Code**,
+**Codex** and **Antigravity**, with their own authentication and their own
+configurations.
+
+
+
 ## [0.9.7] — 2026-10-21
 
 When it goes wrong, it says what went wrong.

@@ -41,8 +41,6 @@ export interface AppSettings {
   theme: ThemeMode
   launchAtLogin: boolean
   toggleShortcut: string
-  agentConfirmConsequential: boolean
-  agentMaxSteps: number
   memoryEnabled: boolean
   memoryAutoExtract: boolean
   memoryRecallCount: number
@@ -66,7 +64,6 @@ export interface AppSettings {
    * servers. Every call still asks before it runs (or is declined), and each
    * one lands in the audit log.
    */
-  chatMcpTools: boolean
   /**
    * Capture the screen with one click: the display is captured (Klyro hides
    * itself for the shot) and attached to the message, with no source picker.
@@ -227,164 +224,6 @@ export interface AppInfo {
 
 export interface TranscribeResult {
   text: string
-}
-
-/* ---------- Desktop automation / agent ---------- */
-
-export type AgentSession = 'wayland' | 'x11' | 'macos' | 'windows' | 'unknown'
-
-/** Why a session cannot (fully) drive input. */
-export type AutomationBlockKind = 'ready' | 'executable-missing' | 'permission-denied' | 'unsupported'
-
-export interface AutomationCheck {
-  name: string
-  ok: boolean
-  detail: string
-}
-
-export interface AutomationRuntime {
-  /** The overall verdict for this session. */
-  kind: AutomationBlockKind
-  /** Backends that responded to a harmless probe (not merely present on PATH). */
-  verifiedBackends: string[]
-  checks: AutomationCheck[]
-}
-
-export interface AutomationCapabilities {
-  platform: string
-  session: AgentSession
-  available: boolean
-  backends: string[]
-  missing: string[]
-  installHint: string
-  limitations: string[]
-  runtime: AutomationRuntime
-}
-
-export type AgentActionType =
-  | 'move'
-  | 'click'
-  | 'doubleClick'
-  | 'type'
-  | 'key'
-  | 'scroll'
-  | 'wait'
-  | 'screenshot'
-  | 'done'
-  | 'ask'
-
-export interface AgentAction {
-  type: AgentActionType
-  x?: number
-  y?: number
-  button?: 'left' | 'right' | 'middle'
-  text?: string
-  keys?: string
-  dy?: number
-  ms?: number
-  summary?: string
-  question?: string
-  requiresConfirmation?: boolean
-  reason?: string
-}
-
-export type AgentStepStatus =
-  | 'planned'
-  | 'executing'
-  | 'executed'
-  | 'verified'
-  | 'unverified'
-  | 'ambiguous'
-  | 'blocked'
-  | 'skipped'
-  | 'pending'
-  | 'failed'
-  | 'blocked'
-  | 'skipped'
-
-/** Lifecycle state of an agent task. Terminal: completed/failed/cancelled/interrupted. */
-export type AgentTaskState =
-  | 'queued'
-  | 'running'
-  | 'awaiting-approval'
-  | 'paused'
-  | 'cancelling'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
-  | 'interrupted'
-
-/** Coarse error buckets so the UI and logs can act on failures. */
-export type AgentErrorCategory =
-  | 'automation-unavailable'
-  | 'input-backend'
-  | 'model'
-  | 'malformed-action'
-  | 'timeout'
-  | 'rate-limit'
-  | 'blocked-by-screen'
-  | 'cancelled'
-  | 'unknown'
-
-export type AgentEvent =
-  | { type: 'start'; runId: string; goal: string }
-  | { type: 'state'; runId: string; state: AgentTaskState }
-  | {
-      type: 'step'
-      runId: string
-      index: number
-      action: AgentAction
-      status: AgentStepStatus
-      detail?: string
-      verified?: boolean
-      screenChanged?: boolean
-    }
-  | { type: 'needsConfirmation'; runId: string; index: number; action: AgentAction; reason: string }
-  | { type: 'done'; runId: string; summary: string }
-  | { type: 'cancelled'; runId: string }
-  | { type: 'error'; runId: string; message: string; category?: AgentErrorCategory }
-
-export interface AgentRunRequest {
-  goal: string
-  maxSteps?: number
-}
-
-export interface AgentStatus {
-  running: boolean
-  runId: string | null
-  goal: string | null
-  state: AgentTaskState | 'idle'
-  paused: boolean
-  steps: number
-  modelCalls: number
-  elapsedMs: number
-}
-
-export interface AgentStepRecord {
-  index: number
-  action: AgentAction
-  status: AgentStepStatus
-  detail?: string
-  /** Whether the screen changed in a way consistent with the action. */
-  screenChanged?: boolean
-  /** Whether the step produced an observable, verified effect. */
-  verified?: boolean
-  /** How many times execution was attempted. */
-  attempts?: number
-}
-
-export type AgentOutcome = 'done' | 'cancelled' | 'error' | 'step-limit' | 'timeout' | 'interrupted'
-
-export interface AgentTaskRecord {
-  id: string
-  goal: string
-  startedAt: number
-  finishedAt: number
-  state: AgentTaskState
-  outcome: AgentOutcome
-  summary: string
-  errorCategory?: AgentErrorCategory
-  steps: AgentStepRecord[]
 }
 
 /* ---------- Knowledge: memory, documents, integrations ---------- */
@@ -768,8 +607,6 @@ export interface KlyroApi {
 
   sendChat(req: SendChatRequest): Promise<void>
   abortChat(): Promise<void>
-  /** Answer a pending MCP tool-call approval for the running chat. */
-  chatRespondTool(callId: string, approved: boolean): Promise<void>
   onChatStream(listener: (event: ChatStreamEvent) => void): () => void
 
   listConversations(): Promise<ConversationSummary[]>
@@ -789,29 +626,6 @@ export interface KlyroApi {
   privateModeStatus(): Promise<{ supported: boolean; enabled: boolean }>
   /** Keep the overlay visible across focus changes while meeting-assist records. */
   setRecordingSticky(sticky: boolean): Promise<void>
-
-  /* MCP connector */
-  mcpServers(): Promise<MCPServerState[]>
-  /** MCP servers already configured in OpenCode, Claude Code and friends. */
-  mcpImportDiscover(): Promise<Array<{
-    source: string
-    name: string
-    command: string
-    args: string[]
-    env?: Record<string, string>
-    alreadyAdded: boolean
-  }>>
-  mcpImportAdd(input: { name: string; command: string; args?: string[]; env?: Record<string, string> }): Promise<MCPServerConfig>
-  mcpAddServer(input: { name: string; command: string; args?: string[] }): Promise<MCPServerConfig>
-  mcpRemoveServer(id: string): Promise<void>
-  mcpRefreshTools(id: string): Promise<MCPTool[]>
-  mcpCallTool(input: { serverId: string; name: string; args?: Record<string, unknown> }): Promise<MCPCallResult>
-  /** Read a resource published by an MCP server. */
-  mcpReadResource(input: { serverId: string; uri: string }): Promise<{ text: string }>
-
-  /* Post-meeting action agent */
-  meetingProposeActions(meetingId: string): Promise<{ meetingTitle: string; proposals: ActionProposal[] }>
-  meetingExecuteActions(input: { meetingId: string; proposals: ActionProposal[] }): Promise<MeetingOutput[]>
 
   /* Audit log */
   auditList(limit?: number): Promise<AuditEntry[]>
@@ -899,16 +713,6 @@ export interface KlyroApi {
   diagnosticsList(): Promise<CrashReport[]>
   diagnosticsClear(): Promise<void>
 
-  getAutomationCapabilities(): Promise<AutomationCapabilities>
-  runAgent(request: AgentRunRequest): Promise<void>
-  cancelAgent(): Promise<void>
-  pauseAgent(): Promise<void>
-  resumeAgent(): Promise<void>
-  confirmAgent(runId: string, approved: boolean): Promise<void>
-  getAgentStatus(): Promise<AgentStatus>
-  listAgentTasks(): Promise<AgentTaskRecord[]>
-  onAgentEvent(listener: (event: AgentEvent) => void): () => void
-
   memoryList(): Promise<MemoryRecord[]>
   memoryAdd(draft: MemoryDraft): Promise<MemoryRecord[]>
   memoryUpdate(id: string, patch: Partial<MemoryDraft>): Promise<MemoryRecord[]>
@@ -922,32 +726,4 @@ export interface KlyroApi {
 
   knowledgeSearch(query: string): Promise<KnowledgeHit[]>
 
-  integrationList(): Promise<IntegrationStatus[]>
-  integrationTest(id: IntegrationId): Promise<IntegrationStatus[]>
-  githubSetToken(token: string): Promise<IntegrationStatus[]>
-  githubClearToken(): Promise<IntegrationStatus[]>
-  githubAccount(): Promise<GitHubAccount>
-  githubRepos(): Promise<GitHubRepo[]>
-  githubIssues(ownerRepo: string): Promise<GitHubIssue[]>
-  githubCreateIssue(ownerRepo: string, title: string, body: string): Promise<GitHubIssue>
-
-  meetingList(): Promise<MeetingRecord[]>
-  meetingSave(draft: MeetingDraft): Promise<MeetingRecord[]>
-  meetingSummarize(id: string): Promise<MeetingRecord[]>
-  meetingDelete(id: string): Promise<MeetingRecord[]>
-  /** Append one transcribed chunk; silence artefacts and repeats are dropped. */
-  meetingTranscriptAppend(text: string): Promise<{ segments: MeetingSegment[]; added: boolean }>
-  /** Record that a stretch of audio could not be transcribed. */
-  meetingTranscriptGap(): Promise<{ segments: MeetingSegment[]; added: boolean }>
-  /** The transcript of a recording that was still in progress at last exit. */
-  meetingTranscriptGet(): Promise<{ startedAt: number; updatedAt: number; segments: MeetingSegment[] } | null>
-  meetingTranscriptDiscard(): Promise<MeetingRecord[]>
-
-  workflowList(): Promise<WorkflowRecord[]>
-  workflowCreate(draft: WorkflowDraft): Promise<WorkflowRecord[]>
-  workflowDelete(id: string): Promise<WorkflowRecord[]>
-  workflowRun(id: string, input: string): Promise<WorkflowRunResult>
-  workflowRuns(): Promise<WorkflowRun[]>
-  workflowCancel(runId: string): Promise<void>
-  onWorkflowEvent(listener: (event: WorkflowEvent) => void): () => void
 }

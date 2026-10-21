@@ -16,7 +16,6 @@ type Step = 'welcome' | 'try' | 'done'
 interface Props {
   /** Opens Settings so the user can add a key or start Ollama. */
   onOpenSettings: () => void
-  onOpenIntegrations: () => void
 }
 
 const SUGGESTIONS = [
@@ -25,7 +24,7 @@ const SUGGESTIONS = [
   'What should I do next on this screen?'
 ]
 
-export function Onboarding({ onOpenSettings, onOpenIntegrations }: Props) {
+export function Onboarding({ onOpenSettings }: Props) {
   const [step, setStep] = useState<Step>('welcome')
   const [ready, setReady] = useState<boolean | null>(null)
   const [needsKey, setNeedsKey] = useState(false)
@@ -192,9 +191,6 @@ export function Onboarding({ onOpenSettings, onOpenIntegrations }: Props) {
                     <div className="notice__actions">
                       <button className="btn btn--sm" onClick={onOpenSettings}>
                         <span>Add a key</span>
-                      </button>
-                      <button className="btn btn--ghost btn--sm" onClick={onOpenIntegrations}>
-                        <span>See providers</span>
                       </button>
                     </div>
                   </div>

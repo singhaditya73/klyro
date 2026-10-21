@@ -3,14 +3,14 @@ import type { KnowledgeHit } from '@shared/types'
 import { useKnowledge } from '../hooks/useKnowledge'
 import { useModal } from '../hooks/useModal'
 import { timeAgo } from '../lib/format'
-import { Brain, FileText, Plug, Search, Loader2, Plus, Trash2, Pin, PinOff, Edit2, Blocks, GitBranch, CheckCircle, AlertCircle, ExternalLink, ChevronUp, ChevronDown, Mail, MessageSquare, Info, Key, X } from 'lucide-react'
+import { Brain, FileText, Search, Loader2, Plus, Trash2, Pin, PinOff, Edit2, AlertCircle, MessageSquare, Info, X } from 'lucide-react'
 import KlyroMark from '../assets/logo/klyro-mark.svg'
 
 interface Props {
   onClose: () => void
 }
 
-type Tab = 'memories' | 'documents' | 'integrations'
+type Tab = 'memories' | 'documents'
 
 export function KnowledgePanel({ onClose }: Props) {
   const knowledge = useKnowledge()
@@ -20,12 +20,6 @@ export function KnowledgePanel({ onClose }: Props) {
   const [memoryTags, setMemoryTags] = useState('')
   const [filter, setFilter] = useState('')
   const [hits, setHits] = useState<KnowledgeHit[] | null>(null)
-  const [token, setToken] = useState('')
-  const [repo, setRepo] = useState('')
-  const [issueTitle, setIssueTitle] = useState('')
-  const [issueBody, setIssueBody] = useState('')
-  const [issueNotice, setIssueNotice] = useState<string | null>(null)
-  const [openRepos, setOpenRepos] = useState(false)
   // Two-step destructive confirm: first click arms the button, second click runs it.
   const [confirmClear, setConfirmClear] = useState<'memories' | 'documents' | null>(null)
 
@@ -55,7 +49,6 @@ export function KnowledgePanel({ onClose }: Props) {
     }
   }
 
-  const github = knowledge.integrations.find((entry) => entry.id === 'github')
   const shownMemories = filter
     ? knowledge.memories.filter((record) => record.text.toLowerCase().includes(filter.toLowerCase()))
     : knowledge.memories
@@ -69,20 +62,7 @@ export function KnowledgePanel({ onClose }: Props) {
     setHits(await window.klyro.knowledgeSearch(value))
   }
 
-  async function createIssue(): Promise<void> {
-    setIssueNotice(null)
-    try {
-      const created = await window.klyro.githubCreateIssue(repo, issueTitle, issueBody)
-      setIssueNotice('Created #' + created.number + ': ' + created.title)
-      setIssueTitle('')
-      setIssueBody('')
-    } catch (error) {
-      setIssueNotice('✗ ' + (error as Error).message)
-    }
-  }
-
   const h3Style: React.CSSProperties = { margin: '0 0 16px', fontSize: '14px', fontWeight: 600 }
-  const h4Style: React.CSSProperties = { margin: '0 0 12px', fontSize: '13px', fontWeight: 600 }
 
   return (
     <div className="modal">
@@ -105,10 +85,6 @@ export function KnowledgePanel({ onClose }: Props) {
           <button className={tab === 'documents' ? 'tab tab--active' : 'tab'} role="tab" aria-selected={tab === 'documents'} onClick={() => setTab('documents')}>
             <FileText className="icon icon--sm" aria-hidden="true" />
             <span style={{ marginLeft: 6 }}>Documents ({knowledge.documents.length})</span>
-          </button>
-          <button className={tab === 'integrations' ? 'tab tab--active' : 'tab'} role="tab" aria-selected={tab === 'integrations'} onClick={() => setTab('integrations')}>
-            <Blocks className="icon icon--sm" aria-hidden="true" />
-            <span style={{ marginLeft: 6 }}>Integrations</span>
           </button>
         </div>
 
@@ -369,163 +345,6 @@ export function KnowledgePanel({ onClose }: Props) {
             </section>
           )}
 
-          {tab === 'integrations' && (
-            <section>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                <div className="icon-tile">
-                  <GitBranch aria-hidden="true" />
-                </div>
-                <div>
-                  <h3 style={h3Style}>GitHub</h3>
-                  <p className="muted" style={{ margin: '2px 0 0', fontSize: 12 }}>Create issues, search repositories, and link code to conversations</p>
-                </div>
-              </div>
-
-              {github?.detail && (
-                <div className="notice notice--info" style={{ marginBottom: 16 }}>
-                  <span className="icon icon--sm notice__icon" aria-hidden="true"><Plug /></span>
-                  {github.detail}
-                </div>
-              )}
-
-              {knowledge.githubAccount ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  <div className="card">
-                    <div className="card__row" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <CheckCircle className="icon icon--md" style={{ color: 'var(--success)' }} aria-hidden="true" />
-                        <div>
-                          <div style={{ fontWeight: 600 }}>Connected as <strong>{knowledge.githubAccount.login}</strong></div>
-                          {knowledge.githubAccount.name && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{knowledge.githubAccount.name}</div>}
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
-                        <button className="btn btn--ghost btn--sm" onClick={() => void knowledge.loadRepos()}>
-                          <Blocks className="icon icon--xs" aria-hidden="true" />
-                          <span>Load repositories</span>
-                        </button>
-                        <button className="btn btn--ghost btn--sm" onClick={() => void knowledge.clearGitHubToken()}>
-                          <Trash2 className="icon icon--xs" aria-hidden="true" />
-                          <span>Disconnect</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {knowledge.repos.length > 0 && (
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                        <h4 style={h4Style}>Repositories ({knowledge.repos.length})</h4>
-                        <button className="btn btn--ghost btn--sm" onClick={() => setOpenRepos(!openRepos)}>
-                          {openRepos ? <ChevronUp className="icon icon--xs" aria-hidden="true" /> : <ChevronDown className="icon icon--xs" aria-hidden="true" />}
-                          <span style={{ marginLeft: 6 }}>{openRepos ? 'Collapse' : 'Expand'}</span>
-                        </button>
-                      </div>
-                      {openRepos && (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
-                          {knowledge.repos.map((item) => (
-                            <div key={item.fullName} className="card" style={{ cursor: 'pointer' }} onClick={() => { setRepo(item.fullName); setIssueNotice(null); }}>
-                              <div className="card__row" style={{ alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                                <strong style={{ flex: 1, minWidth: 0 }}>{item.fullName}</strong>
-                                {item.isPrivate && <span className="pill pill--warn">Private</span>}
-                                <span className="pill" style={{ marginLeft: 8 }}>{item.openIssues} open</span>
-                              </div>
-                              {item.description && <div className="card__text muted" style={{ marginTop: 8 }}>{item.description}</div>}
-                              <div className="provider__actions" style={{ marginTop: 12 }}>
-                                <button className="btn btn--ghost btn--sm" onClick={(e) => { e.stopPropagation(); setRepo(item.fullName); setIssueNotice(null); }}>
-                                  Use for issues
-                                  <ExternalLink className="icon icon--xs" aria-hidden="true" />
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {knowledge.githubAccount && (
-                    <div style={{ marginTop: 24, paddingTop: 24, borderTop: '1px solid var(--border-subtle)' }}>
-                      <h4 style={h4Style}>Open an issue</h4>
-                      <label className="field" style={{ marginBottom: 12 }}>
-                        <span className="field__label">Repository (owner/name)</span>
-                        <input value={repo} onChange={(event) => setRepo(event.target.value)} placeholder="singhaditya73/klyro" className="field" />
-                      </label>
-                      <label className="field" style={{ marginBottom: 12 }}>
-                        <span className="field__label">Title</span>
-                        <input value={issueTitle} onChange={(event) => setIssueTitle(event.target.value)} className="field" />
-                      </label>
-                      <label className="field" style={{ marginBottom: 16 }}>
-                        <span className="field__label">Body</span>
-                        <textarea rows={4} value={issueBody} onChange={(event) => setIssueBody(event.target.value)} className="field" />
-                      </label>
-                      <div className="provider__actions" style={{ gap: 10 }}>
-                        <button className="btn btn--primary" disabled={!repo.trim() || !issueTitle.trim()} onClick={createIssue}>
-                          <AlertCircle className="icon icon--sm" aria-hidden="true" />
-                          <span>Create issue</span>
-                        </button>
-                        {issueNotice && <span className="muted">{issueNotice}</span>}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="card">
-                  <div className="key-row" style={{ flexDirection: 'column', gap: 12, alignItems: 'stretch' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <Key className="icon icon--md" style={{ color: 'var(--text-muted)' }} aria-hidden="true" />
-                      <div>
-                        <div style={{ fontWeight: 500 }}>Personal access token required</div>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Create a token with <code>repo</code> scope at GitHub Settings → Developer settings → Personal access tokens</div>
-                      </div>
-                    </div>
-                    <input
-                      type="password"
-                      placeholder="Paste personal access token (repo scope)…"
-                      value={token}
-                      onChange={(event) => setToken(event.target.value)}
-                      className="field"
-                    />
-                    <button className="btn btn--primary" disabled={!token.trim()} onClick={() => { void knowledge.saveGitHubToken(token); setToken(''); }}>
-                      <Plug className="icon icon--sm" aria-hidden="true" />
-                      <span>Connect GitHub</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div style={{ marginTop: 32, paddingTop: 24, borderTop: '1px solid var(--border-subtle)' }}>
-                <h4 style={{ margin: '0 0 16px', fontSize: 13, fontWeight: 600, color: 'var(--text-muted)' }}>Available integrations</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
-                  {[
-                    { id: 'gmail', label: 'Gmail', description: 'Read, search, and send emails', icon: <Mail /> },
-                    { id: 'slack', label: 'Slack', description: 'Post messages, search channels', icon: <MessageSquare /> },
-                    { id: 'drive', label: 'Google Drive', description: 'Search and attach files', icon: <FileText /> },
-                    { id: 'notion', label: 'Notion', description: 'Search pages and databases', icon: <FileText /> },
-                  ].map((item) => (
-                    <div key={item.id} className="card" style={{ opacity: 0.6, pointerEvents: 'none' }}>
-                      <div className="card__row">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <div className="icon icon--md" style={{ background: 'var(--surface-base)', borderRadius: 'var(--radius-sm)', padding: 8, color: 'var(--text-muted)' }}>
-                            {item.icon}
-                          </div>
-                          <div>
-                            <div style={{ fontWeight: 500 }}>{item.label}</div>
-                            <div className="muted" style={{ fontSize: 11 }}>Coming soon</div>
-                          </div>
-                        </div>
-                        <span className="pill pill--warn">Planned</span>
-                      </div>
-                      <div className="card__text muted" style={{ fontSize: 12 }}>{item.description}</div>
-                    </div>
-                  ))}
-                </div>
-                <p style={{ margin: '16px 0 0', fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
-                  More integrations are planned. Let us know which ones you would like to see.
-                </p>
-              </div>
-            </section>
-          )}
         </div>
       </div>
     </div>

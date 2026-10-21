@@ -10,7 +10,6 @@ import { settingsDomain } from './domains/settings'
 import { createTray } from './domains/tray'
 import { createMainWindow, createOverlayWindow, showMainWindow } from './domains/windows'
 import { maintenance } from './domains/maintenance'
-import { mcp } from './domains/mcp'
 import { warmupScreenPermission } from './domains/screenshot'
 import { localAgentLauncher } from './domains/local-agent-launcher'
 import { antigravity } from './domains/antigravity'
@@ -120,7 +119,6 @@ if (!gotLock) {
 
   app.on('will-quit', () => {
     unregisterShortcuts()
-    mcp.shutdown()
     // Never leave a server we started running behind us.
     localAgentLauncher.stopOpenCode()
     antigravity.stopService()

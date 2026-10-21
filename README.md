@@ -1,15 +1,21 @@
 # Klyro
 
-> **Your AI. Your entire computer.**
-> *Understand. Remember. Act.*
+> **Ask anything, without leaving the app.**
 
-Klyro is a cross-platform (Windows / macOS / Linux) desktop AI assistant. It can
-see your screen, hear your audio, remember your context, connect your tools, and
-perform real tasks across applications — with your explicit permission at every
-step.
+Klyro is a cross-platform (Windows / macOS / Linux) **meeting and interview
+assistant**. Press one key and an overlay opens on top of whatever you are
+doing; ask a question about the screen or the conversation and the answer comes
+back in place — invisible to the people you are talking to.
+
+It uses the models and agents **you already have**: OpenCode, the Claude Code
+and Codex CLIs, Antigravity, Ollama, or any API key you already hold. No
+subscription of ours, no key to paste.
 
 This is an **independent implementation**. No proprietary third-party source code
 or assets are used.
+
+The product, and what was deliberately kept and removed, is written down in
+[`docs/PRODUCT-SCOPE.md`](docs/PRODUCT-SCOPE.md).
 
 ## Status
 

@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { DocumentRecord, GitHubRepo, ImportResult, IntegrationStatus, MemoryRecord } from '@shared/types'
+import type { DocumentRecord, ImportResult, MemoryRecord } from '@shared/types'
 
 export interface KnowledgeController {
   memories: MemoryRecord[]
   documents: DocumentRecord[]
-  integrations: IntegrationStatus[]
-  githubAccount: { login: string; name: string | null; avatarUrl: string } | null
-  repos: GitHubRepo[]
   importing: boolean
   notice: string | null
   error: string | null
@@ -18,19 +15,18 @@ export interface KnowledgeController {
   importDocuments: () => Promise<void>
   deleteDocument: (id: string) => Promise<void>
   clearDocuments: () => Promise<void>
-  saveGitHubToken: (token: string) => Promise<void>
-  clearGitHubToken: () => Promise<void>
-  testGitHubConnection: () => Promise<void>
-  loadRepos: () => Promise<void>
-  loadAccount: () => Promise<void>
 }
 
+/**
+ * What the assistant knows about the user.
+ *
+ * This is the grounding for a meeting answer: a resume, a project
+ * description, a document you were sent. It is the difference between an
+ * answer about you and a generic one.
+ */
 export function useKnowledge(): KnowledgeController {
   const [memories, setMemories] = useState<MemoryRecord[]>([])
   const [documents, setDocuments] = useState<DocumentRecord[]>([])
-  const [integrations, setIntegrations] = useState<IntegrationStatus[]>([])
-  const [githubAccount, setGithubAccount] = useState<KnowledgeController['githubAccount']>(null)
-  const [repos, setRepos] = useState<GitHubRepo[]>([])
   const [importing, setImporting] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -43,15 +39,10 @@ export function useKnowledge(): KnowledgeController {
     setDocuments(await window.klyro.documentList())
   }, [])
 
-  const refreshIntegrations = useCallback(async (): Promise<void> => {
-    setIntegrations(await window.klyro.integrationList())
-  }, [])
-
   useEffect(() => {
     void refreshMemory()
     void refreshDocuments()
-    void refreshIntegrations()
-  }, [refreshMemory, refreshDocuments, refreshIntegrations])
+  }, [refreshMemory, refreshDocuments])
 
   const guard = useCallback(async (action: () => Promise<void>): Promise<void> => {
     setError(null)
@@ -141,57 +132,9 @@ export function useKnowledge(): KnowledgeController {
     })
   }, [guard])
 
-  const saveGitHubToken = useCallback(
-    async (token: string): Promise<void> => {
-      await guard(async () => {
-        setIntegrations(await window.klyro.githubSetToken(token))
-        setRepos([])
-        const account = await window.klyro.githubAccount()
-        setGithubAccount(account)
-        setNotice(`Connected as ${account.login}.`)
-      })
-    },
-    [guard]
-  )
-
-  const clearGitHubToken = useCallback(
-    async (): Promise<void> => {
-      await guard(async () => {
-        setIntegrations(await window.klyro.githubClearToken())
-        setGithubAccount(null)
-        setRepos([])
-      })
-    },
-    [guard]
-  )
-
-  const testGitHubConnection = useCallback(
-    async (): Promise<void> => {
-      await guard(async () => {
-        setIntegrations(await window.klyro.integrationTest('github'))
-      })
-    },
-    [guard]
-  )
-
-  const loadRepos = useCallback(async (): Promise<void> => {
-    await guard(async () => {
-      setRepos(await window.klyro.githubRepos())
-    })
-  }, [guard])
-
-  const loadAccount = useCallback(async (): Promise<void> => {
-    await guard(async () => {
-      setGithubAccount(await window.klyro.githubAccount())
-    })
-  }, [guard])
-
   return {
     memories,
     documents,
-    integrations,
-    githubAccount,
-    repos,
     importing,
     notice,
     error,
@@ -202,11 +145,6 @@ export function useKnowledge(): KnowledgeController {
     clearMemories,
     importDocuments,
     deleteDocument,
-    clearDocuments,
-    saveGitHubToken,
-    clearGitHubToken,
-    testGitHubConnection,
-    loadRepos,
-    loadAccount
+    clearDocuments
   }
 }

@@ -14,7 +14,6 @@ import { conversations } from './conversations'
 import { buildKnowledgeContext } from './context'
 import { documents } from './documents'
 import { memory } from './memory'
-import { mcp } from './mcp'
 import { settingsDomain } from './settings'
 import { usage } from './usage'
 import { answerCache, AnswerCache } from './answer-cache'
@@ -31,9 +30,6 @@ interface PendingTool {
 }
 /** The tool call waiting for the user's answer, at most one at a time. */
 let pendingTool: PendingTool | null = null
-
-/** Hard cap on tool rounds per message so a chatty model cannot loop forever. */
-const MAX_TOOL_ROUNDS = 5
 
 function emit(event: ChatStreamEvent): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -126,7 +122,9 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
   })
 
   const turns = buildTurns(conversations.get(conversationId) ?? conversation)
-  // A pinned document replaces the BM25 grounding with the document itself.
+  // What the assistant knows about the user: their notes, their documents,
+  // their resume. This is what makes an answer grounded instead of generic.
+  // A pinned document replaces the recall with the document itself.
   const pinned = request.pinnedDocumentId ? documents.documentText(request.pinnedDocumentId) : null
   const pinnedBlock = pinned ? wrapUntrusted(`pinned document: ${pinned.name}`, pinned.text, { maxChars: 24000 }) : ''
   const knowledge = pinnedBlock
@@ -188,86 +186,25 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
       }
     }
 
-    // The tool loop: the model may call MCP tools (when enabled and any are
-    // configured). Each call waits for an explicit Allow; the loop runs at
-    // most MAX_TOOL_ROUNDS times so no tool turns chat into a runaway agent.
-    const tools = settings.chatMcpTools ? await mcp.toolSpecs() : []
-    const toolSpecsForModel = tools.map((tool) => ({ name: tool.name, description: tool.description, parameters: tool.parameters }))
-    let history: ChatTurn[] = turns
-    for (let round = 0; round <= MAX_TOOL_ROUNDS && (round === 0 || toolSpecsForModel.length > 0); round += 1) {
-      const calls: Array<{ id: string; name: string; argsJson: string }> = []
-      let roundText = ''
-      if (toolSpecsForModel.length > 0 && provider.chatWithTools) {
-        for await (const chunk of withIdleTimeout(
-          provider.chatWithTools({ ...baseOptions, turns: history, tools: toolSpecsForModel }),
-          { onStall: () => abort.abort() }
-        )) {
-          if (chunk.kind === 'text') {
-            if (firstTokenMs === null) firstTokenMs = Date.now() - startedAt
-            roundText += chunk.text
-            text += chunk.text
-            emit({ type: 'delta', messageId: assistantId, text: chunk.text })
-          } else {
-            calls.push(...chunk.calls)
-          }
-        }
-      } else {
-        for await (const delta of withIdleTimeout(provider.chat({ ...baseOptions, turns: history }), { onStall: () => abort.abort() })) {
-          if (firstTokenMs === null) firstTokenMs = Date.now() - startedAt
-          roundText += delta
-          text += delta
-          emit({ type: 'delta', messageId: assistantId, text: delta })
-        }
-      }
-      if (calls.length === 0 || round === MAX_TOOL_ROUNDS || abort.signal.aborted) break
-
-      history = [...history, { role: 'assistant', text: roundText, toolCalls: calls }]
-      for (const call of calls) {
-        if (abort.signal.aborted) break
-        const approved = await new Promise<boolean>((resolve) => {
-          pendingTool = { messageId: assistantId, callId: call.id, name: call.name, args: call.argsJson.slice(0, 2000), resolve }
-          emit({
-            type: 'tool-pending',
-            messageId: assistantId,
-            callId: call.id,
-            name: call.name,
-            args: call.argsJson.slice(0, 2000)
-          })
-          if (abort.signal.aborted) {
-            if (pendingTool?.callId === call.id) pendingTool = null
-            resolve(false)
-          }
-        })
-        let ok = false
-        let detail: string
-        if (approved) {
-          const result = await mcp.invokeByName(call.name, call.argsJson)
-          ok = result.ok
-          detail = result.detail
-          audit.record(
-            'chat.tool-call',
-            `${ok ? 'Allowed and ran' : 'Attempted to run'} ${call.name} in chat`,
-            { ok, serverId: result.serverId, tool: result.toolName }
-          )
-          usage.record(providerId, 'chat', { toolCall: true })
-        } else {
-          detail = 'The user declined this tool call.'
-          audit.record('chat.tool-call', `Declined ${call.name} in chat`)
-        }
-        pendingTool = null
-        emit({ type: 'tool-resolved', messageId: assistantId, callId: call.id, ok })
-        const marker = `\n\n🔧 **${call.name}** ${ok ? 'ran — result returned above' : 'not run'}`
-        history.push({ role: 'tool', text: ok ? detail : `Not run. ${detail}`, toolCallId: call.id })
-        text += marker
-        emit({ type: 'delta', messageId: assistantId, text: marker })
-      }
-      if (abort.signal.aborted) break
+    // One pass, one answer. The assistant answers questions; it does not call
+    // tools, so there is no loop to bound and nothing to approve.
+    for await (const delta of withIdleTimeout(provider.chat({ ...baseOptions, turns }), { onStall: () => abort.abort() })) {
+      if (firstTokenMs === null) firstTokenMs = Date.now() - startedAt
+      text += delta
+      emit({ type: 'delta', messageId: assistantId, text: delta })
     }
 
     conversations.updateMessage(conversationId, assistantId, { content: text })
     const totalMs = Date.now() - startedAt
     emit({ type: 'done', messageId: assistantId, ms: firstTokenMs ?? totalMs, totalMs, model: route.model })
     usage.record(providerId, 'chat')
+    // Extraction costs a model call, so only run it for substantive exchanges.
+    if (settings.memoryAutoExtract && text.trim().length >= 24 && request.content.trim().length >= 24) {
+      const origin = `conversation:${conversation.title || conversationId}`
+      void memory
+        .extractFromExchange(request.content, text, origin)
+        .catch((error) => logger.warn('Memory extraction failed', (error as Error).message))
+    }
     // Remember it: the same question about the same screen is instant next time.
     if (request.useFastModel && settings.overlayAnswerCache && text.trim().length > 0) {
       answerCache.set(
@@ -279,13 +216,6 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
         text,
         route.model
       )
-    }
-    // Extraction costs a model call, so only run it for substantive exchanges.
-    if (settings.memoryAutoExtract && text.trim().length >= 24 && request.content.trim().length >= 24) {
-      const origin = `conversation:${conversation.title || conversationId}`
-      void memory
-        .extractFromExchange(request.content, text, origin)
-        .catch((error) => logger.warn('Memory extraction failed', (error as Error).message))
     }
   } catch (error) {
     usage.record(providerId, 'chat', { failed: true })

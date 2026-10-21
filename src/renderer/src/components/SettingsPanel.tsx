@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import type {
   AppSettings,
-  AutomationCapabilities,
   DataScope,
   DataSummary,
   PermissionState,
@@ -238,7 +237,6 @@ export function SettingsPanel({ onClose }: Props) {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [providers, setProviders] = useState<ProviderStatus[]>([])
   const [permissions, setPermissions] = useState<PermissionState | null>(null)
-  const [automation, setAutomation] = useState<AutomationCapabilities | null>(null)
   const [security, setSecurity] = useState<SecurityStatus | null>(null)
   const [data, setData] = useState<DataSummary | null>(null)
   const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({})
@@ -258,7 +256,6 @@ export function SettingsPanel({ onClose }: Props) {
         setSettings(await window.klyro.getSettings())
         setProviders(await window.klyro.listProviders())
         setPermissions(await window.klyro.checkPermissions())
-        setAutomation(await window.klyro.getAutomationCapabilities())
         setSecurity(await window.klyro.securityStatus())
         setData(await window.klyro.dataSummary())
         setReportCount((await window.klyro.diagnosticsList()).length)
@@ -656,47 +653,6 @@ export function SettingsPanel({ onClose }: Props) {
             </div>
           )}
 
-          <h4 style={{ margin: '24px 0 12px', fontSize: '13px', fontWeight: 600 }}>Desktop agent</h4>
-          <label className="checkbox">
-            <input type="checkbox" checked={settings.agentConfirmConsequential} onChange={(event) => void patch({ agentConfirmConsequential: event.target.checked })} />
-            <span>Ask before clicks, typing, and other state-changing actions</span>
-          </label>
-          <label className="field" style={{ marginTop: '12px' }}>
-            <span className="field__label">Max steps per task</span>
-            <input type="number" min={1} max={30} value={settings.agentMaxSteps} onChange={(event) => void patch({ agentMaxSteps: Number(event.target.value) || 1 })} className="field" />
-          </label>
-
-          <h4 style={{ margin: '24px 0 12px', fontSize: '13px', fontWeight: 600 }}>Tools in chat</h4>
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={settings.chatMcpTools}
-              onChange={(event) => void patch({ chatMcpTools: event.target.checked })}
-            />
-            <span>Let chat call MCP server tools (each call asks Allow / Deny first)</span>
-          </label>
-          <div className="muted" style={{ marginTop: '8px', fontSize: '12px' }}>
-            Configure servers under Integrations → MCP servers. Every approved call is audited locally; nothing runs without your explicit answer.
-          </div>
-
-          {automation && (
-            <div className="permissions-section" style={{ marginTop: '16px' }}>
-              <h4>Automation backend</h4>
-              <div className="permissions-section__row">
-                <span>Status</span>
-                <strong>{automation.available ? `ready (${automation.backends.join(', ')})` : 'unavailable'}</strong>
-              </div>
-              {automation.missing.length && <div className="muted" style={{ fontSize: '12px' }}><strong>Missing:</strong> {automation.missing.join(', ')}</div>}
-              {automation.installHint && (
-                <div className="muted" style={{ fontSize: '12px' }}>
-                  Install: <code className="agent-panel__code">{automation.installHint}</code>
-                </div>
-              )}
-              {automation.limitations.map((note, index) => (
-                <div key={index} className="muted" style={{ fontSize: '12px' }}>{note}</div>
-              ))}
-            </div>
-          )}
         </section>
 
         <section style={{ marginTop: '32px' }}>

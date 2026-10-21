@@ -2,6 +2,14 @@
 
 Status legend: **✅ done** · **🟡 partial** · **⬜ planned**
 
+> **0.9.8: the product is a meeting and interview assistant.** The overlay, the
+> hotkey, screen context, talk and listen modes, private mode, the model
+> picker, every provider and every local agent are the product. The chat
+> workspace, the desktop agent, workflows, the Meetings surface, the GitHub
+> integration and the MCP client were removed — each belongs to a different
+> product (MCP and the knowledge base are detailed in
+> `docs/PRODUCT-SCOPE.md`).
+
 ## Part 1 — Core assistant capabilities
 
 | Feature | Status | Notes |
