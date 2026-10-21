@@ -1,6 +1,6 @@
 import type { ProviderId } from '@shared/types'
 import type { Provider } from './types'
-import { openAICompatible } from './openai'
+import { openAICompatibleFor } from './openai'
 import { anthropic } from './anthropic'
 import { gemini } from './gemini'
 import { ollama } from './ollama'
@@ -9,10 +9,15 @@ import { claudeCodeProvider } from './claude-code'
 import { codexProvider } from './codex'
 import { antigravityProvider } from './antigravity'
 
+/**
+ * Every slot gets its own adapter, and the adapter knows its slot: an error
+ * raised while talking to Groq says "Groq", not "OpenAI". The three
+ * OpenAI-compatible slots share one implementation but never one identity.
+ */
 const registry: Record<ProviderId, Provider> = {
-  openai: openAICompatible,
-  groq: { ...openAICompatible, id: 'groq' },
-  'openai-compatible': { ...openAICompatible, id: 'openai-compatible' },
+  openai: openAICompatibleFor('openai'),
+  groq: openAICompatibleFor('groq'),
+  'openai-compatible': openAICompatibleFor('openai-compatible'),
   anthropic,
   gemini,
   ollama,

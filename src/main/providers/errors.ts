@@ -59,6 +59,8 @@ export interface ProviderErrorOptions {
   retryable?: boolean
   /** Short excerpt of the provider's own text, already redacted. */
   detail?: string
+  /** The endpoint the request went to, so a failure can name it. */
+  endpoint?: string
 }
 
 /** The maximum amount of provider text we echo back to the user. */
@@ -87,7 +89,13 @@ export function extractDetail(body: string): string {
   return redactString(text.replace(/\s+/g, ' ')).slice(0, MAX_DETAIL)
 }
 
-function messageFor(kind: ProviderErrorKind, label: string, status?: number, detail?: string): string {
+function messageFor(
+  kind: ProviderErrorKind,
+  label: string,
+  status?: number,
+  detail?: string,
+  endpoint?: string
+): string {
   const tail = detail ? ` ${detail}` : ''
   switch (kind) {
     case 'auth':
@@ -99,7 +107,7 @@ function messageFor(kind: ProviderErrorKind, label: string, status?: number, det
     case 'timeout':
       return detail || `${label} stopped responding before finishing. Try again.`
     case 'network':
-      return `Could not reach ${label}. Check your internet connection and the endpoint URL in Settings.${tail}`
+      return `Could not reach ${label}${endpoint ? ` at ${endpoint}` : ''}. Check your internet connection and the endpoint URL in Settings.${tail}`
     case 'server':
       return `${label} had a server error${status ? ` (${status})` : ''}. This is usually temporary — try again.${tail}`
     case 'bad_request':
@@ -122,6 +130,8 @@ export class ProviderError extends Error {
   readonly retryAfterMs?: number
   readonly retryable: boolean
   readonly detail?: string
+  /** The endpoint the request went to, when the failure happened on the way there. */
+  readonly endpoint?: string
 
   constructor(message: string, options: ProviderErrorOptions) {
     super(message)
@@ -132,6 +142,7 @@ export class ProviderError extends Error {
     this.retryAfterMs = options.retryAfterMs
     this.retryable = options.retryable ?? RETRYABLE[options.kind]
     this.detail = options.detail
+    this.endpoint = options.endpoint
   }
 }
 
@@ -153,7 +164,12 @@ export function parseRetryAfter(header: string | null | undefined, now = Date.no
 export function classifyStatus(
   status: number,
   body = '',
-  options: { provider?: ProviderIdOrLabel; retryAfter?: string | null; now?: number } = {}
+  options: {
+    provider?: ProviderIdOrLabel
+    retryAfter?: string | null
+    now?: number
+    endpoint?: string
+  } = {}
 ): ProviderError {
   const detail = extractDetail(body)
   const retryAfterMs = parseRetryAfter(options.retryAfter, options.now)
@@ -169,12 +185,13 @@ export function classifyStatus(
   else if (status === 400 || status === 422) kind = 'bad_request'
   else kind = 'unknown'
 
-  return new ProviderError(messageFor(kind, label, status, detail), {
+  return new ProviderError(messageFor(kind, label, status, detail, options.endpoint), {
     kind,
     provider: options.provider,
     status,
     retryAfterMs,
-    detail
+    detail,
+    endpoint: options.endpoint
   })
 }
 
@@ -206,13 +223,50 @@ function isAbortError(error: unknown): boolean {
   return name === 'AbortError' || name === 'TimeoutError' || code === 'ABORT_ERR'
 }
 
+/**
+ * Messages that say nothing on their own: the real reason is in `cause`.
+ */
+const GENERIC_MESSAGES = /^(fetch failed|network error|terminated|failed|error)$/i
+
+/**
+ * The most specific message in an error chain.
+ *
+ * `fetch` fails with a bare "fetch failed"; the reason — DNS, a refused
+ * connection, a rejected certificate, a dropped socket — only lives in
+ * `cause`. A user can act on the reason, so the reason is what they are shown
+ * instead of the wrapper.
+ */
+export function describeCause(error: unknown): string {
+  const messages: string[] = []
+  const codes: string[] = []
+  const seen = new Set<unknown>()
+  let current: unknown = error
+  while (current && typeof current === 'object' && !seen.has(current)) {
+    seen.add(current)
+    const message = current instanceof Error ? current.message.trim() : ''
+    const code = codeOf(current)
+    if (message && !GENERIC_MESSAGES.test(message)) {
+      if (!messages.includes(message)) messages.push(message)
+    } else if (code && !codes.includes(code)) {
+      codes.push(code)
+    }
+    current = (current as { cause?: unknown }).cause
+  }
+  // The reason wins over the bare code; the code is only the fallback.
+  return messages.length > 0 ? messages.join(' — ') : codes.join(' — ')
+}
+
 /** Classify anything thrown by `fetch`, a body read, or our own guards. */
-export function classifyThrown(error: unknown, options: { provider?: ProviderIdOrLabel } = {}): ProviderError {
+export function classifyThrown(
+  error: unknown,
+  options: { provider?: ProviderIdOrLabel; endpoint?: string } = {}
+): ProviderError {
   if (isProviderError(error)) return error
 
   const label = providerLabel(options.provider)
   const raw = error instanceof Error ? error.message : String(error)
-  const detail = redactString(raw).slice(0, MAX_DETAIL)
+  // The wrapper ("fetch failed") hides the reason; the cause carries it.
+  const detail = redactString(describeCause(error) || raw).slice(0, MAX_DETAIL)
   const code = codeOf(error)
   const name = (error as { name?: unknown } | null)?.name
 
@@ -223,20 +277,27 @@ export function classifyThrown(error: unknown, options: { provider?: ProviderIdO
     return new ProviderError(detail, { kind: 'timeout', provider: options.provider, detail })
   }
   if (code && NETWORK_CODES.has(code)) {
-    return new ProviderError(messageFor('network', label, undefined, detail), {
+    return new ProviderError(messageFor('network', label, undefined, detail, options.endpoint), {
       kind: 'network',
       provider: options.provider,
-      detail
+      detail,
+      endpoint: options.endpoint
     })
   }
   if (/fetch failed|network|socket hang up|terminated|other side closed|ECONNRESET/i.test(raw)) {
-    return new ProviderError(messageFor('network', label, undefined, detail), {
+    return new ProviderError(messageFor('network', label, undefined, detail, options.endpoint), {
       kind: 'network',
       provider: options.provider,
-      detail
+      detail,
+      endpoint: options.endpoint
     })
   }
-  return new ProviderError(detail || `${label} request failed.`, { kind: 'unknown', provider: options.provider, detail })
+  return new ProviderError(detail || `${label} request failed.`, {
+    kind: 'unknown',
+    provider: options.provider,
+    detail,
+    endpoint: options.endpoint
+  })
 }
 
 export function isRetryable(error: unknown): boolean {
@@ -252,6 +313,10 @@ export function toUserMessage(error: unknown): string {
 }
 
 /** Convenience: classify, then describe. */
-export function describeFailure(error: unknown, provider?: ProviderIdOrLabel): string {
-  return toUserMessage(isProviderError(error) ? error : classifyThrown(error, { provider }))
+export function describeFailure(
+  error: unknown,
+  provider?: ProviderIdOrLabel,
+  endpoint?: string
+): string {
+  return toUserMessage(isProviderError(error) ? error : classifyThrown(error, { provider, endpoint }))
 }

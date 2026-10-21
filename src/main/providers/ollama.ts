@@ -1,5 +1,5 @@
 import type { ChatOptions, Provider, TestOptions } from './types'
-import { parseDataUrl, rawLines, trimSlash } from './http'
+import { parseDataUrl, rawLines, trimSlash, hostOf } from './http'
 import { classifyThrown, describeFailure } from './errors'
 import { openResponse, responseDetail } from './request'
 
@@ -49,7 +49,7 @@ export const ollama: Provider = {
         if (json?.done) return
       }
     } catch (error) {
-      throw classifyThrown(error, { provider: PROVIDER })
+      throw classifyThrown(error, { provider: PROVIDER, endpoint: hostOf(trimSlash(options.baseUrl)) })
     }
   },
 
@@ -66,7 +66,7 @@ export const ollama: Provider = {
         latencyMs: Date.now() - started
       }
     } catch (error) {
-      return { ok: false, detail: describeFailure(error, PROVIDER) }
+      return { ok: false, detail: describeFailure(error, PROVIDER, hostOf(trimSlash(options.baseUrl))) }
     }
   }
 }

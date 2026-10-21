@@ -8,6 +8,7 @@
 
 import { logger } from '../logger'
 import { classifyStatus, classifyThrown } from './errors'
+import { hostOf } from './http'
 import { withRetry, type RetryInfo } from './retry'
 export interface OpenResponseOptions {  provider?: string
   attempts?: number
@@ -42,6 +43,9 @@ export async function openResponse(
   init: RequestInit | (() => RequestInit),
   options: OpenResponseOptions = {}
 ): Promise<Response> {
+  // The endpoint is part of the failure message: "could not reach Groq" is
+  // only half an answer without the host that was actually contacted.
+  const endpoint = hostOf(url)
   return withRetry(
     async () => {
       let response: Response
@@ -49,7 +53,7 @@ export async function openResponse(
         const resolved = typeof init === 'function' ? init() : { ...init }
         response = await fetch(url, resolved)
       } catch (error) {
-        throw classifyThrown(error, { provider: options.provider })
+        throw classifyThrown(error, { provider: options.provider, endpoint })
       }
 
       const accepted = options.accept ? options.accept(response) : response.ok
@@ -57,7 +61,8 @@ export async function openResponse(
         const body = await response.text().catch(() => '')
         throw classifyStatus(response.status, body, {
           provider: options.provider,
-          retryAfter: response.headers.get('retry-after')
+          retryAfter: response.headers.get('retry-after'),
+          endpoint
         })
       }
       return response

@@ -79,11 +79,73 @@ describe('OpenCode local provider', () => {
     expect(chunks.join('')).toContain('1 image')
   }, 30000)
 
+  it('keeps the whole answer when the turn is several messages', async () => {
+    const chunks: string[] = []
+    for await (const chunk of openCodeProvider.chat({
+      model: 'minimax/minimax-m3.1-flash:free',
+      baseUrl: BASE_URL,
+      apiKey: PASSWORD,
+      turns: [{ role: 'user', text: 'multi' }]
+    })) {
+      chunks.push(chunk)
+    }
+    // The progress line and the answer are different messages; both are the
+    // answer as far as the user is concerned.
+    expect(chunks.join('')).toBe('Looking. \nAll done.')
+  }, 30000)
+
+  it('does not lose the answer behind a tool call', async () => {
+    const chunks: string[] = []
+    for await (const chunk of openCodeProvider.chat({
+      model: 'minimax/minimax-m3.1-flash:free',
+      baseUrl: BASE_URL,
+      apiKey: PASSWORD,
+      turns: [{ role: 'user', text: 'tool' }]
+    })) {
+      chunks.push(chunk)
+    }
+    // The first message of the turn holds a tool call and no text at all.
+    expect(chunks.join('')).toBe('Here is the answer.')
+  }, 30000)
+
   it('passes its own connection test', async () => {
     const result = await openCodeProvider.test({ baseUrl: BASE_URL, apiKey: PASSWORD, model: 'minimax/minimax-m3.1-flash:free' })
     expect(result.ok).toBe(true)
     expect(result.detail).toContain('no key')
   }, 20000)
+
+  it('says so when the turn ends without an answer', async () => {
+    // An empty answer used to be stored as an empty message: the chat showed
+    // a blank bubble and the user could not tell a silent model from a
+    // broken one.
+    await expect(
+      (async () => {
+        for await (const _ of openCodeProvider.chat({
+          model: 'minimax/minimax-m3.1-flash:free',
+          baseUrl: BASE_URL,
+          apiKey: PASSWORD,
+          turns: [{ role: 'user', text: 'silent' }]
+        })) {
+          // consume
+        }
+      })()
+    ).rejects.toThrow(/without an answer/i)
+  }, 30000)
+
+  it('reports why a turn failed', async () => {
+    await expect(
+      (async () => {
+        for await (const _ of openCodeProvider.chat({
+          model: 'minimax/minimax-m3.1-flash:free',
+          baseUrl: BASE_URL,
+          apiKey: PASSWORD,
+          turns: [{ role: 'user', text: 'broken' }]
+        })) {
+          // consume
+        }
+      })()
+    ).rejects.toThrow(/the model is not available/i)
+  }, 30000)
 
   it('explains itself when the server is not there', async () => {
     await expect(

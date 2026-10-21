@@ -4,6 +4,18 @@ export function trimSlash(url: string): string {
   return url.replace(/\/+$/, '')
 }
 
+/**
+ * The host of a URL, for messages that must name the endpoint that failed.
+ * A user staring at "Could not reach Groq" needs to know *which* Groq.
+ */
+export function hostOf(url: string): string {
+  try {
+    return new URL(url).host
+  } catch {
+    return url
+  }
+}
+
 /** Yields raw lines from a streaming response body. */
 export async function* rawLines(res: Response): AsyncGenerator<string> {
   const reader = res.body?.getReader()

@@ -1,9 +1,8 @@
+import type { ProviderId } from '@shared/types'
 import type { ChatOptions, ChatTurn, Provider, ProviderChunk, ProviderToolSpec, TestOptions, TranscribeOptions } from './types'
-import { sseJson, trimSlash } from './http'
+import { sseJson, trimSlash, hostOf } from './http'
 import { classifyThrown, describeFailure, isProviderError, ProviderError } from './errors'
 import { openResponse, responseDetail } from './request'
-
-const PROVIDER = 'openai'
 
 /**
  * A 404 on chat almost always means a wrong model name or a wrong base URL.
@@ -40,7 +39,8 @@ async function enrichNotFound(error: unknown, options: ChatOptions): Promise<unk
         status: error.status,
         retryAfterMs: error.retryAfterMs,
         retryable: error.retryable,
-        detail: error.detail
+        detail: error.detail,
+        endpoint: error.endpoint
       })
     }
     return new Error(
@@ -85,143 +85,159 @@ interface PendingCall {
   args: string
 }
 
-/** OpenAI Chat Completions. Also powers any OpenAI-compatible endpoint. */
-export const openAICompatible: Provider = {
-  id: 'openai',
+/**
+ * OpenAI Chat Completions. Also powers any OpenAI-compatible endpoint.
+ *
+ * One adapter serves three Settings slots — OpenAI, Groq and a custom
+ * OpenAI-compatible endpoint — so the slot has to travel with the adapter.
+ * It used to be hardcoded to "openai", which made Klyro blame OpenAI for
+ * somebody else's outage: a Groq that could not be reached was reported as
+ * "Could not reach OpenAI", and the user was sent to the wrong Settings card.
+ * Each slot now gets its own adapter, and its own name in every error.
+ */
+export function openAICompatibleFor(providerId: ProviderId = 'openai'): Provider {
+  const PROVIDER = providerId
+  return {
+    id: providerId,
 
-  /** Streaming chat with function calling (OpenAI-compatible endpoints). */
-  async *chatWithTools(options: ChatOptions & { tools: ProviderToolSpec[] }): AsyncGenerator<ProviderChunk> {
-    let res: Awaited<ReturnType<typeof openResponse>>
-    try {
-      res = await openResponse(
-        `${trimSlash(options.baseUrl)}/chat/completions`,
-        {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {})
+    /** Streaming chat with function calling (OpenAI-compatible endpoints). */
+    async *chatWithTools(options: ChatOptions & { tools: ProviderToolSpec[] }): AsyncGenerator<ProviderChunk> {
+      let res: Awaited<ReturnType<typeof openResponse>>
+      try {
+        res = await openResponse(
+          `${trimSlash(options.baseUrl)}/chat/completions`,
+          {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {})
+            },
+            body: JSON.stringify({
+              model: options.model,
+              stream: true,
+              temperature: options.temperature ?? 0.7,
+              ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
+              tools: options.tools.map((tool) => ({ type: 'function', function: tool })),
+              messages: [
+                ...(options.system ? [{ role: 'system', content: options.system }] : []),
+                ...options.turns.map(toOpenAIMessage)
+              ]
+            }),
+            signal: options.signal
           },
-          body: JSON.stringify({
-            model: options.model,
-            stream: true,
-            temperature: options.temperature ?? 0.7,
-            ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
-            tools: options.tools.map((tool) => ({ type: 'function', function: tool })),
-            messages: [
-              ...(options.system ? [{ role: 'system', content: options.system }] : []),
-              ...options.turns.map(toOpenAIMessage)
-            ]
-          }),
-          signal: options.signal
-        },
-        { provider: PROVIDER, signal: options.signal }
-      )
-    } catch (error) {
-      throw await enrichNotFound(classifyThrown(error, { provider: PROVIDER }), options)
-    }
+          { provider: PROVIDER, signal: options.signal }
+        )
+      } catch (error) {
+        throw await enrichNotFound(classifyThrown(error, { provider: PROVIDER }), options)
+      }
 
-    const pending = new Map<number, PendingCall>()
-    try {
-      for await (const event of sseJson(res)) {
-        const choice = event?.choices?.[0]
-        const delta = choice?.delta
-        const content = delta?.content
-        if (typeof content === 'string' && content.length > 0) yield { kind: 'text', text: content }
-        const fragments = delta?.tool_calls
-        if (Array.isArray(fragments)) {
-          for (const fragment of fragments as Array<Record<string, unknown>>) {
-            const index = typeof fragment.index === 'number' ? fragment.index : pending.size
-            const current = pending.get(index) ?? { id: '', name: '', args: '' }
-            if (typeof fragment.id === 'string' && fragment.id) current.id = fragment.id
-            const fn = fragment.function as Record<string, unknown> | undefined
-            if (typeof fn?.name === 'string' && fn.name) current.name = fn.name
-            if (typeof fn?.arguments === 'string') current.args += fn.arguments
-            pending.set(index, current)
+      const pending = new Map<number, PendingCall>()
+      try {
+        for await (const event of sseJson(res)) {
+          const choice = event?.choices?.[0]
+          const delta = choice?.delta
+          const content = delta?.content
+          if (typeof content === 'string' && content.length > 0) yield { kind: 'text', text: content }
+          const fragments = delta?.tool_calls
+          if (Array.isArray(fragments)) {
+            for (const fragment of fragments as Array<Record<string, unknown>>) {
+              const index = typeof fragment.index === 'number' ? fragment.index : pending.size
+              const current = pending.get(index) ?? { id: '', name: '', args: '' }
+              if (typeof fragment.id === 'string' && fragment.id) current.id = fragment.id
+              const fn = fragment.function as Record<string, unknown> | undefined
+              if (typeof fn?.name === 'string' && fn.name) current.name = fn.name
+              if (typeof fn?.arguments === 'string') current.args += fn.arguments
+              pending.set(index, current)
+            }
           }
+          if (choice?.finish_reason === 'tool_calls') break
         }
-        if (choice?.finish_reason === 'tool_calls') break
+      } catch (error) {
+        throw await enrichNotFound(classifyThrown(error, { provider: PROVIDER }), options)
       }
-    } catch (error) {
-      throw await enrichNotFound(classifyThrown(error, { provider: PROVIDER }), options)
-    }
 
-    const calls = [...pending.values()]
-      .filter((call) => call.id && call.name)
-      .map((call) => ({ id: call.id, name: call.name, argsJson: call.args.slice(0, 200000) }))
-    if (calls.length > 0) yield { kind: 'tool_calls', calls }
-  },
+      const calls = [...pending.values()]
+        .filter((call) => call.id && call.name)
+        .map((call) => ({ id: call.id, name: call.name, argsJson: call.args.slice(0, 200000) }))
+      if (calls.length > 0) yield { kind: 'tool_calls', calls }
+    },
 
-  async *chat(options: ChatOptions): AsyncGenerator<string> {
-    // openResponse can fail before any stream starts (a wrong model name 404s
-    // here), so it sits in its own try so the same not-found enrichment applies.
-    let res: Awaited<ReturnType<typeof openResponse>>
-    try {
-      res = await openResponse(
-        `${trimSlash(options.baseUrl)}/chat/completions`,
-        {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {})
+    async *chat(options: ChatOptions): AsyncGenerator<string> {
+      // openResponse can fail before any stream starts (a wrong model name 404s
+      // here), so it sits in its own try so the same not-found enrichment applies.
+      let res: Awaited<ReturnType<typeof openResponse>>
+      try {
+        res = await openResponse(
+          `${trimSlash(options.baseUrl)}/chat/completions`,
+          {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {})
+            },
+            body: JSON.stringify({
+              model: options.model,
+              stream: true,
+              temperature: options.temperature ?? 0.7,
+              ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
+              messages: [
+                ...(options.system ? [{ role: 'system', content: options.system }] : []),
+                ...options.turns.map(toOpenAIMessage)
+              ]
+            }),
+            signal: options.signal
           },
-          body: JSON.stringify({
-            model: options.model,
-            stream: true,
-            temperature: options.temperature ?? 0.7,
-            ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
-            messages: [
-              ...(options.system ? [{ role: 'system', content: options.system }] : []),
-              ...options.turns.map(toOpenAIMessage)
-            ]
-          }),
-          signal: options.signal
-        },
-        { provider: PROVIDER, signal: options.signal }
-      )
-    } catch (error) {
-      throw await enrichNotFound(classifyThrown(error, { provider: PROVIDER }), options)
-    }
-    try {
-      for await (const event of sseJson(res)) {
-        const delta = event?.choices?.[0]?.delta?.content
-        if (typeof delta === 'string' && delta.length > 0) yield delta
+          { provider: PROVIDER, signal: options.signal }
+        )
+      } catch (error) {
+        throw await enrichNotFound(classifyThrown(error, { provider: PROVIDER }), options)
       }
-    } catch (error) {
-      // A stream that dies mid-answer lands here; classify it for the caller.
-      throw await enrichNotFound(classifyThrown(error, { provider: PROVIDER }), options)
-    }
-  },
-
-  async test(options: TestOptions) {
-    const started = Date.now()
-    try {
-      const res = await fetch(`${trimSlash(options.baseUrl)}/models`, {
-        headers: options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}
-      })
-      if (!res.ok) return { ok: false, detail: await responseDetail(res, PROVIDER) }
-      return { ok: true, detail: 'Connected', latencyMs: Date.now() - started }
-    } catch (error) {
-      return { ok: false, detail: describeFailure(error, PROVIDER) }
-    }
-  },
-
-  async transcribe(options: TranscribeOptions): Promise<string> {
-    const res = await openResponse(
-      `${trimSlash(options.baseUrl)}/audio/transcriptions`,
-      () => {
-        const blob = new Blob([options.audio], { type: options.mimeType })
-        const form = new FormData()
-        form.append('file', blob, 'audio.webm')
-        form.append('model', options.model || 'whisper-1')
-        return {
-          method: 'POST',
-          headers: options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {},
-          body: form
+      try {
+        for await (const event of sseJson(res)) {
+          const delta = event?.choices?.[0]?.delta?.content
+          if (typeof delta === 'string' && delta.length > 0) yield delta
         }
-      },
-      { provider: PROVIDER }
-    )
-    const json = (await res.json()) as { text?: string }
-    return json.text ?? ''
+      } catch (error) {
+        // A stream that dies mid-answer lands here; classify it for the caller.
+        throw await enrichNotFound(classifyThrown(error, { provider: PROVIDER }), options)
+      }
+    },
+
+    async test(options: TestOptions) {
+      const started = Date.now()
+      const endpoint = hostOf(trimSlash(options.baseUrl))
+      try {
+        const res = await fetch(`${trimSlash(options.baseUrl)}/models`, {
+          headers: options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}
+        })
+        if (!res.ok) return { ok: false, detail: await responseDetail(res, PROVIDER) }
+        return { ok: true, detail: 'Connected', latencyMs: Date.now() - started }
+      } catch (error) {
+        return { ok: false, detail: describeFailure(error, PROVIDER, endpoint) }
+      }
+    },
+
+    async transcribe(options: TranscribeOptions): Promise<string> {
+      const res = await openResponse(
+        `${trimSlash(options.baseUrl)}/audio/transcriptions`,
+        () => {
+          const blob = new Blob([options.audio], { type: options.mimeType })
+          const form = new FormData()
+          form.append('file', blob, 'audio.webm')
+          form.append('model', options.model || 'whisper-1')
+          return {
+            method: 'POST',
+            headers: options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {},
+            body: form
+          }
+        },
+        { provider: PROVIDER }
+      )
+      const json = (await res.json()) as { text?: string }
+      return json.text ?? ''
+    }
   }
 }
+
+/** The OpenAI slot itself. */
+export const openAICompatible: Provider = openAICompatibleFor('openai')

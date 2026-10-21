@@ -1,5 +1,5 @@
 import type { ChatOptions, ChatTurn, Provider, TestOptions } from './types'
-import { parseDataUrl, sseJson, trimSlash } from './http'
+import { parseDataUrl, sseJson, trimSlash, hostOf } from './http'
 import { classifyThrown, describeFailure } from './errors'
 import { openResponse, responseDetail } from './request'
 
@@ -54,7 +54,7 @@ export const gemini: Provider = {
         }
       }
     } catch (error) {
-      throw classifyThrown(error, { provider: PROVIDER })
+      throw classifyThrown(error, { provider: PROVIDER, endpoint: hostOf(trimSlash(options.baseUrl)) })
     }
   },
 
@@ -65,7 +65,7 @@ export const gemini: Provider = {
       if (!res.ok) return { ok: false, detail: await responseDetail(res, PROVIDER) }
       return { ok: true, detail: 'Connected', latencyMs: Date.now() - started }
     } catch (error) {
-      return { ok: false, detail: describeFailure(error, PROVIDER) }
+      return { ok: false, detail: describeFailure(error, PROVIDER, hostOf(trimSlash(options.baseUrl))) }
     }
   }
 }

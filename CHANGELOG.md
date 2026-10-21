@@ -4,6 +4,10 @@ All notable changes to Klyro are recorded here. Versions follow [SemVer](https:/
 
 ## [Unreleased]
 
+## [0.9.7] — 2026-10-21
+
+When it goes wrong, it says what went wrong.
+
 ### Fixed
 - **Provider errors named the wrong provider.** The OpenAI-compatible adapter
   is shared by three Settings slots (OpenAI, Groq, OpenAI-compatible
@@ -22,6 +26,12 @@ All notable changes to Klyro are recorded here. Versions follow [SemVer](https:/
   that list, so a reply stopped at its first sentence, or came out empty when
   the first message held only a tool call. The whole turn is now read, in
   order, and the answer ends when the server says the turn is done.
+- **A local answer that ended in silence left a blank bubble.** When the turn
+  was over and the model had said nothing, Klyro stored an empty message: the
+  chat showed nothing at all, and a silent model looked exactly like a broken
+  one. A turn that says nothing — or that fails — now says what happened:
+  *"OpenCode finished the turn without an answer"*, or the server's own
+  reason when the turn failed.
 
 ## [0.9.6] — 2026-10-21
 

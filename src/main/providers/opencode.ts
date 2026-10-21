@@ -1,7 +1,7 @@
 import type { ProviderTestResult } from '@shared/types'
 import type { ChatOptions, ChatTurn, Provider, TestOptions } from './types'
 import { classifyThrown, describeFailure, isProviderError, ProviderError } from './errors'
-import { trimSlash } from './http'
+import { hostOf, trimSlash } from './http'
 
 const PROVIDER = 'opencode'
 
@@ -31,6 +31,12 @@ const REQUEST_TIMEOUT_MS = 120000
 const POLL_MS = 300
 /** Stop polling after this many quiet polls (the answer is finished). */
 const MAX_QUIET_POLLS = 60
+/**
+ * How many quiet polls mean "the turn is over" when the server does not say
+ * so itself. Ten polls is three seconds — long enough for a slow tool call,
+ * short enough that a finished answer does not hang around.
+ */
+const IDLE_POLLS = 10
 
 interface OpenCodeModel {
   id?: string
@@ -45,8 +51,13 @@ interface OpenCodeMessage {
   role?: string
   content?: Array<{ type?: string; text?: string }>
   parts?: Array<{ type?: string; text?: string }>
-  info?: { id?: string; role?: string }
+  info?: { id?: string; role?: string; time?: { created?: number } }
   model?: { id?: string; providerID?: string }
+  time?: { created?: number }
+  /** Only on the `idle` entry: how the turn ended. */
+  outcome?: string
+  /** Only on the `idle` entry: why it failed. */
+  error?: { message?: string; type?: string }
 }
 
 /** Basic auth for a password-protected `opencode serve`. */
@@ -108,7 +119,7 @@ async function request<T>(
     if (error instanceof Error && error.name === 'AbortError') {
       throw new ProviderError('OpenCode did not answer in time.', { kind: 'timeout', provider: PROVIDER })
     }
-    throw classifyThrown(error, { provider: PROVIDER })
+    throw classifyThrown(error, { provider: PROVIDER, endpoint: hostOf(url) })
   } finally {
     clearTimeout(timer)
   }
@@ -222,10 +233,90 @@ function turnImages(turns: ChatTurn[]): { uri: string; name: string }[] {
 /** The text of an assistant message, from either API generation. */
 function textOf(message: OpenCodeMessage): string {
   const parts = message.content ?? message.parts ?? []
+  if (!Array.isArray(parts)) return ''
   return parts
     .filter((part) => part.type === 'text' && typeof part.text === 'string')
     .map((part) => part.text ?? '')
     .join('')
+}
+
+/** Is this an assistant message, in either API generation? */
+function isAssistant(message: OpenCodeMessage): boolean {
+  return message.type === 'assistant' || message.info?.role === 'assistant'
+}
+
+/** Is this the user's own message? */
+function isUser(message: OpenCodeMessage): boolean {
+  return message.type === 'user' || message.info?.role === 'user'
+}
+
+/** When the message was written, whichever generation it came from. */
+function createdAt(message: OpenCodeMessage): number | undefined {
+  return message.time?.created ?? message.info?.time?.created
+}
+
+/**
+ * The messages oldest first.
+ *
+ * The server lists a session newest first, so the list arrives in the wrong
+ * order for reading a conversation. Timestamps are the honest way to sort it;
+ * without them the server's own order is the only clue there is.
+ */
+function chronological(messages: OpenCodeMessage[]): OpenCodeMessage[] {
+  const stamped = messages.some((message) => createdAt(message) !== undefined)
+  if (!stamped) return [...messages].reverse()
+  return [...messages].sort((a, b) => (createdAt(a) ?? 0) - (createdAt(b) ?? 0))
+}
+
+/**
+ * Everything the assistant said during the current turn.
+ *
+ * A turn is not one message: the model can speak, call a tool, think, and then
+ * speak again — and each of those is a separate message. Only the part after
+ * the last user message belongs to this turn, and all of it is the answer.
+ * Separate messages are separated by a line, the way they were said.
+ */
+function turnText(messages: OpenCodeMessage[]): string {
+  const ordered = chronological(messages)
+  let start = 0
+  for (let index = ordered.length - 1; index >= 0; index -= 1) {
+    if (isUser(ordered[index])) {
+      start = index + 1
+      break
+    }
+  }
+  return ordered
+    .slice(start)
+    .filter(isAssistant)
+    .map(textOf)
+    .filter((text) => text.length > 0)
+    .join('\n')
+}
+
+/**
+ * The `idle` entry that closed the turn, with the reason it ended.
+ *
+ * The server says "the turn is over" with an `idle` entry, which is the only
+ * honest signal: a model can be quiet for several seconds between two pieces
+ * of its answer. The entry also says how the turn ended — and why it failed.
+ */
+function idleEntry(messages: OpenCodeMessage[]): OpenCodeMessage | null {
+  const last = chronological(messages).at(-1)
+  return last && last.type === 'idle' ? last : null
+}
+
+/**
+ * A turn that ended without a word is a failure, not an empty answer.
+ *
+ * Klyro used to store an empty assistant message in that case, so the chat
+ * showed a blank bubble and nothing else — the user could not tell a silent
+ * model from a broken one.
+ */
+function noAnswerError(): ProviderError {
+  return new ProviderError(
+    'OpenCode finished the turn without an answer. The model said nothing — try again, or pick another model in Settings.',
+    { kind: 'unknown', provider: PROVIDER }
+  )
 }
 
 export const openCodeProvider: Provider = {
@@ -336,8 +427,8 @@ async function* chatV1(
   while (quiet < MAX_QUIET_POLLS) {
     await new Promise((resolve) => setTimeout(resolve, POLL_MS))
     const messages = await request<OpenCodeMessage[]>(baseUrl, apiKey, `/session/${sessionId}/message?limit=20`)
-    const last = [...(messages ?? [])].reverse().find((message) => message.info?.role === 'assistant')
-    const text = last ? textOf(last) : ''
+    const list = messages ?? []
+    const text = turnText(list)
     if (text.length > delivered.length) {
       const delta = text.slice(delivered.length)
       delivered = text
@@ -346,8 +437,12 @@ async function* chatV1(
       continue
     }
     quiet += 1
-    if (quiet > 2 && delivered.length > 0) break
+    // The server has no "turn over" marker in this generation, so a turn that
+    // stays quiet for a while is over. Generous enough to survive a slow tool.
+    if (quiet > IDLE_POLLS && delivered.length > 0) break
   }
+
+  if (delivered.length === 0) throw noAnswerError()
 }
 
 /** v2: the API lives under /api, and answers are read back from the session. */
@@ -387,16 +482,47 @@ async function* chatV2(
     await new Promise((resolve) => setTimeout(resolve, POLL_MS))
     const messages = await request<{ data?: OpenCodeMessage[] }>(baseUrl, apiKey, `/api/session/${sessionId}/message`)
     const list = messages.data ?? []
-    const last = [...list].reverse().find((message) => message.type === 'assistant')
-    const text = last ? textOf(last) : ''
+    const idle = idleEntry(list)
+
+    // A turn that failed is reported with the server's own reason: that is
+    // the answer to "why did my chat come back empty?".
+    if (idle?.outcome === 'failed') {
+      const reason = idle.error?.message?.trim()
+      throw new ProviderError(
+        `OpenCode could not finish the turn${reason ? `: ${reason}` : '.'}`,
+        { kind: 'server', provider: PROVIDER, detail: reason }
+      )
+    }
+    if (idle?.outcome === 'interrupted') {
+      throw new ProviderError('OpenCode was interrupted before the turn finished.', {
+        kind: 'cancelled',
+        provider: PROVIDER
+      })
+    }
+
+    const text = turnText(list)
     if (text.length > delivered.length) {
       const delta = text.slice(delivered.length)
       delivered = text
       quiet = 0
       yield delta
+      // The server marks the end of the turn with an `idle` entry. Waiting for
+      // it is the only way to be sure the answer is whole: a model can go
+      // quiet for seconds between a tool call and the rest of its reply.
+      if (idle) break
       continue
     }
     quiet += 1
-    if (quiet > 2 && delivered.length > 0) break
+    if (idle) {
+      // The turn is over: either it said nothing at all, or what it said is
+      // already delivered.
+      if (delivered.length === 0) throw noAnswerError()
+      break
+    }
+    // Fallback for a server that never says "idle": a turn that stays quiet
+    // for a while is over. Generous enough to survive a slow tool call.
+    if (quiet > IDLE_POLLS && delivered.length > 0) break
   }
+
+  if (delivered.length === 0) throw noAnswerError()
 }
