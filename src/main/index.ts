@@ -13,6 +13,7 @@ import { maintenance } from './domains/maintenance'
 import { warmupScreenPermission } from './domains/screenshot'
 import { localAgentLauncher } from './domains/local-agent-launcher'
 import { antigravity } from './domains/antigravity'
+import { daemon } from './domains/daemon'
 
 app.setName('Klyro')
 
@@ -105,6 +106,10 @@ if (!gotLock) {
     // the first question does not wait for it. It fails quietly: the service
     // is started again on demand.
     void antigravity.warmUp()
+    // The daemon owns the hot path. It starts in milliseconds and lives in a
+    // few megabytes, so the overlay's answer does not wait on a browser
+    // runtime. If it is not built, the app carries on without it.
+    void daemon.start()
     logger.info(`Klyro ${app.getVersion()} ready on ${process.platform}`)
 
     app.on('activate', () => {
@@ -121,6 +126,7 @@ if (!gotLock) {
     unregisterShortcuts()
     // Never leave a server we started running behind us.
     localAgentLauncher.stopOpenCode()
+    daemon.stop()
     antigravity.stopService()
   })
 }

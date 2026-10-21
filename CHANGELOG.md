@@ -4,6 +4,37 @@ All notable changes to Klyro are recorded here. Versions follow [SemVer](https:/
 
 ## [Unreleased]
 
+## [0.9.9] — 2026-10-21
+
+The daemon: the hot path leaves Electron.
+
+### Added
+- **`klyro-core`, a Rust daemon that owns the hot path.** The overlay's
+  question no longer waits on a browser runtime: the app starts the daemon at
+  launch and hands it the provider configuration, and the answer comes back
+  through it.
+
+  | | Electron app | `klyro-core` |
+  | --- | --- | --- |
+  | Start to listening | ~1 s | **2.3 ms** |
+  | Memory | 851 MB (10 processes) | **4.3 MB** (one process) |
+  | Binary | ~250 MB of runtime | 2.6 MB, no runtime |
+
+  It speaks a small JSON-line protocol over a local socket (mode `0600`): it
+  says hello, lists a provider's models, and answers a question, streaming the
+  words back as they arrive. The OpenAI-shaped family (OpenAI, Groq, any
+  OpenAI-compatible server) and Ollama are in it; the local agents join next,
+  each with its own protocol. The keys never touch a second file: the daemon
+  holds them in memory, handed over by the app, which is the only thing that
+  can decrypt the OS keychain.
+
+  If the daemon is not there — not built, or a platform it does not cover —
+  the app carries on exactly as before.
+
+### Fixed
+- An Ollama base URL with the OpenAI-compatible `/v1` on the end no longer
+  answers "not found"; the suffix comes off before Ollama's own routes.
+
 ## [0.9.8] — 2026-10-21
 
 Klyro is now only the thing it is good at.

@@ -5,6 +5,15 @@ import { openResponse, responseDetail } from './request'
 
 const PROVIDER = 'ollama'
 
+/**
+ * Ollama's own routes, without the "/v1" an OpenAI-compatible base URL
+ * carries.
+ */
+function ollamaBase(baseUrl: string): string {
+  const base = trimSlash(baseUrl)
+  return base.endsWith('/v1') ? base.slice(0, -3) : base
+}
+
 /** Local models via Ollama's native API (no API key required). */
 export const ollama: Provider = {
   id: 'ollama',
@@ -22,7 +31,7 @@ export const ollama: Provider = {
     ]
 
     const res = await openResponse(
-      `${trimSlash(options.baseUrl)}/api/chat`,
+      `${ollamaBase(options.baseUrl)}/api/chat`,
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -56,7 +65,7 @@ export const ollama: Provider = {
   async test(options: TestOptions) {
     const started = Date.now()
     try {
-      const res = await fetch(`${trimSlash(options.baseUrl)}/api/tags`)
+      const res = await fetch(`${ollamaBase(options.baseUrl)}/api/tags`)
       if (!res.ok) return { ok: false, detail: await responseDetail(res, PROVIDER) }
       const json = (await res.json()) as { models?: { name: string }[] }
       const names = (json.models ?? []).map((m) => m.name).slice(0, 5)

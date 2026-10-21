@@ -8,10 +8,12 @@ import { DEFAULT_PROVIDERS, PROVIDER_META } from '../providers/defaults'
 import { classifyThrown, toUserMessage } from '../providers/errors'
 import { providerCarriesImages, resolveRoute } from '../providers/routing'
 import type { ChatTurn } from '../providers/types'
+import type { ProviderId } from '@shared/types'
 import { audit } from './audit'
 import { StreamStalledError, withIdleTimeout } from '../util/idle-timeout'
 import { conversations } from './conversations'
 import { buildKnowledgeContext } from './context'
+import { daemon } from './daemon'
 import { documents } from './documents'
 import { memory } from './memory'
 import { settingsDomain } from './settings'
@@ -47,6 +49,12 @@ function styleSuffix(style: ResponseStyle): string {
       return ''
   }
 }
+
+/**
+ * The providers the daemon can answer for: the OpenAI-shaped family, which
+ * is the same shape the daemon speaks.
+ */
+const DAEMON_PROVIDERS = new Set<ProviderId>(['openai', 'groq', 'openai-compatible', 'ollama'])
 
 /**
  * How much history is sent to the model. Without a bound, a long conversation
@@ -182,6 +190,50 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
         emit({ type: 'done', messageId: assistantId, cached: true, ms: 0, totalMs: 0, model: route.model })
         usage.record(providerId, 'chat', { toolCall: false })
         audit.record('chat.cached', `Replayed a cached answer for "${request.content.slice(0, 80)}"`)
+        return
+      }
+    }
+
+    // The daemon, when it is there, answers the question: it is a process that
+    // starts in milliseconds and lives in a few megabytes, so the overlay's
+    // answer does not wait on a browser runtime. The providers it cannot
+    // carry — the local agents, with their own protocols — still go through
+    // the app.
+    // The daemon serves the overlay's hot path — the question you ask in the
+    // middle of a meeting. Everything else goes through the app.
+    const daemonCanAnswer = request.useFastModel === true && DAEMON_PROVIDERS.has(providerId)
+    if (daemonCanAnswer && (await daemon.available())) {
+      const answered = await daemon.ask(
+        {
+          provider: providerId,
+          model: route.model,
+          baseUrl: route.baseUrl,
+          apiKey: route.apiKey,
+          prompt: request.content,
+          images: (request.attachments ?? []).map((attachment) => ({
+            dataUrl: attachment.dataUrl,
+            mime: attachment.mime
+          }))
+        },
+        (event) => {
+          if (event.kind === 'delta') {
+            if (firstTokenMs === null) firstTokenMs = Date.now() - startedAt
+            text += event.text
+            emit({ type: 'delta', messageId: assistantId, text: event.text })
+            return
+          }
+          if (event.kind === 'error') {
+            throw new Error(event.message)
+          }
+        }
+      )
+      if (!answered) {
+        // The daemon did not take it: fall through to the app's own client.
+      } else {
+        conversations.updateMessage(conversationId, assistantId, { content: text })
+        const totalMs = Date.now() - startedAt
+        emit({ type: 'done', messageId: assistantId, ms: firstTokenMs ?? totalMs, totalMs, model: route.model })
+        usage.record(providerId, 'chat')
         return
       }
     }

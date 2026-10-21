@@ -25,6 +25,11 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Build the daemon
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+      - run: cargo build --release --manifest-path crates/klyro-core/Cargo.toml
       - run: npm ci
       - run: npm run dist:linux
       - name: List built artifacts
@@ -46,6 +51,11 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Build the daemon
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.1
+      - run: cargo build --release --manifest-path crates/klyro-core/Cargo.toml
       - run: npm ci
       - run: npm run dist:win
       - name: List built artifacts

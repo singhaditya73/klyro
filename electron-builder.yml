@@ -19,6 +19,13 @@ files:
   - '!node_modules/@modelcontextprotocol/sdk/dist/esm/**'
   - '!node_modules/{express,raw-body,jose,cors,@hono}/**'
 asar: true
+# The daemon: one small Rust binary next to the app. It owns the hot path, so
+# the overlay opens in milliseconds instead of waiting on a browser runtime.
+extraResources:
+  - from: crates/klyro-core/target/release
+    to: .
+    filter:
+      - 'klyro-core*'
 compression: normal
 artifactName: ${productName}-${version}-${arch}.${ext}
 
