@@ -120,6 +120,8 @@ export const IPC = {
   antigravityStartService: 'antigravity:startService',
   antigravityConnect: 'antigravity:connect',
   antigravityDisconnect: 'antigravity:disconnect',
+  /** The models a provider can serve, so the user can pick one. */
+  providerModels: 'provider:models',
 
   /* Import MCP servers from tools the user already runs */
   mcpImportDiscover: 'mcp:importDiscover',

@@ -18,6 +18,7 @@ import { meetings } from './meetings'
 import { maintenance } from './maintenance'
 import { memory } from './memory'
 import { privacy } from './privacy'
+import { listProviderModels } from './provider-models'
 import { workflows } from './workflows'
 import { transcribeAudio } from './audio'
 import { applyOverlayDisplay, applyOverlayOpacity, applyOverlayPrivateMode, getOverlayWindow, listDisplays, overlayPrivateModeSupported, setOverlayStickyRecording } from './windows'
@@ -517,6 +518,10 @@ export function registerIpcHandlers(): void {
   handle(IPC.localAgentConnectOpenCode, () => localAgentLauncher.connectOpenCode())
   handle(IPC.localAgentOpenCodeInstalled, () => ({ installed: Boolean(findOpenCodeBinary()) }))
   handle(IPC.localAgentClis, () => localAgents.agentClis())
+  handle(IPC.providerModels, (_event, input: unknown) => {
+    const providerId = z.enum(PROVIDER_IDS).parse(input)
+    return listProviderModels(providerId)
+  })
   handle(IPC.providerDetectModels, (_event, input: unknown) => {
     const parsed = z
       .object({ baseUrl: z.string().max(300), kind: z.enum(['opencode', 'openai-compatible']) })

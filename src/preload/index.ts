@@ -75,6 +75,7 @@ const api: KlyroApi = {
   antigravityStartService: () => ipcRenderer.invoke(IPC.antigravityStartService),
   antigravityConnect: () => ipcRenderer.invoke(IPC.antigravityConnect),
   antigravityDisconnect: () => ipcRenderer.invoke(IPC.antigravityDisconnect),
+  providerModels: (providerId: string) => ipcRenderer.invoke(IPC.providerModels, providerId),
   localAgentStartOpenCode: () => ipcRenderer.invoke(IPC.localAgentStartOpenCode),
   localAgentConnectOpenCode: () => ipcRenderer.invoke(IPC.localAgentConnectOpenCode),
   localAgentOpenCodeInstalled: () => ipcRenderer.invoke(IPC.localAgentOpenCodeInstalled),

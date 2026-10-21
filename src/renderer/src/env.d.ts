@@ -123,6 +123,10 @@ interface KlyroApi {
   antigravityStartService(): Promise<{ started: boolean; error?: string; note?: string }>
   antigravityConnect(): Promise<{ ok: boolean; error?: string; note?: string }>
   antigravityDisconnect(): Promise<{ ok: boolean }>
+  providerModels(providerId: string): Promise<{
+    models: Array<{ id: string; name: string; provider: string; quota: number | null; free: boolean }>
+    note: string | null
+  }>
   antigravityStatus(): Promise<{
     supported: boolean
     running: boolean

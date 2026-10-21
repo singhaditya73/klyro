@@ -23,6 +23,33 @@ All notable changes to Klyro are recorded here. Versions follow [SemVer](https:/
   the first message held only a tool call. The whole turn is now read, in
   order, and the answer ends when the server says the turn is done.
 
+## [0.9.4] — 2026-10-21
+
+Pick the model you want — in every provider.
+
+### Added
+- **A model picker for every provider.** Settings → Providers now has a real
+  dropdown per provider instead of a text field, and it is filled from the
+  provider itself: Antigravity's catalogue (with the remaining quota on each
+  entry), the OpenCode server's models, Ollama's tags, the `/models` endpoint
+  of OpenAI, Anthropic, Gemini, Groq and any OpenAI-compatible server, and the
+  model ids the Claude Code and Codex CLIs accept. A model that is not
+  advertised can still be typed in.
+- **A model picker in the chat composer**, so you can switch model per
+  question without going to Settings — the chip next to the Send button.
+- **A model picker in the quick-ask overlay**, for the fast model it answers
+  with.
+- The Antigravity card in Integrations now lists its models as buttons: press
+  the one you want and Klyro uses that model from then on.
+- When a provider cannot be asked for its models, the picker says why — a
+  rejected key, a missing key, a server that is not running — instead of
+  showing an empty list.
+
+### Fixed
+- A slow answer from a provider you have already switched away from could
+  replace the newer list with the old one. The picker now drops a late answer
+  that no longer belongs to the provider on screen.
+
 ## [0.9.3] — 2026-10-21
 
 Antigravity without the IDE: connect once, use it any day.

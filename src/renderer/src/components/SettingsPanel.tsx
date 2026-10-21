@@ -10,7 +10,8 @@ import type {
   SecurityStatus
 } from '@shared/types'
 import { useModal } from '../hooks/useModal'
-import { Loader2, CheckCircle, CheckCircle2, AlertCircle, Shield, ShieldCheck, ShieldQuestion, HardDrive, Trash2, Download, Broom, Database, Key, RefreshCcw, Sparkles, Zap, X, ExternalLink } from 'lucide-react'
+import { ModelPicker } from './ModelPicker'
+import { Loader2, CheckCircle, CheckCircle2, AlertCircle, Shield, ShieldCheck, ShieldQuestion, HardDrive, Trash2, Download, Broom, Database, Key, Sparkles, Zap, X, ExternalLink } from 'lucide-react'
 import KlyroMark from '../assets/logo/klyro-mark.svg'
 
 interface Props {
@@ -249,8 +250,6 @@ export function SettingsPanel({ onClose }: Props) {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [version, setVersion] = useState<string | null>(null)
   const [displays, setDisplays] = useState<Array<{ index: number; label: string; primary: boolean; bounds: { width: number; height: number } }>>([])
-  const [detecting, setDetecting] = useState<string | null>(null)
-  const [detectedModels, setDetectedModels] = useState<Record<string, string[]>>({})
 
   useEffect(() => {
     void (async () => {
@@ -286,23 +285,6 @@ export function SettingsPanel({ onClose }: Props) {
             : 'dark'
           : next.theme
       document.documentElement.dataset.theme = resolved
-    }
-  }
-
-  /** Ask a local server which models it serves, and offer them. */
-  async function detectModels(id: ProviderId, baseUrl: string): Promise<void> {
-    setDetecting(id)
-    try {
-      const kind = id === 'opencode' ? 'opencode' : 'openai-compatible'
-      const models = await window.klyro.providerDetectModels({ baseUrl, kind })
-      setDetectedModels((previous) => ({ ...previous, [id]: models }))
-      if (models.length > 0) {
-        await updateProviderField(id, 'model', models[0])
-      }
-    } catch {
-      setDetectedModels((previous) => ({ ...previous, [id]: [] }))
-    } finally {
-      setDetecting(null)
     }
   }
 
@@ -407,36 +389,12 @@ export function SettingsPanel({ onClose }: Props) {
                 <div className="provider-card__grid">
                   <label className="field">
                     <span className="field__label">Model</span>
-                    <input value={config.model} onChange={(event) => void updateProviderField(provider.id, 'model', event.target.value)} className="field" />
-                    {detectedModels[provider.id]?.length ? (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                        {detectedModels[provider.id].slice(0, 8).map((model) => (
-                          <button
-                            key={model}
-                            className="btn btn--ghost btn--sm"
-                            onClick={() => void updateProviderField(provider.id, 'model', model)}
-                            title={`Use ${model}`}
-                          >
-                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{model}</span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                    {(provider.id === 'opencode' || provider.id === 'openai-compatible' || provider.id === 'ollama') && (
-                      <button
-                        className="btn btn--ghost btn--sm"
-                        style={{ marginTop: 6, alignSelf: 'flex-start' }}
-                        onClick={() => void detectModels(provider.id, config.baseUrl)}
-                        disabled={detecting === provider.id}
-                      >
-                        {detecting === provider.id ? (
-                          <Loader2 className="icon icon--xs spin" aria-hidden="true" />
-                        ) : (
-                          <RefreshCcw className="icon icon--xs" aria-hidden="true" />
-                        )}
-                        <span>Detect models</span>
-                      </button>
-                    )}
+                    <ModelPicker
+                      providerId={provider.id}
+                      value={config.model}
+                      providerLabel={provider.label}
+                      onChange={(model) => void updateProviderField(provider.id, 'model', model)}
+                    />
                   </label>
                   <label className="field">
                     <span className="field__label">Base URL</span>
@@ -444,11 +402,11 @@ export function SettingsPanel({ onClose }: Props) {
                   </label>
                   <label className="field">
                     <span className="field__label">Fast model (overlay)</span>
-                    <input
+                    <ModelPicker
+                      providerId={provider.id}
                       value={config.fastModel ?? ''}
-                      placeholder="e.g. llama-3.3-70b-versatile"
-                      onChange={(event) => void updateProviderField(provider.id, 'fastModel', event.target.value)}
-                      className="field"
+                      providerLabel={provider.label}
+                      onChange={(model) => void updateProviderField(provider.id, 'fastModel', model)}
                     />
                     <span className="muted" style={{ fontSize: 11 }}>
                       The quick-ask overlay answers with this model, so the reply lands in under a second. Leave it

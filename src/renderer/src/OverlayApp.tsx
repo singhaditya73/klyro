@@ -14,6 +14,7 @@ import {
   type SilenceWatcher
 } from './lib/listen'
 import type { Attachment } from '@shared/types'
+import { ModelPicker } from './components/ModelPicker'
 import KlyroMark from './assets/logo/klyro-mark.svg'
 
 type AssistMode = 'idle' | 'recording' | 'listening'
@@ -38,6 +39,9 @@ export default function OverlayApp() {
   const [level, setLevel] = useState(0)
   // Screens and windows to choose from (instant capture turned off).
   const [overlaySources, setOverlaySources] = useState<Array<{ id: string; name: string; thumbnail: string }> | null>(null)
+  // The provider the overlay answers with, and the model it uses.
+  const [overlayProvider, setOverlayProvider] = useState('')
+  const [overlayModel, setOverlayModel] = useState('')
   // True while a capture is in flight — the shot takes a moment, so say so.
   const [capturing, setCapturing] = useState(false)
   // How long the last answer took, and whether it was replayed instantly.
@@ -58,6 +62,16 @@ export default function OverlayApp() {
 
   useEffect(() => {
     void window.klyro.privateModeStatus().then(setPrivateMode).catch(() => setPrivateMode(null))
+    void window.klyro
+      .getSettings()
+      .then((settings) => {
+        const provider = settings.providers[settings.activeProvider]
+        setOverlayProvider(settings.activeProvider)
+        // An empty fast model means "the same model as the chat", so that is
+        // what the picker shows.
+        setOverlayModel(provider?.fastModel || provider?.model || '')
+      })
+      .catch(() => undefined)
     return window.klyro.onChatStream((event) => {
       if (event.type === 'start') {
         setAnswer('')
@@ -547,6 +561,29 @@ export default function OverlayApp() {
       <div className="overlay__bar">
         <img src={KlyroMark} alt="" className="overlay__mark" aria-hidden="true" />
         <span className="overlay__brand">Klyro</span>
+        {overlayProvider && (
+          <ModelPicker
+            providerId={overlayProvider}
+            value={overlayModel}
+            variant="chip"
+            onChange={(next) => {
+              setOverlayModel(next)
+              void (async () => {
+                try {
+                  const settings = await window.klyro.getSettings()
+                  await window.klyro.updateSettings({
+                    providers: {
+                      ...settings.providers,
+                      [overlayProvider]: { ...settings.providers[overlayProvider], fastModel: next }
+                    }
+                  })
+                } catch {
+                  // The choice still shows; the next answer uses the old model.
+                }
+              })()
+            }}
+          />
+        )}
         {privateMode && (
           <button
             className="btn btn--icon btn--icon-sm btn--ghost"

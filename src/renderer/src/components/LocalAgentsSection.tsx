@@ -160,6 +160,24 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
     }
   }, [refreshAntigravity])
 
+  /** Make Antigravity the active provider, on one specific model. */
+  const useAntigravityModel = useCallback(async (modelId: string, modelName: string): Promise<void> => {
+    setAgentNote(null)
+    try {
+      const settings = await window.klyro.getSettings()
+      await window.klyro.updateSettings({
+        activeProvider: 'antigravity',
+        providers: {
+          ...settings.providers,
+          antigravity: { baseUrl: 'local://antigravity', model: modelId }
+        }
+      })
+      setAgentNote(`Klyro will use Antigravity's ${modelName} from now on.`)
+    } catch (error) {
+      setAgentNote((error as Error).message)
+    }
+  }, [])
+
   /** Make Antigravity the active provider, on a free model when there is one. */
   const useAntigravityModels = useCallback(async (): Promise<void> => {
     if (!antigravity?.running) return
@@ -390,15 +408,20 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
           </div>
           {antigravity.running && (
             <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {antigravity.models.slice(0, 8).map((model) => (
-                <span key={model.id} className="pill" title={`${model.id} · ${model.provider}`}>
+              {antigravity.models.slice(0, 10).map((model) => (
+                <button
+                  key={model.id}
+                  className="pill"
+                  title={`Use ${model.name} — ${model.id}`}
+                  onClick={() => void useAntigravityModel(model.id, model.name)}
+                >
                   {model.name}
                   {model.quota !== null && model.quota < 1 ? ` · ${Math.round(model.quota * 100)}%` : ''}
-                </span>
+                </button>
               ))}
-              {antigravity.models.length > 8 && (
+              {antigravity.models.length > 10 && (
                 <span className="muted" style={{ fontSize: 11, alignSelf: 'center' }}>
-                  +{antigravity.models.length - 8} more
+                  +{antigravity.models.length - 10} more
                 </span>
               )}
             </div>

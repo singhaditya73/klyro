@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Attachment } from '@shared/types'
 import { Loader2, Mic, Monitor, X, Send, StopCircle } from 'lucide-react'
+import { ModelPicker } from './ModelPicker'
 
 interface Props {
   busy: boolean
@@ -31,6 +32,32 @@ export function Composer({
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  /** The provider the answer will come from, and the model it will use. */
+  const [provider, setProvider] = useState<string>('openai')
+  const [model, setModel] = useState<string>('')
+
+  /** The model the user picks, for the provider that is active right now. */
+  async function chooseModel(next: string): Promise<void> {
+    setModel(next)
+    try {
+      const settings = await window.klyro.getSettings()
+      await window.klyro.updateSettings({
+        providers: { ...settings.providers, [provider]: { ...settings.providers[provider], model: next } }
+      })
+    } catch {
+      // The picker still shows the choice; the next send will use the old one.
+    }
+  }
+
+  useEffect(() => {
+    void window.klyro
+      .getSettings()
+      .then((settings) => {
+        setProvider(settings.activeProvider)
+        setModel(settings.providers[settings.activeProvider]?.model ?? '')
+      })
+      .catch(() => undefined)
+  }, [])
 
   /** Grow the input with its content, up to the CSS max-height. */
   function resizeTextarea(): void {
@@ -202,6 +229,12 @@ export function Composer({
           )}
         </button>
         <div className="spacer" />
+        <ModelPicker
+          providerId={provider}
+          value={model}
+          variant="chip"
+          onChange={(next) => void chooseModel(next)}
+        />
         <span className="composer__hint" aria-hidden="true">Enter to send · Shift+Enter for a new line</span>
         {busy ? (
           <button className="btn btn--danger btn--stop" onClick={onStop} aria-label="Stop generation">

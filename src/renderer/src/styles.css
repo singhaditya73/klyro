@@ -795,6 +795,9 @@ input[type='range']::-moz-range-thumb {
   font-weight: 500;
   white-space: nowrap;
 }
+/* A pill that picks something: it says so on hover. */
+button.pill { cursor: pointer; font-family: inherit; }
+button.pill:hover { background: var(--surface-hover); color: var(--text-primary); border-color: var(--border-default); }
 .pill--accent { color: var(--text-primary); background: var(--accent-soft); border-color: transparent; }
 .pill--ok { color: var(--success); background: var(--success-soft); border-color: transparent; }
 .pill--warn { color: var(--warning); background: var(--warning-soft); border-color: transparent; }
@@ -935,6 +938,126 @@ input[type='range']::-moz-range-thumb {
   line-height: 1.6;
 }
 .composer__actions { display: flex; align-items: center; gap: var(--space-2); }
+
+/* The model picker: one control, used in Settings and in the composer. */
+.model-picker { position: relative; display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.model-picker__control { display: flex; align-items: center; gap: var(--space-1); }
+.model-picker__button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-input);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.model-picker__button:hover { background: var(--surface-hover); }
+.model-picker__button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-picker__menu {
+  position: fixed;
+  z-index: 80;
+  min-width: 260px;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-lg);
+}
+.model-picker__search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  margin-bottom: var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-input);
+  color: var(--text-muted);
+}
+.model-picker__search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  outline: none;
+}
+.model-picker__list { display: flex; flex-direction: column; gap: 2px; max-height: 280px; overflow-y: auto; }
+.model-picker__option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.model-picker__option:hover { background: var(--surface-hover); }
+.model-picker__option--active { background: var(--accent-soft); }
+.model-picker__option-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-picker__option-provider {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-transform: lowercase;
+}
+.model-picker__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.model-picker__custom-link {
+  margin-top: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  text-align: left;
+  cursor: pointer;
+}
+.model-picker__custom-link:hover { color: var(--text-primary); }
+.model-picker__custom { display: flex; align-items: center; gap: var(--space-2); }
+
+/* The compact form, for the composer. */
+.model-picker--chip { position: relative; flex: 0 0 auto; }
+.model-picker__chip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 0 0 auto;
+  max-width: 220px;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.model-picker__chip:hover { background: var(--surface-hover); color: var(--text-primary); }
+.model-picker__chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .composer__hint { font-size: var(--text-xs); color: var(--text-disabled); }
 .composer__error {
   font-size: var(--text-sm);

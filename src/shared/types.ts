@@ -844,6 +844,11 @@ export interface KlyroApi {
   antigravityConnect(): Promise<{ ok: boolean; error?: string; note?: string }>
   /** Forget the saved Antigravity session. */
   antigravityDisconnect(): Promise<{ ok: boolean }>
+  /** The models a provider can serve — so the user can pick one. */
+  providerModels(providerId: ProviderId): Promise<{
+    models: Array<{ id: string; name: string; provider: string; quota: number | null; free: boolean }>
+    note: string | null
+  }>
   /** The local Antigravity IDE: plan, quota and the models it can reach. */
   antigravityStatus(): Promise<{
     supported: boolean
