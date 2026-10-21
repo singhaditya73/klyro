@@ -1,9 +1,10 @@
 //! The wire protocol between Klyro's app and its daemon.
 //!
-//! One JSON object per line, in both directions. The daemon speaks first on
-//! connect (a `hello`), then the app may push provider configuration, and
-//! then either side may send requests. Answers stream back as `delta` events
-//! so the overlay can show the first words while the rest is still arriving.
+//! One JSON object per line, in both directions. The client authenticates
+//! first, then the daemon says hello, then the app may push provider
+//! configuration, and then either side may send requests. Answers stream back
+//! as `delta` events so the overlay can show the first words while the rest is
+//! still arriving.
 
 use serde::{Deserialize, Serialize};
 
@@ -11,6 +12,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Request {
+    /// The first thing the app sends: the token from the state file.
+    Auth { token: String },
     /// The app is here; the daemon answers with its own `hello`.
     Hello {
         #[allow(dead_code)]
@@ -63,7 +66,7 @@ pub enum Response {
     Hello {
         version: String,
         pid: u32,
-        socket: String,
+        port: u16,
     },
     /// A piece of the answer.
     Delta { text: String },

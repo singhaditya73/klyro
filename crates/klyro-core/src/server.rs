@@ -1,14 +1,17 @@
 //! The daemon: one small process that owns the hot path.
 //!
-//! It listens on a local socket, keeps the provider connections warm, and
-//! answers questions. The app is its control panel; the overlay is its
+//! It listens on the loopback interface, keeps the provider connections warm,
+//! and answers questions. The app is its control panel; the overlay is its
 //! client. Nothing here knows about Electron.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
+
+use tokio::sync::Mutex;
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::{UnixListener, UnixStream};
+use tokio::net::{TcpListener, TcpStream};
 
 use crate::protocol::{ProviderConfig, Request, Response};
 use crate::provider::{Chunk, Client, Ollama, OpenAi};
@@ -16,15 +19,16 @@ use crate::provider::{Chunk, Client, Ollama, OpenAi};
 /// The version of the daemon, reported to the app.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Where the daemon listens. A Unix socket on Unix, a named pipe on Windows.
-pub fn socket_path() -> PathBuf {
+/// Where the daemon's state file lives: the port it listens on and the token
+/// a client has to present.
+pub fn state_path() -> PathBuf {
     let base = std::env::var("KLYRO_STATE_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| {
             let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
             PathBuf::from(home).join(".config").join("klyro")
         });
-    base.join("klyro-core.sock")
+    base.join("klyro-core.json")
 }
 
 /// What the daemon remembers between requests.
@@ -75,22 +79,23 @@ impl State {
 }
 
 /// Serve until the process is asked to stop.
-pub async fn serve(listener: UnixListener, state: &PathBuf) -> std::io::Result<()> {
-    tracing::info!(socket = %state.display(), "klyro-core listening");
-    let state = State::default();
+pub async fn serve(listener: TcpListener, token: String) -> std::io::Result<()> {
+    // The configuration is shared: the app configures the daemon once and
+    // then asks questions over any connection.
+    let state = Arc::new(Mutex::new(State::default()));
     loop {
-        let (stream, _peer) = match listener.accept().await {
+        let (stream, peer) = match listener.accept().await {
             Ok(pair) => pair,
             Err(error) => {
                 tracing::warn!(%error, "could not accept a connection");
                 continue;
             }
         };
-        let mut state = State {
-            providers: state.providers.clone(),
-        };
+        tracing::debug!(%peer, "a client connected");
+        let token = token.clone();
+        let state = Arc::clone(&state);
         tokio::spawn(async move {
-            if let Err(error) = handle(stream, &mut state).await {
+            if let Err(error) = handle(stream, token, state).await {
                 tracing::warn!(%error, "a connection ended badly");
             }
         });
@@ -98,15 +103,37 @@ pub async fn serve(listener: UnixListener, state: &PathBuf) -> std::io::Result<(
 }
 
 /// One connection: requests in, events out.
-async fn handle(stream: UnixStream, state: &mut State) -> std::io::Result<()> {
+async fn handle(
+    stream: TcpStream,
+    token: String,
+    state: Arc<Mutex<State>>,
+) -> std::io::Result<()> {
     let (read_half, mut write_half) = stream.into_split();
     let mut lines = BufReader::new(read_half).lines();
 
-    // The daemon says hello first, so the app knows it is talking to it.
+    // The first line has to be the token. Nothing else is served to a client
+    // that cannot present it.
+    let authenticated = match lines.next_line().await? {
+        Some(line) => match serde_json::from_str::<Request>(line.trim()) {
+            Ok(Request::Auth { token: given }) => given == token,
+            Ok(_) => false,
+            Err(_) => false,
+        },
+        None => false,
+    };
+    if !authenticated {
+        let response = Response::Error {
+            message: "The daemon did not recognise that token.".to_string(),
+        };
+        write_line(&mut write_half, &response).await?;
+        return Ok(());
+    }
+
+    // The daemon says hello, so the app knows it is talking to it.
     let hello = Response::Hello {
         version: VERSION.to_string(),
         pid: std::process::id(),
-        socket: socket_path().display().to_string(),
+        port: 0,
     };
     write_line(&mut write_half, &hello).await?;
 
@@ -126,10 +153,14 @@ async fn handle(stream: UnixStream, state: &mut State) -> std::io::Result<()> {
             }
         };
         match request {
+            Request::Auth { .. } => {
+                // Already done.
+            }
             Request::Hello { .. } => {
                 // Already said hello.
             }
             Request::Configure { providers } => {
+                let mut state = state.lock().await;
                 for config in providers {
                     state.providers.insert(config.id.clone(), config);
                 }
@@ -138,7 +169,8 @@ async fn handle(stream: UnixStream, state: &mut State) -> std::io::Result<()> {
                 write_line(&mut write_half, &Response::Pong).await?;
             }
             Request::Models { provider } => {
-                let response = match state.client_for_models(&provider) {
+                let client = state.lock().await.client_for_models(&provider);
+                let response = match client {
                     Some(client) => match client.models().await {
                         Ok(models) => Response::Models { models },
                         Err(message) => Response::Error { message },
@@ -157,7 +189,11 @@ async fn handle(stream: UnixStream, state: &mut State) -> std::io::Result<()> {
                 prompt,
                 images,
             } => {
-                let client = match state.client_for_ask(&provider, &base_url, api_key.clone()) {
+                let client = state
+                    .lock()
+                    .await
+                    .client_for_ask(&provider, &base_url, api_key.clone());
+                let client = match client {
                     Some(client) => client,
                     None => {
                         let response = Response::Error {
@@ -177,8 +213,6 @@ async fn handle(stream: UnixStream, state: &mut State) -> std::io::Result<()> {
                     }
                 };
                 use futures_util::StreamExt;
-                // The stream is not Unpin (it is an async block), so it is
-                // pinned before it is polled.
                 let mut stream = std::pin::pin!(stream);
                 while let Some(item) = stream.next().await {
                     match item {
@@ -208,7 +242,7 @@ async fn handle(stream: UnixStream, state: &mut State) -> std::io::Result<()> {
 
 /// Write one JSON object, on its own line.
 async fn write_line(
-    write_half: &mut tokio::net::unix::OwnedWriteHalf,
+    write_half: &mut tokio::net::tcp::OwnedWriteHalf,
     response: &Response,
 ) -> std::io::Result<()> {
     let mut line = serde_json::to_string(response).unwrap_or_default();
