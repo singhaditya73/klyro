@@ -1,263 +1,77 @@
-# Klyro — Feature Matrix & Plan
+# Klyro — Feature Matrix
 
 Status legend: **✅ done** · **🟡 partial** · **⬜ planned**
 
-> **0.9.8: the product is a meeting and interview assistant.** The overlay, the
-> hotkey, screen context, talk and listen modes, private mode, the model
-> picker, every provider and every local agent are the product. The chat
-> workspace, the desktop agent, workflows, the Meetings surface, the GitHub
-> integration and the MCP client were removed — each belongs to a different
-> product (MCP and the knowledge base are detailed in
-> `docs/PRODUCT-SCOPE.md`).
+> Klyro is a **meeting and interview assistant**. One key opens an overlay on
+> top of whatever you are doing; you ask a question about the screen or the
+> conversation, and the answer comes back in place — invisible to the people
+> you are talking to. It uses the models and agents **you already have**.
+>
+> The product, and what was deliberately kept and removed, is written down in
+> [`docs/PRODUCT-SCOPE.md`](docs/PRODUCT-SCOPE.md).
 
-## Part 1 — Core assistant capabilities
-
-| Feature | Status | Notes |
-| --- | --- | --- |
-| 1.1 Floating assistant window | ✅ | Frameless always-on-top overlay window; **user-controlled opacity (20–100%, 0.3.3)** via window-level transparency; explicit drag handles (top bar + Klyro wordmark), interactive controls excluded from dragging. **0.6.0: it appears the way a native panel does** — the window is created at launch (so the hotkey pays only for the animation), it fades in with an ease-out curve while the content settles behind it, it fades out instead of vanishing, and the window background matches the glass surface so there is no colour flash |
-| 1.2 Global shortcut to show/hide | ✅ | Default `Ctrl/Cmd+Shift+Space` (configurable) |
-| 1.2c Keep the overlay out of a share | ✅ | Three supported routes: (1) **Private mode** excludes the window from captures and live shares on Windows/macOS; (2) **Overlay screen** (0.3.9) puts the overlay on a second display you are not sharing — the shared framebuffer simply does not contain it; (3) **privacy check** (0.3.7) measures the exclusion on your own machine. Linux capture now prefers a compositor-native tool (grim / GNOME Shell D-Bus / ImageMagick) so the xdg-desktop-portal dialog never appears on your screen mid-meeting |
-| 1.2b Capture exclusion, verified | ✅ | **Private mode** excludes the overlay from screen captures and live screen shares on Windows and macOS (`WDA_EXCLUDEFROMCAPTURE` / `NSWindow.sharingType = .none`) — the same supported APIs password managers use. **0.3.7: a privacy check measures it on your machine** — two captures, one with the overlay up and one without, compared pixel by pixel — and reports the number instead of claiming it. macOS permission is requested at launch so the system prompt never appears mid-meeting. Linux/X11 has no per-window exclusion API; the check says so plainly |
-| 1.3 Text questions | ✅ | Streaming chat |
-| 1.4 Voice input | 🟡 | Record → transcribe via OpenAI-compatible `/audio/transcriptions`; local Whisper supported |
-| 1.5 Contextual follow-ups | ✅ | Full conversation history sent to the provider |
-| 1.6 Stays accessible over other apps | ✅ | Overlay window |
-| 1.7 Window controls / keyboard nav | 🟡 | Escape closes panels, dialogs take focus, visible focus rings; full arrow-key navigation still open |
-| 2.1 Permission-gated screen capture | ✅ | `desktopCapturer` + explicit source picker. **Klyro hides itself while capturing (0.3.5)** so a full-screen shot shows your work, not the app asking about it; Klyro's own windows are filtered out of the source list |
-| 2.2 Ask about screen / region | 🟡 | One flow: chat → "Ask about my screen" (or the Screen shortcut) opens the source picker, the capture attaches to your message, and the answer lands in the same conversation. The separate "Screen Assistant" page was cut in 0.3.5 as a duplicate of this. **Also in the quick-ask overlay (0.3.6)**: "Capture screen" attaches what is on screen to the next question — the point where you are already in another app. **Instant capture (0.3.7)**: one click captures the display below the overlay (Klyro hides itself for the shot) and attaches it; a Settings switch turns the source picker off/on, and the OS permission state is shown honestly. Region crop planned |
-| 2.3 Understand text/code/UI | ✅ | Vision models (provider-dependent) |
-| 2.4 Conversation context across turns | ✅ | Persisted history |
-| 3.1 Microphone capture with consent | ✅ | `getUserMedia` + visible recording state |
-| 3.2 Live transcription | 🟡 | Push-to-talk transcription; **conversation mode (0.6.0)**: the microphone stays open, voice activity detection starts and ends your utterance, and Klyro answers when you stop speaking — with the screen attached, so the answer is about what you are looking at while you say it. **Speak again mid-answer and the answer is cut off**: you interrupted, and the new words are the question |
-| 3.3—3.4 Real-time suggestions | 🟡 | Overlay "Listen" mode: 20s chunked transcription of meeting audio, question heuristic, auto-answers shown in the overlay (rate-limited on free Groq tiers) |
-| 4.1 Meeting transcripts / summaries | ✅ | Chunked recording → transcript → summary + action items; overlay listen/record assist; post-meeting action agent with output ledger |
-| 5.1 Saved + searchable history | ✅ | Local JSON store + search |
-| 5.2 Custom instructions / preferences | ✅ | System prompt + response style |
-| 6.1 Provider abstraction | ✅ | OpenAI-compatible, Anthropic, Gemini, Ollama, and **OpenCode** (0.7.0) |
-| 6.1a Pick the model you want | ✅ | **0.9.4: a model picker for every provider** — Settings → Providers has a dropdown per provider, filled from the provider itself (Antigravity's catalogue with the quota on each entry, the OpenCode server, Ollama, the `/models` endpoint of OpenAI, Anthropic, Gemini, Groq and any OpenAI-compatible server, and the ids the Claude Code and Codex CLIs accept). The chat composer and the quick-ask overlay have the same picker, so a model can be switched per question. Verified live: picked Gemini 3.5 Flash Lite in the composer and the next answer came from `MODEL_GOOGLE_GEMINI_2_5_FLASH` |
-| 6.1b Pictures reach the model | ✅ | **0.9.6: an attached image is delivered, not dropped** — OpenCode takes the picture as a file whose uri is the image (verified live: the model read a test picture and answered "Red" for the red half), Claude Code reads it from stdin as part of the message, Codex takes it as a file the way `codex exec --image` does, and the hosted providers always did. Antigravity's model call is a prompt and a model id with nowhere to put an image, so it says so plainly instead of answering as if the screen were blank |
-| 6.1f Antigravity as a model source | ✅ | **0.9.3: use Antigravity's models with the IDE closed** — connect once while the IDE is open; Klyro saves the account session and afterwards starts Antigravity's own agent service itself. Verified live end to end with the IDE fully closed: Pro plan, the account, 19 models, and a question answered by Claude Opus 4.6. **0.9.2:** Klyro answers with Antigravity's models — Claude Opus 4.6, Sonnet 4.6, Gemini 3.5 and the rest of the catalogue — with no key |
-| 6.1e Antigravity, read directly | ✅ | **0.9.0: Klyro talks to the Antigravity IDE's own language server** — Connect-RPC over localhost, authenticated with the token the IDE hands its server. Verified live: account, plan (Pro), quota and 22 models (Claude Opus 4.6, Sonnet 4.6, Gemini 3.5). No key, no bridge, nothing scraped from private files. **0.9.3:** the account session is captured once from the IDE's own state publisher and replayed, so the IDE is never needed again — see `docs/ANTIGRAVITY.md` |
-| 6.1c Borrow your agent CLIs | ✅ | **0.8.0: Claude Code and the Codex CLI as providers** — both run headless on the user's machine with their own login (subscription or saved auth), so Klyro needs no key. Klyro detects both and offers them in Integrations |
-| 6.1d Import MCP servers you already have | ✅ | **0.8.0:** Klyro reads the MCP servers configured in OpenCode, Claude Code and other tools, and imports them with their command and environment intact — one click instead of retyping an MCP config (verified: the REA server, 200 tools, 6 prompts) |
-| 6.1b Borrow what you already run | ✅ | **0.7.2: one click from the Home screen** — a card appears when OpenCode is installed; pressing *Connect* starts it, reads the password it printed, picks a free model, makes it the active provider, and is ready to answer. Windows, macOS and Linux (npm's `.cmd` shims are handled). **0.7.1: Klyro can start OpenCode itself** — one click in Integrations, and it reads the password the server printed, keeps it encrypted, connects, and never leaves the server running behind it. **0.7.0: "Local models & agents"** — Klyro probes the services already running on the machine and offers one-click connect, with **no API key**: OpenCode (a local `opencode serve`, which answers with *your* OpenCode account, its free models and its limits), Ollama, LM Studio, LiteLLM, vLLM, and local bridges to other IDEs' subscriptions. The OpenCode provider speaks the server's published HTTP API (v1 and v2 generations), so a password-protected server works too |
-| 6.2 Configurable endpoints | ✅ | Per-provider Base URL + model |
-| 6.3 Secure API keys | ✅ | Encrypted at rest via Electron `safeStorage` |
-| 6.4 Error handling / timeouts | ✅ | Errors surfaced per message; a stalled stream fails after 90s of silence instead of hanging |
-
-## Part 2 — Differentiating features
+## Part 1 — The overlay (the product)
 
 | Feature | Status | Notes |
 | --- | --- | --- |
-| 7. Autonomous desktop agent | 🟡 | Observe → plan → act loop with per-action confirmation, cancellation, and persisted task history. Requires a system input backend (see below). |
-| 8. Persistent personal memory | ✅ | Local store, BM25 recall injected into every prompt, pinning, near-duplicate suppression, optional automatic fact extraction |
-| 9. Integrations (GitHub, Drive, …) | 🟡 | GitHub done (account, repos, issues, create issue). **MCP connector done**: bring-your-own local stdio MCP servers — list tools, invoke tools, every call audited. **Tool-calling in chat done (0.3.2)**: opt-in — chat can call MCP tools through an approval-gated loop (Allow/Deny per call, max 5 tool rounds, audited). Drive/others planned |
-| 10. AI coding mode | ⬜ | Deliberately cut in 0.3.1: "work on code" belongs to the desktop agent (which any editor/index can feed via MCP). No coding surface of its own |
-| 11. Reusable skills / workflows | ✅ | Named multi-step workflows, 3 built-ins (standup, notes-to-actions, diff review), custom creation, runs land in a real conversation — one surface (Workflows view), deduplicated |
-| 12. Document & research intelligence | 🟡 | Local document import (text, code, HTML, PDF via `pdftotext`, Office via `unzip`) + BM25 grounding. **"Ask about this" (0.3.2)**: ground one chat message in the full text of a pinned document. Web research planned |
-| 13. Productivity / task management | 🟡 | Meeting action items, workflow runs, and the **post-meeting action agent**: proposes issues from action items, user approves, Klyro executes, outcomes land in a per-meeting output ledger |
-| 14. Trust, security, reliability | 🟡 | Sandboxed renderer with context isolation, origin-validated IPC, encrypted keys, encrypted-at-rest secrets, navigation guards, locked-down CSP, microphone-only permission policy, idle-timeout on model streams, and a **local audit log** (agent actions, MCP tool calls, meeting outputs — exportable as JSON, clearable, never sent anywhere) |
-| 15. Speed (consumer path) | ✅ | **Turbo mode (0.4.0)**: the quick-ask overlay answers with the provider's *fast model* (set per provider), a short answer budget, and an **instant replay** cache — the same question about an unchanged screen comes back instantly, labelled as a replay. The overlay reports **time-to-first-token** ("0.84s") under every answer, and the number is also written to the audit log |
-| 16. Usage & cost honesty | ✅ | Local per-provider request ledger (Settings → Provider usage): requests, tool calls, failures. **RMS silence gate (0.3.2)**: listen mode skips transcription on silence-only chunks, so quiet meeting minutes cost zero provider calls |
+| Opens on one key | ✅ | `Ctrl/Cmd+Shift+Space` (configurable). The window is created at launch, so the hotkey pays only for the animation — it fades in like a native panel, and it fades out instead of vanishing. |
+| Stays over other apps | ✅ | Frameless, always-on-top overlay with 20–100% opacity and explicit drag handles. |
+| Asks a question | ✅ | Type and press Enter. The answer streams in place, with the time-to-first-token under it. |
+| **Hears a question and answers it** | ✅ | **0.9.10:** the listen mode records in small slices, watches the room's level, and treats the pause that ends a question as the end of it — so the question is transcribed on its own and answered at once (~2 s, not up to 20 s). Silence is never transcribed, so a quiet meeting costs nothing. |
+| Records one question in real time | ✅ | *Record question*: press once when the question starts, once when it ends; Klyro transcribes and answers it. |
+| Talks to you | ✅ | *Talk*: the microphone stays open, voice activity detection starts and ends your utterance, and Klyro answers when you stop — with the screen attached. Speak again mid-answer and the answer is cut off: you interrupted. |
+| Asks about the screen | ✅ | *Capture screen*: one click takes what is below the overlay (Klyro hides itself for the shot) and attaches it to the next question. A source picker is available when instant capture is off. |
+| Hears the meeting | ✅ | System audio (Windows loopback, Linux monitor device, macOS mic fallback) or the microphone. The transcript runs in the overlay. |
+| Switches the model mid-meeting | ✅ | The model chip next to the input; the choice is per provider and remembered. |
+| Keeps out of a share | ✅ | Three routes: **private mode** (excludes the window from captures and live shares on Windows and macOS — the same APIs password managers use), the **overlay screen** (put it on a display you are not sharing), and the **privacy check** (two real captures, compared pixel by pixel, so the number is measured rather than claimed). |
+| Instant replay | ✅ | The same question about an unchanged screen comes back instantly, labelled as a replay. |
+| Closing | ✅ | Escape closes it when idle. |
 
-## Desktop agent (Stage B)
+## Part 2 — The control panel
 
-The agent captures the primary display, asks the active (vision-capable) model for
-the **single next action** as strict JSON, and executes it by synthesising input.
-Every loop iteration re-captures the screen, so each decision is made against the
-observed result of the previous action.
-
-**Input backends** — Klyro shells out to platform tools and reports honestly when
-none is present:
-
-| Platform | Backend | Install |
+| Feature | Status | Notes |
 | --- | --- | --- |
-| Linux (X11 / XWayland) | `xdotool` | `sudo dnf install -y xdotool` |
-| Linux (native Wayland) | `ydotool` (+ `ydotoold` daemon) | `sudo dnf install -y ydotool` |
-| Linux (typing only) | `wtype` | `sudo dnf install -y wtype` |
-| macOS | `osascript`; `cliclick` for the mouse | `brew install cliclick` |
-| Windows | PowerShell `SendKeys` + `user32` | built in |
+| Models & agents | ✅ | Every model and agent you already have, with their own sign-in: OpenAI, Anthropic, Gemini, Groq, Ollama, any OpenAI-compatible server, **OpenCode**, **Claude Code**, **Codex**, **Antigravity**. One click to connect a local server; Klyro reads the password it printed and keeps it encrypted. |
+| Antigravity, with the IDE closed | ✅ | Connect once while the IDE is open; Klyro saves the account session and afterwards starts Antigravity's own agent service itself. Verified end to end with the IDE fully closed: the Pro plan, the account, 19 models, an answer from Claude Opus 4.6. |
+| A model picker for every provider | ✅ | Filled from the provider itself: Antigravity's catalogue (with the remaining quota on each entry), the OpenCode server, Ollama, the `/models` endpoint of OpenAI, Anthropic, Gemini, Groq and any OpenAI-compatible server, and the ids the Claude Code and Codex CLIs accept. A model that is not advertised can still be typed in. |
+| What Klyro knows | ✅ | Memories and documents (text, Markdown, code, CSV, JSON, HTML, PDF, Office), recalled with BM25 and injected into every answer — a resume, a project description, a document you were sent. Optional automatic fact extraction; near-duplicate suppression. |
+| Assistant behaviour | ✅ | System prompt, response style, theme. |
+| Desktop | ✅ | Launch at login, the quick-ask shortcut, overlay opacity, instant capture on/off, which display the overlay lives on, the privacy check, and the instant-replay switch. |
+| Security & data | ✅ | Credential storage (OS keychain), what is stored and how to clear it, storage on this device, and opt-in crash reports (off by default, local only). |
+| Usage and audit | ✅ | Per-provider request counts, and an append-only local log of what happened — exportable as JSON, clearable, never sent anywhere. |
+| Permissions | ✅ | Microphone-only permission policy; the screen-permission state is shown honestly. |
 
-Safety: state-changing actions (clicks, typing, Enter/modified keys, or anything the
-model flags) pause for an explicit **Approve / Decline** by default
-(`agentConfirmConsequential`), the run is cancellable at any point, coordinates are
-mapped from screenshot space back to screen space, and completed runs are stored in
-`agent-tasks.json`.
+## Part 3 — Privacy
 
-## Knowledge (Stage C)
+| Feature | Status | Notes |
+| --- | --- | --- |
+| Keys encrypted at rest | ✅ | Electron `safeStorage` (OS keychain). Plaintext is refused unless you explicitly opt in. |
+| The overlay is excluded from captures | ✅ | Windows and macOS. **Linux has no per-window exclusion API** — the privacy check says so plainly rather than pretending. |
+| Measured, not claimed | ✅ | The privacy check takes two real captures and reports the changed pixels. |
+| Nothing leaves the machine unless you say so | ✅ | A local model never sends anything. A cloud provider gets the question and the picture, and the app says which provider is in use and whether it is local. |
+| Secrets never reach a log | ✅ | Prompts, answers, transcripts, keys and frames are not logged. |
+| Data you can see and clear | ✅ | Counts per scope, one click to clear, a storage report and a clean-up. |
+| Configurable retention | ⬜ | Not yet: data can be cleared per scope, but there is no retention policy yet. |
+| Private sessions | 🟡 | Private mode keeps the overlay out of captures; a session that is never written to disk is not implemented yet. |
 
-Everything is local: memories, documents, and the ranking index never leave the
-device except as part of the prompt you send to your chosen provider.
+## Part 4 — The engines
 
-- **Memory** — a `memory.json` store with tags, pinning, and edits. Before each
-  turn the top-K memories for your question are retrieved with **BM25** and added
-  to the system prompt. Near-duplicates are suppressed with Jaccard similarity
-  (≥ 0.82). Optional *automatic extraction* asks the model to distil durable facts
-  from an exchange (default off; never stores secrets).
-- **Documents** — import text, Markdown, code, CSV/JSON, HTML, and PDF/Office
-  files. Text is extracted (`pdftotext` for PDFs, `unzip` + markup stripping for
-  docx/pptx/xlsx/odt), chunked on paragraph boundaries with overlap, and ranked
-  the same way. Re-importing a path replaces the previous copy.
-- **Grounding** — retrieved memories and excerpts are injected as a clearly
-  delimited data block with instructions to treat it as reference, not
-  instructions. The chat bubble shows how many memories/excerpts grounded the
-  answer.
-- **MCP** — the protocol client is the official `@modelcontextprotocol/sdk`
-  (0.4.1), so handshake, framing, capability negotiation and timeouts behave
-  exactly as the specification says. Klyro lists a server's **tools**,
-  **resources** and **prompts**, can read a resource, and calls tools through
-  an approval-gated loop. The agent loop, the approval gates and the audit
-  trail around it remain ours.
-- **Integrations** — GitHub via a personal access token held in the encrypted
-  secret store: identify the account, list repositories and open issues
-  (PRs flagged), and create issues. Repository identifiers are validated before
-  any request leaves the machine.
+| Feature | Status | Notes |
+| --- | --- | --- |
+| Provider abstraction | ✅ | Ten providers, one contract. |
+| Pictures reach the model | ✅ | OpenCode (a file whose uri is the image — verified live: the model read a test picture and answered "Red"), Claude Code (stdin), Codex (`--image`), and the hosted providers. Antigravity's model call is a prompt and a model id with nowhere to put an image, so it says so plainly instead of answering as if the screen were blank. |
+| The Rust daemon | ✅ | **0.9.9:** `klyro-core` owns the hot path — it starts in 2.3 ms and lives in 4.3 MB, where the Electron app is 851 MB across ten processes. It speaks a small JSON-line protocol over loopback with a token, and the app hands it the provider configuration (keys in memory; the daemon never touches the encrypted file). **The OpenAI-shaped family and Ollama are in it; the local agents still go through the app.** |
+| Error handling | ✅ | Failures are surfaced per message with advice; a stalled stream fails after 90 s instead of hanging; a local server that is not running is reported as that, not as a broken internet. |
+| Latency | ✅ | The overlay reports time-to-first-token under every answer, and the answer cache makes a repeat instant. |
 
-## Studio (Stage D)
+## Part 5 — Deliberately not here
 
-**Meetings mode** — record a meeting (or use the overlay's live assist), transcribe
-in chunks, save, summarise, and act on the output: the post-meeting action agent
-turns action items into reviewed GitHub issues and records the outcome in a
-per-meeting ledger. *(Coding mode was cut in 0.3.1 — file work now flows through
-the desktop agent rather than a parallel surface.)*
-
-**Meeting intelligence** — record from the microphone; audio is transcribed in
-~15 second chunks and timestamped live. Saving stores the transcript locally and
-never uploads it anywhere except for transcription. **Summarize** turns a
-transcript into a short summary plus extracted action items (parsed from JSON,
-with a bullet-list fallback when a model ignores the format).
-
-**Workflows** — named, multi-step sequences that run inside a real conversation,
-so you can keep asking follow-ups afterwards. Steps are either a **prompt**
-(`{{input}}` and `{{prev}}` placeholders) or a **GitHub** fetch, and each step's
-output feeds the next. Three built-ins ship: *Standup from GitHub issues*,
-*Turn notes into action items*, and *Review a diff*.
-
-## First run (0.5.0)
-
-A first-time user does not read feature lists — they need to *see* the product
-work. The welcome tour is three steps and about twenty seconds:
-
-1. **Welcome** — what Klyro is, the hotkey (shown as a human-readable
-   accelerator), and the three things that matter. If no model is configured
-   yet, it says so plainly and offers to add a key, with a link to the
-   provider list.
-2. **Try it** — the tour captures the screen, asks a suggested question about
-   it, and shows the answer with the real latency badge. The question is
-   editable, with one-tap suggestions.
-3. **Done** — the tour closes and the app is ready.
-
-It never blocks: skip at any point, and Settings has *Show the welcome tour
-again* for anyone who wants it later.
-
-## Design system (0.3.4–0.3.5)
-
-The interface is built from a single token set rather than per-page CSS:
-
-- **Type** — bundled Inter Variable for the interface and JetBrains Mono for code
-  (no dependence on whatever fonts a machine happens to have).
-- **Colour** — one graphite palette, plus a *real* light theme: `system`, `dark`
-  and `light` now paint an actual light palette instead of an inverted dark one.
-  The theme is applied to `<html>`, so the whole app flips in a single paint.
-- **Surfaces** — a five-step elevation scale (base → secondary → raised →
-  active → elevated) with layered shadows and hairline borders.
-- **Controls** — switches instead of raw checkboxes, custom radios, a styled
-  range slider, focus rings on every interactive element, and consistent
-  hover/press motion (120–280 ms, and none of it when the OS asks for reduced
-  motion).
-- **Responsive shell** — the sidebar is a persistent rail on wide windows and a
-  drawer below 980 px; the window now opens at 1280 × 820.
-- **Review tooling** — `scripts/shots.cjs` boots the built app and captures
-  every surface (home, chat, workflows, integrations, panels, overlay, light
-  theme) so design changes can be judged on the real pixels, not by imagination.
-  `scripts/shot-rail.cjs` measures the collapsed sidebar for overflow.
-
-## Fixes found while reviewing the pixels (0.3.5)
-
-- **Text fields lost the caret after every character.** The panel hook
-  re-focused the panel whenever the app re-rendered (panels are handed a new
-  `onClose` function each time), so the agent's goal box threw the caret out
-  after one keystroke. The close callback now lives in a ref, and there is a
-  regression test that fails on the old behaviour.
-- **The Screen Assistant page was a duplicate** of the composer's share-screen
-  button, and its answer appeared in a different view than the capture. It is
-  now one flow inside Chat: capture attaches to the message, answer lands in
-  the same conversation. The "Screen" shortcut opens chat with the picker ready.
-- **Klyro captured itself.** A full-screen capture included Klyro's own window;
-  Klyro now hides for the moment of the capture, and its own windows are
-  filtered out of the source picker.
-- **The collapsed rail overflowed**: button labels were still rendered in the
-  68 px column. Labels are hidden, the workspace icons sit under the brand, and
-  the rail is now checked for overflow automatically.
-- **The source picker pushed the layout** and could fall off the bottom of the
-  window; it is now a compact popover above the composer.
-- **Empty conversations sat at the top** of a large empty canvas; the empty
-  state is centred and offers "Ask about my screen" directly.
-- **Monospace leaked onto buttons** next to the API-key field; the mono font is
-  now confined to the key itself.
-
-## Hardening, packaging & release (Stage E)
-
-**Security.** Beyond the Stage A baseline (sandboxed renderer, `contextIsolation`,
-origin-validated IPC, encrypted keys), a window may now *only* display Klyro's own
-renderer: navigation elsewhere is refused, real links are handed to the user's
-browser, embedded webviews cannot attach, and the permission policy grants
-microphone capture to Klyro's origin and nothing else. The production CSP is
-`default-src 'none'` with `object-src`, `base-uri`, `form-action` and
-`frame-ancestors` all disabled.
-
-**Accessibility.** Dialog semantics (`role="dialog"`, `aria-modal`) with focus moved
-into the panel on open, Escape to dismiss every panel, a live region for the chat
-transcript, labelled icon-only buttons, tab roles with `aria-selected`, visible
-focus rings, and `prefers-reduced-motion` support.
-
-**Performance.** The panels are code-split and load on first open, which also defers
-their data fetching, cutting the startup bundle from 656 kB to 594 kB (the rest
-lands in four chunks of 7–25 kB). The packaged asar keeps only runtime files:
-6.76 MB → 3.19 MB, with dependency licences retained.
-
-**Reliability.** Every model call is wrapped in an idle-timeout guard: 90 seconds
-of silence fails the request with a clear message instead of an endless spinner.
-
-**Packaging.** `npm run pack:linux` / `pack:win` produce unpacked builds;
-`npm run dist:linux` produces an **AppImage** and a **deb** (verified metadata,
-dependencies, desktop entry, icons and `StartupWMClass`), and `dist:win` produces
-the **NSIS** installer. `npm run smoke` boots the built app and asserts both windows
-render, the preload bridge is present, and the renderer logged no errors.
-
-## Delivery stages
-
-- **Stage A (done):** desktop shell, global shortcut, chat, screen
-  understanding, voice input, history, provider config.
-- **Stage B (done):** reliable computer-use automation (input control,
-  verification, permissions, cancellation, recovery).
-- **Stage C (done):** personal memory, local document understanding, first
-  integrations.
-- **Stage D (done):** meeting intelligence, reusable workflows; coding mode later cut (see 0.3.1).
-- **Stage E (done):** performance, security hardening, accessibility, packaging,
-  release automation.
-
-## Known limitations
-
-- Voice transcription requires an OpenAI-compatible provider (or local Whisper).
-- Desktop automation requires a system input backend (`xdotool` / `ydotool` /
-  `wtype` on Linux, `cliclick`/Accessibility on macOS, PowerShell on Windows).
-  Klyro detects this at runtime and shows the exact install command.
-- The agent plans one action per screenshot and re-observes after acting; it does
-  not yet run a separate verifier pass or learn from failures across runs.
-- Automation is limited to the primary display.
-- PDF import needs `pdftotext` (poppler-utils) and Office import needs `unzip`;
-  Klyro reports this per file rather than failing silently.
-- Retrieval is lexical (BM25) — no embeddings yet, so paraphrases can be missed.
-- Code citations are file-level; the index does not yet carry line ranges.
-- Meeting transcription cuts at ~15 second boundaries, so a word spanning a cut
-  can be lost; there is no live in-call overlay.
-- GitHub is the only integration so far.
-- Global shortcut registration fails silently if the OS already reserves it.
-- Windows installers must be built on Windows: electron-builder needs Wine to run
-  NSIS from Linux. The Linux build can still produce `release/win-unpacked` (a real
-  `Klyro.exe` with correct version resources and icon) for inspection.
-- macOS is not a supported release target; the `dmg` target exists but is untested.
-- The smoke check needs a display; on CI it runs under `xvfb-run`.
-- Code signing and notarisation are not configured — Windows SmartScreen and
-  Linux users will see an unsigned build.
+| Feature | Status | Why |
+| --- | --- | --- |
+| The chat workspace | ⬜ | A conversation app is a different product; the overlay has its own input and history. |
+| The desktop agent | ⬜ | Nothing in "answer my question now" needs a mouse and keyboard, and it is a large attack surface on a machine that is holding a meeting. |
+| Workflows | ⬜ | A batch feature for a workspace. |
+| The Meetings/Studio surface | ⬜ | Record-then-act-afterwards is not instant assistance. |
+| The GitHub integration | ⬜ | Filing issues is a workspace action. |
+| The MCP client | ⬜ | A tool protocol for agents that act on code — it moves to the IDE product. |
+| An editor | ⬜ | That is the second product: a Rust IDE where the model is yours to choose and each task goes to the cheapest model that can do it. |
