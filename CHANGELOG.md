@@ -4,6 +4,33 @@ All notable changes to Klyro are recorded here. Versions follow [SemVer](https:/
 
 ## [Unreleased]
 
+## [0.9.10] — 2026-10-21
+
+The meeting is heard, and the question is answered the moment it ends.
+
+### Fixed
+- **A question in a meeting was not answered until the recording chunk
+  ended — up to twenty seconds later.** The listen mode recorded in fixed
+  20-second chunks, transcribed each one, and only then decided whether it
+  held a question. A question that ended after two seconds was not even
+  transcribed until twenty.
+
+  It now listens for the *utterance*: the audio is recorded in small slices,
+  the room's level is watched, and the pause that ends a question ends it.
+  The question is transcribed on its own and answered at once.
+
+  | | before | now |
+  | --- | --- | --- |
+  | a question that ends after 2 s is answered | up to 20 s later | ~2 s later |
+  | what is transcribed | a 20-second chunk | just the question |
+  | what a silent stretch costs | a transcription request | nothing |
+
+  The silence gate still holds: a stretch of silence is never transcribed, so
+  a quiet meeting costs nothing.
+
+- A provider that cannot transcribe no longer repeats the same error for
+  every question in the meeting: the listen mode stops and says so once.
+
 ## [0.9.9] — 2026-10-21
 
 The daemon: the hot path leaves Electron.

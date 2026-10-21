@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Eye, EyeOff, Headphones, Loader2, Mic, Monitor, Square, X } from 'lucide-react'
 import {
   createSilenceWatcher,
+  createLevelWatcher,
+  UtteranceAssembler,
+  type LevelWatcher,
   isNoAnswer,
   isSpeech,
   listenPrompt,
@@ -19,7 +22,8 @@ import KlyroMark from './assets/logo/klyro-mark.svg'
 
 type AssistMode = 'idle' | 'recording' | 'listening'
 
-const CHUNK_MS = 20000
+/** How small the recorded slices are: the finer, the sooner a question ends. */
+const SLICE_MS = 250
 
 export default function OverlayApp() {
   const [text, setText] = useState('')
@@ -53,6 +57,12 @@ export default function OverlayApp() {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const mimeRef = useRef('audio/webm')
   const gateRef = useRef<SilenceWatcher | null>(null)
+  /** The room's level, while the listen mode is running. */
+  const levelRef = useRef<LevelWatcher | null>(null)
+  /** The recorded slices, waiting to become a question. */
+  const assemblerRef = useRef<UtteranceAssembler | null>(null)
+  /** The poll that notices a question has ended. */
+  const listenTimerRef = useRef<number | null>(null)
   const modeRef = useRef<AssistMode>('idle')
   const busyRef = useRef(false)
   const autoRef = useRef(true)
@@ -127,6 +137,13 @@ export default function OverlayApp() {
     recorderRef.current = null
     gateRef.current?.dispose()
     gateRef.current = null
+    if (listenTimerRef.current !== null) {
+      window.clearInterval(listenTimerRef.current)
+      listenTimerRef.current = null
+    }
+    levelRef.current?.dispose()
+    levelRef.current = null
+    assemblerRef.current = null
     chainRef.current = Promise.resolve()
     void window.klyro.setRecordingSticky(false)
   }
@@ -513,13 +530,51 @@ export default function OverlayApp() {
       setAnswer('')
       const recorder = recorderRef.current
       if (!recorder) return
+      // The room is watched, and the audio is recorded in small slices, so a
+      // question is handed over the moment it ends — not when a recording
+      // chunk happens to finish.
+      const watcher = createLevelWatcher(streamRef.current as MediaStream)
+      levelRef.current = watcher
+      const assembler = new UtteranceAssembler()
+      assemblerRef.current = assembler
       recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) void queueChunk(new Blob([event.data], { type: mimeRef.current }))
+        if (event.data.size === 0) return
+        assembler.push(new Blob([event.data], { type: mimeRef.current }))
       }
-      recorder.start(CHUNK_MS)
+      recorder.start(SLICE_MS)
+      // Every 100 ms: has the question just ended?
+      listenTimerRef.current = window.setInterval(() => {
+        const utterance = assembler.takeEndedUtterance(watcher)
+        if (!utterance) return
+        void handleQuestion(utterance)
+      }, 100)
     } catch (error) {
       setAssistNote((error as Error).message)
       teardownRecording()
+    }
+  }
+
+  /**
+   * A question was heard. Transcribe it, show it, and answer it.
+   */
+  async function handleQuestion(utterance: Blob): Promise<void> {
+    try {
+      const text = await transcribeBlob(utterance)
+      if (!text) return
+      const next = [...transcript.slice(-7), text]
+      setTranscript(next)
+      if (autoRef.current && !busyRef.current && looksLikeQuestion(text)) {
+        await askAssist(listenPrompt(next))
+      }
+    } catch (error) {
+      const message = (error as Error).message
+      setAssistNote(message)
+      // A provider that cannot transcribe will not transcribe the next
+      // question either: stop listening and say so once, instead of showing
+      // the same error for every question in the meeting.
+      if (/not supported|cannot transcribe|transcription/i.test(message)) {
+        await stopListening()
+      }
     }
   }
 
@@ -527,32 +582,17 @@ export default function OverlayApp() {
     modeRef.current = 'idle'
     setMode('idle')
     await stopRecorder()
-    gateRef.current?.dispose()
-    gateRef.current = null
+    if (listenTimerRef.current !== null) {
+      window.clearInterval(listenTimerRef.current)
+      listenTimerRef.current = null
+    }
+    levelRef.current?.dispose()
+    levelRef.current = null
+    assemblerRef.current = null
     chainRef.current = Promise.resolve()
     void window.klyro.setRecordingSticky(false)
   }
 
-  function queueChunk(chunk: Blob): Promise<void> {
-    const run = async (): Promise<void> => {
-      try {
-        // The silence gate: a chunk with no voiced sample in its window costs
-        // nothing at all (the ~100 ms level poller decides, not the provider).
-        if (gateRef.current?.isSilentChunk(CHUNK_MS)) return
-        const text = await transcribeBlob(chunk)
-        if (!text) return
-        const next = [...transcript.slice(-7), text]
-        setTranscript(next)
-        if (autoRef.current && !busyRef.current && looksLikeQuestion(text)) {
-          await askAssist(listenPrompt(next))
-        }
-      } catch (error) {
-        setAssistNote((error as Error).message)
-      }
-    }
-    chainRef.current = chainRef.current.then(run, run)
-    return chainRef.current
-  }
 
   const assistBusy = mode !== 'idle'
 

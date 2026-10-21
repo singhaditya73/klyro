@@ -92,6 +92,12 @@ is be fast, private and quiet enough for a live meeting.
 
 - **Overlay startup** — the window is created at launch, so the hotkey only
   pays a fade. Keep it that way, and keep the daemon warm.
+- **The meeting is heard, and the question is answered the moment it ends**
+  (0.9.10). The listen mode used to record in fixed 20-second chunks, so a
+  question that ended after two seconds was not transcribed until twenty. It
+  now records in small slices, watches the room's level, and treats the pause
+  that ends a question as the end of it: the question is transcribed on its own
+  and answered at once — about two seconds later rather than up to twenty.
 - **Context** — the chat pipeline sends up to 40 turns of history. An overlay
   question does not need a transcript; it needs the screen, the question and
   the last line or two. The overlay gets a short context.
