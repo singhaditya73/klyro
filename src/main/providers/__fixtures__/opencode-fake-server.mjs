@@ -19,7 +19,7 @@ function json(response, status, body) {
   response.end(payload)
 }
 
-const server = createServer((request, response) => {
+const server = createServer(async (request, response) => {
   const url = new URL(request.url || '/', `http://127.0.0.1:${port}`)
   const path = url.pathname
 
@@ -74,8 +74,10 @@ const server = createServer((request, response) => {
   const promptMatch = path.match(/^\/api\/session\/([^/]+)\/prompt$/)
   if (promptMatch && request.method === 'POST') {
     const sessionId = promptMatch[1]
+    const body = await readBody(request)
+    const files = Array.isArray(body.files) ? body.files : []
     const list = messages.get(sessionId) || []
-    list.push({ id: 'msg_user', type: 'user', time: { created: Date.now() }, text: 'question' })
+    list.push({ id: 'msg_user', type: 'user', time: { created: Date.now() }, text: body.text ?? '', files })
     messages.set(sessionId, list)
     // The answer arrives a moment later, in two pieces.
     setTimeout(() => {
@@ -85,7 +87,14 @@ const server = createServer((request, response) => {
         type: 'assistant',
         time: { created: Date.now() },
         model: { id: 'test-model', providerID: 'openrouter' },
-        content: [{ type: 'text', text: 'Klyro ' }]
+        // When the prompt carried a picture, the answer says how many it got —
+        // that is what the test for image delivery looks at.
+        content: [
+          {
+            type: 'text',
+            text: `Klyro ${files.length > 0 ? `I can see ${files.length} image${files.length === 1 ? '' : 's'}. ` : ''}`
+          }
+        ]
       })
       messages.set(sessionId, current)
     }, 300)
@@ -112,6 +121,22 @@ const server = createServer((request, response) => {
 
   json(response, 404, { _tag: 'NotFoundError', message: 'not found' })
 })
+
+function readBody(request) {
+  return new Promise((resolve) => {
+    let body = ''
+    request.on('data', (chunk) => {
+      body += chunk
+    })
+    request.on('end', () => {
+      try {
+        resolve(JSON.parse(body))
+      } catch {
+        resolve({ text: '' })
+      }
+    })
+  })
+}
 
 server.listen(port, '127.0.0.1', () => {
   process.stdout.write(`opencode fixture listening on ${port}\n`)

@@ -1,5 +1,5 @@
-import { existsSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { existsSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ProviderTestResult } from '@shared/types'
 import type { ChatOptions, ChatTurn, Provider, TestOptions } from './types'
@@ -113,7 +113,11 @@ export const codexProvider: Provider = {
     const args = ['exec', prompt]
     if (options.model && options.model.trim()) args.push('--model', options.model.trim())
 
+    // Codex takes an image as a file on disk, so the picture is written to a
+    // temporary file for the length of the call and removed afterwards.
+    const images = await writeImages(options.turns)
     try {
+      for (const file of images) args.push('--image', file)
       // Codex writes the final agent message to stdout; progress goes to
       // stderr. That keeps the answer reliable without depending on the exact
       // shape of its JSONL event stream.
@@ -123,6 +127,39 @@ export const codexProvider: Provider = {
         throw new ProviderError(error.message.slice(0, 500), { kind: 'bad_request', provider: PROVIDER })
       }
       throw new ProviderError((error as Error).message, { kind: 'bad_request', provider: PROVIDER })
+    } finally {
+      // The pictures were only ever meant for this call.
+      for (const file of images) {
+        try {
+          rmSync(file, { force: true })
+        } catch {
+          // A leftover in the temp folder is not worth an error.
+        }
+      }
     }
   }
+}
+
+/**
+ * Write the images of the newest turn to temporary files.
+ *
+ * The Codex CLI takes an image as a path, so the bytes have to be on disk for
+ * the length of the call.
+ */
+async function writeImages(turns: ChatTurn[]): Promise<string[]> {
+  const images: string[] = []
+  for (let index = turns.length - 1; index >= 0; index -= 1) {
+    const turn = turns[index]
+    if (turn.role !== 'user' || !turn.images?.length) continue
+    for (const [position, image] of turn.images.entries()) {
+      const comma = image.dataUrl.indexOf(',')
+      const base64 = comma === -1 ? image.dataUrl : image.dataUrl.slice(comma + 1)
+      const extension = image.mime.split('/')[1] ?? 'png'
+      const file = join(tmpdir(), `klyro-image-${Date.now()}-${position}.${extension}`)
+      writeFileSync(file, Buffer.from(base64, 'base64'))
+      images.push(file)
+    }
+    break
+  }
+  return images
 }

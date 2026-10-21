@@ -4,9 +4,9 @@ import type { ChatStreamEvent, Conversation, ResponseStyle, SendChatRequest } fr
 import { IPC } from '@shared/ipc'
 import { logger } from '../logger'
 import { getProvider } from '../providers'
-import { DEFAULT_PROVIDERS } from '../providers/defaults'
+import { DEFAULT_PROVIDERS, PROVIDER_META } from '../providers/defaults'
 import { classifyThrown, toUserMessage } from '../providers/errors'
-import { resolveRoute } from '../providers/routing'
+import { providerCarriesImages, resolveRoute } from '../providers/routing'
 import type { ChatTurn } from '../providers/types'
 import { audit } from './audit'
 import { StreamStalledError, withIdleTimeout } from '../util/idle-timeout'
@@ -156,6 +156,15 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
         .filter(Boolean)
         .join('\n\n'),
       signal: abort.signal
+    }
+
+    // A picture that the provider cannot carry must not vanish without a word:
+    // the model would answer as if it had never seen the screen.
+    const attachments = request.attachments ?? []
+    if (attachments.length > 0 && !providerCarriesImages(providerId)) {
+      const note = `⚠️ **${PROVIDER_META[providerId]?.label ?? providerId} cannot carry an image.** The answer below is based on the text only — the picture did not reach the model. Switch to OpenCode, Claude Code, Codex or a vision provider to send pictures.`
+      text = note
+      emit({ type: 'delta', messageId: assistantId, text: note })
     }
 
     // Turbo: the same question about the same screen was answered moments

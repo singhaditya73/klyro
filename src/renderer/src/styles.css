@@ -1135,6 +1135,8 @@ button.pill:hover { background: var(--surface-hover); color: var(--text-primary)
 }
 .message--user .message__header { justify-content: flex-end; }
 .message--user .message__copy { margin-left: 0; }
+/* The pictures of a user's message belong with their words: on the same side. */
+.message--user .message__attachments { justify-content: flex-end; }
 
 .message--assistant .message__body { padding-left: 1px; }
 .message--error .message__body { color: var(--danger-hover); }

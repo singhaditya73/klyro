@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AppSettings, ProviderId } from '@shared/types'
 import { DEFAULT_PROVIDERS } from './defaults'
-import { assertVisionCapable, resolveRoute, visionSupport } from './routing'
+import { assertVisionCapable, providerCarriesImages, resolveRoute, visionSupport } from './routing'
 
 function settingsFor(activeProvider: ProviderId, model?: string): AppSettings {
   const providers = structuredClone(DEFAULT_PROVIDERS)
@@ -74,6 +74,23 @@ describe('visionSupport', () => {
     expect(visionSupport('ollama', 'llama3.1')).toBe('unknown')
     expect(visionSupport('openai-compatible', 'local-model')).toBe('unknown')
     expect(visionSupport('openai', '')).toBe('unknown')
+  })
+})
+
+describe('providerCarriesImages', () => {
+  it('knows which providers can hand a picture to the model', () => {
+    expect(providerCarriesImages('openai')).toBe(true)
+    expect(providerCarriesImages('anthropic')).toBe(true)
+    expect(providerCarriesImages('gemini')).toBe(true)
+    expect(providerCarriesImages('opencode')).toBe(true)
+    expect(providerCarriesImages('claude-code')).toBe(true)
+    expect(providerCarriesImages('codex')).toBe(true)
+  })
+
+  it('knows that the Antigravity model call is text only', () => {
+    // The Antigravity model call is a prompt and a model id: there is nowhere
+    // to put an image, so the user has to be told rather than left guessing.
+    expect(providerCarriesImages('antigravity')).toBe(false)
   })
 })
 

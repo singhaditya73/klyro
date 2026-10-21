@@ -71,6 +71,36 @@ export function visionSupport(providerId: ProviderId, model: string): VisionSupp
   return 'unknown'
 }
 
+/**
+ * Can this provider's *transport* carry an image at all?
+ *
+ * A model may well be able to read images while the way Klyro talks to it
+ * cannot deliver one — that is a different question from "does this model
+ * have vision", and it is the one that decides whether an attachment is
+ * useful. Providers whose transport has no way to pass an image say so here,
+ * so the user is told instead of the image being dropped in silence.
+ */
+export function providerCarriesImages(providerId: ProviderId): boolean {
+  switch (providerId) {
+    case 'openai':
+    case 'anthropic':
+    case 'gemini':
+    case 'groq':
+    case 'ollama':
+    case 'openai-compatible':
+    case 'opencode':
+    case 'claude-code':
+    case 'codex':
+      return true
+    // The Antigravity model call is a plain prompt and a model id: the
+    // transport has nowhere to put an image.
+    case 'antigravity':
+      return false
+    default:
+      return false
+  }
+}
+
 export interface RouteInput {
   settings: AppSettings
   /** Resolved from the encrypted store by the caller (keeps this pure). */

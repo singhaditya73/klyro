@@ -23,6 +23,29 @@ All notable changes to Klyro are recorded here. Versions follow [SemVer](https:/
   the first message held only a tool call. The whole turn is now read, in
   order, and the answer ends when the server says the turn is done.
 
+## [0.9.6] — 2026-10-21
+
+The picture reaches the model.
+
+### Fixed
+- **An attached image never made it to the model.** OpenCode, Claude Code and
+  Codex all had a way to carry a picture — the server took it, the CLI took it,
+  the CLI took a file — but Klyro sent the text only, so the model answered as
+  if the screen were blank. Now:
+  - **OpenCode** sends the picture with the question (as a file whose uri is
+    the image itself). Verified live against a real server: the model read a
+    test picture and answered "Red" for the red half.
+  - **Claude Code** reads the picture from stdin as part of the message.
+  - **Codex** gets the picture as a file, the way `codex exec --image` takes
+    one.
+- **Antigravity now says so instead of dropping the picture in silence.** Its
+  model call is a prompt and a model id — there is nowhere to put an image —
+  so the answer now opens with a clear note that the model saw only the text.
+  A picture that vanishes without a word is worse than one that is refused.
+- **A picture in your own message sat on the opposite side from your words.**
+  Your words are aligned to the right; the picture was aligned to the left, so
+  the two looked like separate messages. They are on the same side now.
+
 ## [0.9.5] — 2026-10-21
 
 The question leaves the box the moment you press Send.

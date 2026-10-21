@@ -58,6 +58,27 @@ describe('OpenCode local provider', () => {
     expect(chunks.length).toBeGreaterThan(1)
   }, 30000)
 
+  it('sends the picture with the question, so the model can see it', async () => {
+    const chunks: string[] = []
+    for await (const chunk of openCodeProvider.chat({
+      model: 'minimax/minimax-m3.1-flash:free',
+      baseUrl: BASE_URL,
+      apiKey: PASSWORD,
+      turns: [
+        {
+          role: 'user',
+          text: 'What is on this screen?',
+          images: [{ dataUrl: 'data:image/png;base64,AAAA', mime: 'image/png' }]
+        }
+      ]
+    })) {
+      chunks.push(chunk)
+    }
+    // The server counts the pictures it was given: one means the image
+    // reached it, and the model could see it.
+    expect(chunks.join('')).toContain('1 image')
+  }, 30000)
+
   it('passes its own connection test', async () => {
     const result = await openCodeProvider.test({ baseUrl: BASE_URL, apiKey: PASSWORD, model: 'minimax/minimax-m3.1-flash:free' })
     expect(result.ok).toBe(true)

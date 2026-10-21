@@ -201,6 +201,24 @@ function turnsToText(turns: ChatTurn[]): string {
     .join('\n\n')
 }
 
+/**
+ * The images of the newest turn, as data URLs.
+ *
+ * OpenCode takes an image as a file whose `url` is a data URL, so the bytes
+ * Klyro already has are enough — nothing has to be written to disk.
+ */
+function turnImages(turns: ChatTurn[]): { uri: string; name: string }[] {
+  for (let index = turns.length - 1; index >= 0; index -= 1) {
+    const turn = turns[index]
+    if (turn.role !== 'user' || !turn.images?.length) continue
+    return turn.images.map((image, position) => ({
+      uri: image.dataUrl,
+      name: `klyro-image-${position + 1}.${image.mime.split('/')[1] ?? 'png'}`
+    }))
+  }
+  return []
+}
+
 /** The text of an assistant message, from either API generation. */
 function textOf(message: OpenCodeMessage): string {
   const parts = message.content ?? message.parts ?? []
@@ -239,6 +257,7 @@ export const openCodeProvider: Provider = {
     const baseUrl = trimSlash(options.baseUrl || DEFAULT_BASE_URL)
     const prompt = turnsToText(options.turns)
     if (!prompt.trim()) return
+    const images = turnImages(options.turns)
 
     const health = await probeOpenCode(baseUrl)
     if (!health.healthy) {
@@ -249,10 +268,10 @@ export const openCodeProvider: Provider = {
     }
 
     if (health.generation === 'v1') {
-      yield* chatV1(baseUrl, options.apiKey, options.model, prompt)
+      yield* chatV1(baseUrl, options.apiKey, options.model, prompt, images)
       return
     }
-    yield* chatV2(baseUrl, options.apiKey, options.model, prompt)
+    yield* chatV2(baseUrl, options.apiKey, options.model, prompt, images)
   }
 }
 
@@ -285,7 +304,8 @@ async function* chatV1(
   baseUrl: string,
   apiKey: string | null,
   model: string | undefined,
-  prompt: string
+  prompt: string,
+  images: { uri: string; name: string }[]
 ): AsyncGenerator<string, void, unknown> {
   const session = await request<{ id?: string }>(baseUrl, apiKey, '/session', {
     method: 'POST',
@@ -298,7 +318,16 @@ async function* chatV1(
     method: 'POST',
     body: JSON.stringify({
       model: model ? { providerID: 'opencode', modelID: model } : undefined,
-      parts: [{ type: 'text', text: prompt }]
+      // A file part carries the image as a data URL.
+      parts: [
+        { type: 'text', text: prompt },
+        ...images.map((image) => ({
+          type: 'file',
+          mime: image.uri.startsWith('data:') ? (image.uri.slice(5).split(';')[0] ?? 'image/png') : 'image/png',
+          filename: image.name,
+          url: image.uri
+        }))
+      ]
     })
   })
 
@@ -326,7 +355,8 @@ async function* chatV2(
   baseUrl: string,
   apiKey: string | null,
   model: string | undefined,
-  prompt: string
+  prompt: string,
+  images: { uri: string; name: string }[]
 ): AsyncGenerator<string, void, unknown> {
   const created = await request<{ data?: { id?: string } }>(baseUrl, apiKey, '/api/session', {
     method: 'POST',
@@ -347,7 +377,8 @@ async function* chatV2(
 
   await request<unknown>(baseUrl, apiKey, `/api/session/${sessionId}/prompt`, {
     method: 'POST',
-    body: JSON.stringify({ text: prompt })
+    // An image travels as a file whose uri is a data URL.
+    body: JSON.stringify({ text: prompt, ...(images.length ? { files: images } : {}) })
   })
 
   let delivered = ''

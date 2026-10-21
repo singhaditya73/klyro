@@ -85,6 +85,27 @@ function turnsToPrompt(turns: ChatTurn[]): string {
     .join('\n\n')
 }
 
+/**
+ * The images of the newest turn.
+ *
+ * The CLI takes an image as a base64 content block, so the bytes Klyro has are
+ * enough — the picture never has to be written to disk.
+ */
+function turnImages(turns: ChatTurn[]): { mime: string; data: string }[] {
+  for (let index = turns.length - 1; index >= 0; index -= 1) {
+    const turn = turns[index]
+    if (turn.role !== 'user' || !turn.images?.length) continue
+    return turn.images.map((image) => {
+      const comma = image.dataUrl.indexOf(',')
+      return {
+        mime: image.mime,
+        data: comma === -1 ? image.dataUrl : image.dataUrl.slice(comma + 1)
+      }
+    })
+  }
+  return []
+}
+
 /** The text of a Claude assistant message. */
 function textOf(message: ClaudeEvent): string {
   return (message.message?.content ?? [])
@@ -140,17 +161,41 @@ export const claudeCodeProvider: Provider = {
     }
     const prompt = turnsToPrompt(options.turns)
     if (!prompt.trim()) return
+    const images = turnImages(options.turns)
 
-    const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose']
+    // Without an image the prompt goes in as an argument, which is the
+    // simplest form. With one, the CLI reads a JSON message from stdin so
+    // the picture can travel with it.
+    const args = images.length
+      ? ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose']
+      : ['-p', prompt, '--output-format', 'stream-json', '--verbose']
     if (options.model && options.model.trim()) args.push('--model', options.model.trim())
 
     const command = process.platform === 'win32' ? `"${binary}"` : binary
     const child = spawn(command, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: [images.length ? 'pipe' : 'ignore', 'pipe', 'pipe'],
       env: process.env,
       windowsHide: true,
       shell: process.platform === 'win32'
     })
+
+    if (images.length) {
+      const message = {
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            ...images.map((image) => ({
+              type: 'image',
+              source: { type: 'base64', media_type: image.mime, data: image.data }
+            }))
+          ]
+        }
+      }
+      child.stdin?.write(`${JSON.stringify(message)}\n`)
+      child.stdin?.end()
+    }
 
     const controller = new AbortController()
     const onAbort = (): void => controller.abort()
