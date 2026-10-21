@@ -112,4 +112,14 @@ describe('classifyThrown', () => {
     expect(classified.endpoint).toBe('api.groq.com')
     expect(classified.message).toContain('Could not reach Groq at api.groq.com')
   })
+
+  it('does not send a local server to the router when it is simply not running', () => {
+    const refused = Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:1234'), { code: 'ECONNREFUSED' })
+    const classified = classifyThrown(refused, {
+      provider: 'openai-compatible',
+      endpoint: 'localhost:1234'
+    })
+    expect(classified.message).toContain('local server is running')
+    expect(classified.message).not.toContain('internet connection')
+  })
 })

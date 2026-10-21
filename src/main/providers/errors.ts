@@ -89,6 +89,19 @@ export function extractDetail(body: string): string {
   return redactString(text.replace(/\s+/g, ' ')).slice(0, MAX_DETAIL)
 }
 
+/**
+ * Is this endpoint on this machine?
+ *
+ * A local server that is not running is fixed by starting it — telling the
+ * user to check their internet connection would send them in the wrong
+ * direction entirely.
+ */
+function isLocalEndpoint(endpoint?: string): boolean {
+  if (!endpoint) return false
+  const host = endpoint.toLowerCase().split(':')[0]
+  return host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host === '[::1]' || host === '::1'
+}
+
 function messageFor(
   kind: ProviderErrorKind,
   label: string,
@@ -106,8 +119,13 @@ function messageFor(
       return `${label} is rate limiting requests right now. Wait a few seconds and try again.${tail}`
     case 'timeout':
       return detail || `${label} stopped responding before finishing. Try again.`
-    case 'network':
-      return `Could not reach ${label}${endpoint ? ` at ${endpoint}` : ''}. Check your internet connection and the endpoint URL in Settings.${tail}`
+    case 'network': {
+      const where = endpoint ? ` at ${endpoint}` : ''
+      const advice = isLocalEndpoint(endpoint)
+        ? 'Check that the local server is running, and the endpoint URL in Settings.'
+        : 'Check your internet connection and the endpoint URL in Settings.'
+      return `Could not reach ${label}${where}. ${advice}${tail}`
+    }
     case 'server':
       return `${label} had a server error${status ? ` (${status})` : ''}. This is usually temporary — try again.${tail}`
     case 'bad_request':
