@@ -9,7 +9,8 @@ export const PROVIDER_IDS: ProviderId[] = [
   'openai-compatible',
   'opencode',
   'claude-code',
-  'codex'
+  'codex',
+  'antigravity'
 ]
 
 export const PROVIDER_META: Record<
@@ -41,6 +42,11 @@ export const PROVIDER_META: Record<
     label: 'Codex CLI (local agent)',
     requiresKey: false,
     keyLabel: 'Not required — it uses your Codex login'
+  },
+  antigravity: {
+    label: 'Antigravity (local agent IDE)',
+    requiresKey: false,
+    keyLabel: 'Not required — it uses your Antigravity session'
   }
 }
 
@@ -60,7 +66,10 @@ export const DEFAULT_PROVIDERS: Record<ProviderId, ProviderSettings> = {
   // picks its own default when empty).
   'claude-code': { baseUrl: '', model: '' },
   // The Codex CLI runs headless on this machine; the model is optional.
-  codex: { baseUrl: '', model: '' }
+  codex: { baseUrl: '', model: '' },
+  // The model id is an Antigravity catalogue id (e.g. MODEL_PLACEHOLDER_M35).
+  // The endpoint is discovered on localhost; this is a marker, not a URL.
+  antigravity: { baseUrl: 'local://antigravity', model: '' }
 }
 
 export const DEFAULT_TRANSCRIBE_MODEL = 'whisper-1'

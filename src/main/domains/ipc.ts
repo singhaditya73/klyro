@@ -53,7 +53,9 @@ function handle<A extends unknown[], R>(
   })
 }
 
-const providerIdSchema = z.enum(['openai', 'anthropic', 'gemini', 'groq', 'ollama', 'openai-compatible'])
+/** Derived from the canonical provider list so a new provider cannot be
+ *  forgotten here (which silently rejected the setting change). */
+const providerIdSchema = z.enum(PROVIDER_IDS as [ProviderId, ...ProviderId[]])
 
 const idSchema = z.string().min(1).max(120)
 const querySchema = z.string().max(500)

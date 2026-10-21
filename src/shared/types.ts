@@ -12,6 +12,7 @@ export type ProviderId =
   | 'openai-compatible'
   | 'opencode'
   | 'claude-code'
+  | 'antigravity'
   | 'codex'
 
 export type ResponseStyle = 'concise' | 'balanced' | 'detailed'

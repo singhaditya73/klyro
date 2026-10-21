@@ -238,6 +238,30 @@ class AntigravityDomain {
     this.connection = null
   }
 
+  /**
+   * Ask one of Antigravity's models a question.
+   *
+   * The language server exposes a direct model call: a model id and a prompt
+   * in, one answer out. That is all Klyro needs to use the user's Antigravity
+   * models (Claude Opus 4.6, Sonnet 4.6, Gemini 3.5 …) as a provider.
+   */
+  async complete(model: string, prompt: string): Promise<string> {
+    const connection = await this.connect()
+    if (!connection) {
+      throw new Error('Antigravity is not running. Open the Antigravity IDE, or start its service from Integrations.')
+    }
+    const result = await this.rpc(connection.port, connection.token, 'GetModelResponse', {
+      ...METADATA,
+      model,
+      prompt
+    })
+    if (!result.ok) {
+      throw new Error(result.error ?? 'Antigravity did not answer.')
+    }
+    const payload = result.data as { response?: string } | null
+    return payload?.response ?? ''
+  }
+
   /** The account, plan, quota and model catalogue, if Antigravity is running. */
   async status(): Promise<AntigravityStatus> {
     if (process.platform !== 'linux') {

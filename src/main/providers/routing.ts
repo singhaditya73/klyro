@@ -50,7 +50,9 @@ const VISION_PATTERNS: Record<ProviderId, RegExp> = {
   // Claude Code serves whatever the user's subscription reaches.
   'claude-code': /(vision|llava|claude|gpt-4o|gemini)/i,
   // Codex serves whatever the user's login reaches.
-  codex: /(vision|llava|gpt-4o|gpt-5|o3|codex)/i
+  codex: /(vision|llava|gpt-4o|gpt-5|o3|codex)/i,
+  // Antigravity serves Claude, Gemini and GPT-OSS models.
+  antigravity: /(vision|llava|claude|gemini|gpt-oss|gpt_oss)/i
 }
 
 export function visionSupport(providerId: ProviderId, model: string): VisionSupport {

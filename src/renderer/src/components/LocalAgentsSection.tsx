@@ -128,6 +128,30 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
     }
   }, [refreshAntigravity])
 
+  /** Make Antigravity the active provider, on a free model when there is one. */
+  const useAntigravityModels = useCallback(async (): Promise<void> => {
+    if (!antigravity?.running) return
+    setAgentNote(null)
+    try {
+      const models = antigravity.models
+      const preferred =
+        models.find((model) => model.quota === 1 && /opus|sonnet|gemini/i.test(model.name)) ??
+        models.find((model) => /opus|sonnet|gemini/i.test(model.name)) ??
+        models[0]
+      const settings = await window.klyro.getSettings()
+      await window.klyro.updateSettings({
+        activeProvider: 'antigravity',
+        providers: {
+          ...settings.providers,
+          antigravity: { baseUrl: 'local://antigravity', model: preferred?.id ?? '' }
+        }
+      })
+      setAgentNote(`Klyro will use Antigravity's ${preferred?.name ?? 'models'} from now on.`)
+    } catch (error) {
+      setAgentNote((error as Error).message)
+    }
+  }, [antigravity])
+
   const healthy = (agents ?? []).filter((agent) => agent.healthy)
   const others = (agents ?? []).filter((agent) => !agent.healthy)
   // OpenCode that is installed but not answering: we can start it ourselves.
@@ -288,10 +312,20 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
                 {antigravity.service === 'klyro' ? ' (the service Klyro started)' : ' (the IDE\'s own service)'}.
               </div>
             </div>
-            <button className="btn btn--ghost btn--sm" onClick={() => void scan()}>
-              <RefreshCcw className="icon icon--xs" aria-hidden="true" />
-              <span>Refresh</span>
-            </button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button
+                className="btn btn--primary btn--sm"
+                onClick={() => void useAntigravityModels()}
+                disabled={startingAgent}
+              >
+                <Cpu className="icon icon--xs" aria-hidden="true" />
+                <span>Use these models</span>
+              </button>
+              <button className="btn btn--ghost btn--sm" onClick={() => void scan()}>
+                <RefreshCcw className="icon icon--xs" aria-hidden="true" />
+                <span>Refresh</span>
+              </button>
+            </div>
           </div>
           <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {antigravity.models.slice(0, 8).map((model) => (

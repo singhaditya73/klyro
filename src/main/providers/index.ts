@@ -7,6 +7,7 @@ import { ollama } from './ollama'
 import { openCodeProvider } from './opencode'
 import { claudeCodeProvider } from './claude-code'
 import { codexProvider } from './codex'
+import { antigravityProvider } from './antigravity'
 
 const registry: Record<ProviderId, Provider> = {
   openai: openAICompatible,
@@ -17,7 +18,8 @@ const registry: Record<ProviderId, Provider> = {
   ollama,
   opencode: openCodeProvider,
   'claude-code': claudeCodeProvider,
-  codex: codexProvider
+  codex: codexProvider,
+  antigravity: antigravityProvider
 }
 
 export function getProvider(id: ProviderId): Provider {
