@@ -23,6 +23,20 @@ All notable changes to Klyro are recorded here. Versions follow [SemVer](https:/
   the first message held only a tool call. The whole turn is now read, in
   order, and the answer ends when the server says the turn is done.
 
+## [0.9.5] — 2026-10-21
+
+The question leaves the box the moment you press Send.
+
+### Fixed
+- **Your question stayed in the input box while the model was answering.**
+  The composer cleared the field only after the whole answer had arrived, so
+  the text you had just sent was on screen twice: once in the conversation
+  and once in the box. The box is emptied the moment you press Send now; the
+  question is already in the conversation, and the answer streams in below.
+  If the question could not be sent at all, the text comes back.
+- The same in the Knowledge panel: asking a document emptied the field only
+  once the answer was done.
+
 ## [0.9.4] — 2026-10-21
 
 Pick the model you want — in every provider.

@@ -40,12 +40,15 @@ export function KnowledgePanel({ onClose }: Props) {
     if (!question || askBusy) return
     setAskBusy(true)
     setAskNote(null)
+    // The box empties as soon as the question is sent: the answer streams in
+    // the chat history, so the text has no reason to stay on screen.
+    setAskQuestion('')
     try {
       const conversation = await window.klyro.createConversation()
       await window.klyro.sendChat({ conversationId: conversation.id, content: question, pinnedDocumentId: documentId })
       setAskNote('Sent — the answer is streaming in your chat history.')
-      setAskQuestion('')
     } catch (error) {
+      setAskQuestion(question)
       setAskNote((error as Error).message)
     } finally {
       setAskBusy(false)

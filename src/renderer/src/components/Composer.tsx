@@ -82,9 +82,20 @@ export function Composer({
     if (busy) return
     const content = text.trim()
     if (!content && attachments.length === 0) return
-    await onSend(content, attachments)
+    // The box empties the moment you press Send. The question is already in
+    // the conversation and the answer streams in below, so there is no reason
+    // to keep the text on screen until the model is done.
+    const sent = attachments
     setText('')
     setAttachments([])
+    try {
+      await onSend(content, sent)
+    } catch (error) {
+      // The question never left the app: put it back rather than lose it.
+      setText(content)
+      setAttachments(sent)
+      setError((error as Error).message)
+    }
   }
 
   async function openSources(): Promise<void> {
