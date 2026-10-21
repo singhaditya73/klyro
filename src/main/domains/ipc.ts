@@ -508,6 +508,11 @@ export function registerIpcHandlers(): void {
   handle(IPC.localAgentsDetect, () => localAgents.detect())
   handle(IPC.antigravityStatus, () => antigravity.status())
   handle(IPC.antigravityStartService, () => antigravity.startService())
+  handle(IPC.antigravityConnect, () => antigravity.connect())
+  handle(IPC.antigravityDisconnect, () => {
+    antigravity.disconnect()
+    return { ok: true }
+  })
   handle(IPC.localAgentStartOpenCode, () => localAgentLauncher.startOpenCode())
   handle(IPC.localAgentConnectOpenCode, () => localAgentLauncher.connectOpenCode())
   handle(IPC.localAgentOpenCodeInstalled, () => ({ installed: Boolean(findOpenCodeBinary()) }))

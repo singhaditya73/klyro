@@ -121,11 +121,15 @@ interface KlyroApi {
   localAgentOpenCodeInstalled(): Promise<{ installed: boolean }>
   localAgentClis(): Promise<Array<{ id: string; name: string; installed: boolean; providerId: string; note: string }>>
   antigravityStartService(): Promise<{ started: boolean; error?: string; note?: string }>
+  antigravityConnect(): Promise<{ ok: boolean; error?: string; note?: string }>
+  antigravityDisconnect(): Promise<{ ok: boolean }>
   antigravityStatus(): Promise<{
     supported: boolean
     running: boolean
     installed?: boolean
     service?: 'ide' | 'klyro' | null
+    connected?: boolean
+    connectedAt?: string | null
     plan: string | null
     account: string | null
     models: Array<{ id: string; name: string; provider: string; quota: number | null }>

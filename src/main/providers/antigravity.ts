@@ -25,13 +25,16 @@ export const antigravityProvider: Provider = {
       if (!status.running) {
         return {
           ok: false,
-          detail: status.error ?? 'Antigravity is not running. Open the Antigravity IDE and try again.'
+          detail:
+            status.error ??
+            'Antigravity is not available. Open the Antigravity IDE and connect your account in Integrations.'
         }
       }
       const models = status.models.length
+      const where = status.connected ? ' — the IDE does not need to be open' : ''
       return {
         ok: true,
-        detail: `Antigravity is running (${status.plan ?? 'signed in'}) with ${models} model${models === 1 ? '' : 's'} available.`,
+        detail: `Antigravity is running (${status.plan ?? 'signed in'}) with ${models} model${models === 1 ? '' : 's'} available${where}.`,
         latencyMs: Date.now() - started
       }
     } catch (error) {

@@ -13,6 +13,7 @@ import { maintenance } from './domains/maintenance'
 import { mcp } from './domains/mcp'
 import { warmupScreenPermission } from './domains/screenshot'
 import { localAgentLauncher } from './domains/local-agent-launcher'
+import { antigravity } from './domains/antigravity'
 
 app.setName('Klyro')
 
@@ -101,6 +102,10 @@ if (!gotLock) {
     if (settingsDomain.get().screenPreWarm && process.platform === 'darwin') {
       void warmupScreenPermission()
     }
+    // If the user has connected Antigravity, start its agent service now so
+    // the first question does not wait for it. It fails quietly: the service
+    // is started again on demand.
+    void antigravity.warmUp()
     logger.info(`Klyro ${app.getVersion()} ready on ${process.platform}`)
 
     app.on('activate', () => {
@@ -118,5 +123,6 @@ if (!gotLock) {
     mcp.shutdown()
     // Never leave a server we started running behind us.
     localAgentLauncher.stopOpenCode()
+    antigravity.stopService()
   })
 }

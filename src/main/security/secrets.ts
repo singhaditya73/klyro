@@ -29,7 +29,15 @@ const PLAINTEXT_REFUSED =
  * plaintext keys are re-encrypted as soon as a keychain becomes available.
  */
 class SecretStore {
-  private readonly file = join(app.getPath('userData'), 'secrets.json')
+  /**
+   * Where the store lives. Resolved lazily: at import time the app may not be
+   * ready yet (and outside Electron there is no app at all), so the path is
+   * only looked up when the store is actually used.
+   */
+  private get file(): string {
+    return join(app.getPath('userData'), 'secrets.json')
+  }
+
   private data: SecretsFile = { encrypted: false, keys: {} }
   private ready = false
   private allowPlaintext = false

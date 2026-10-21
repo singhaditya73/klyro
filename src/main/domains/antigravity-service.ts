@@ -14,10 +14,17 @@ import { randomUUID } from 'node:crypto'
  * from the message's own descriptor in the server binary (`Metadata` in
  * exa.language_server_pb).
  *
- * The account token and the cascade model config still come from the IDE's
- * sidecar, so a fully headless agent needs those too; Klyro reports that
- * honestly instead of pretending.
+ * The account session comes from the IDE's sidecar, so a server Klyro starts
+ * needs a sidecar too: `antigravity-session.ts` replays a captured session to
+ * it, which is what makes the IDE unnecessary after a one-time connect.
  */
+
+/**
+ * The Antigravity cloud endpoint. The IDE points its language server at the
+ * "daily" host — the plain host rejects model calls with a quota error even
+ * though the account is entitled, so this has to match the IDE exactly.
+ */
+export const CLOUD_CODE_ENDPOINT = 'https://daily-cloudcode-pa.googleapis.com'
 
 /** Field numbers of the `Metadata` message, read out of the server binary. */
 const FIELD = {
@@ -113,32 +120,39 @@ function serverBinaryNames(): string[] {
   return ['language_server_linux_x64', 'language_server_linux_arm']
 }
 
-/** Start the language server the way the IDE does, and hand it our metadata. */
+/**
+ * Start the language server the way the IDE does, and hand it our metadata.
+ *
+ * `sidecar` points the server at a replay sidecar that stands in for the
+ * IDE's own extension server — that is how a server Klyro started gets an
+ * account session without the IDE running.
+ */
 export function startLanguageServer(
   serverBinary: string,
   extensionPath: string,
-  options: { apiKey?: string } = {}
+  options: { apiKey?: string; sidecar?: { port: number; token: string } } = {}
 ): { child: ChildProcess; token: string } {
   const token = randomUUID()
-  const child = spawn(
-    serverBinary,
-    [
-      '--csrf_token',
-      token,
-      '--app_data_dir',
-      'antigravity-ide',
-      '--subclient_type',
-      'ide',
-      '--cloud_code_endpoint',
-      'https://cloudcode-pa.googleapis.com'
-    ],
-    {
-      cwd: join(homedir(), '.local', 'share'),
-      stdio: ['pipe', 'pipe', 'pipe'],
-      detached: false,
-      env: process.env
-    }
-  )
+  const args = [
+    '--csrf_token',
+    token,
+    '--app_data_dir',
+    'antigravity-ide',
+    '--subclient_type',
+    'ide',
+    '--cloud_code_endpoint',
+    CLOUD_CODE_ENDPOINT
+  ]
+  if (options.sidecar) {
+    args.push('--extension_server_port', String(options.sidecar.port))
+    args.push('--extension_server_csrf_token', options.sidecar.token)
+  }
+  const child = spawn(serverBinary, args, {
+    cwd: join(homedir(), '.local', 'share'),
+    stdio: ['pipe', 'pipe', 'pipe'],
+    detached: false,
+    env: process.env
+  })
   const metadata = buildInitialMetadata({
     extensionPath,
     apiKey: options.apiKey ?? '',

@@ -43,6 +43,8 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
     running: boolean
     installed?: boolean
     service?: 'ide' | 'klyro' | null
+    connected?: boolean
+    connectedAt?: string | null
     plan: string | null
     models: Array<{ id: string; name: string; provider: string; quota: number | null }>
     endpoint: string | null
@@ -123,6 +125,36 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
       await refreshAntigravity()
     } catch (error) {
       setAgentNote((error as Error).message)
+    } finally {
+      setStartingAgent(false)
+    }
+  }, [refreshAntigravity])
+
+  /**
+   * The one-time connect: take a snapshot of the Antigravity account session
+   * while the IDE is running, so the IDE never has to be opened again.
+   */
+  const connectAntigravity = useCallback(async (): Promise<void> => {
+    setStartingAgent(true)
+    setAgentNote(null)
+    try {
+      const result = await window.klyro.antigravityConnect()
+      setAgentNote(result.error ?? result.note ?? null)
+      await refreshAntigravity()
+    } catch (error) {
+      setAgentNote((error as Error).message)
+    } finally {
+      setStartingAgent(false)
+    }
+  }, [refreshAntigravity])
+
+  /** Forget the saved session. */
+  const disconnectAntigravity = useCallback(async (): Promise<void> => {
+    setStartingAgent(true)
+    try {
+      await window.klyro.antigravityDisconnect()
+      setAgentNote('Antigravity disconnected. Klyro will not use it until you connect again.')
+      await refreshAntigravity()
     } finally {
       setStartingAgent(false)
     }
@@ -265,25 +297,26 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
         </div>
       )}
 
-      {antigravity && !antigravity.running && antigravity.installed && (
+      {antigravity && !antigravity.connected && antigravity.installed && (
         <div className="card" style={{ marginTop: 12 }}>
           <div className="card__row" style={{ flexWrap: 'wrap' }}>
             <span className="icon-tile">
               <Server className="icon icon--sm" aria-hidden="true" />
             </span>
             <div style={{ flex: 1, minWidth: 200 }}>
-              <div className="card__title">Antigravity is installed, not running</div>
+              <div className="card__title">Antigravity is installed, not connected</div>
               <div className="card__subtitle">
-                Klyro can start the Antigravity agent service itself — no need to open the IDE.
+                Connect your Antigravity account once — open the IDE and press Connect. After that Klyro uses its models
+                on its own, and the IDE never has to be opened again.
               </div>
             </div>
-            <button className="btn btn--primary btn--sm" onClick={() => void startAntigravityService()} disabled={startingAgent}>
+            <button className="btn btn--primary btn--sm" onClick={() => void connectAntigravity()} disabled={startingAgent}>
               {startingAgent ? (
                 <Loader2 className="icon icon--xs spin" aria-hidden="true" />
               ) : (
-                <Cpu className="icon icon--xs" aria-hidden="true" />
+                <Key className="icon icon--xs" aria-hidden="true" />
               )}
-              <span>{startingAgent ? 'Starting…' : 'Start the service'}</span>
+              <span>{startingAgent ? 'Connecting…' : 'Connect'}</span>
             </button>
           </div>
           {agentNote && (
@@ -294,7 +327,7 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
         </div>
       )}
 
-      {antigravity?.running && (
+      {antigravity?.connected && (
         <div className="card" style={{ marginTop: 12, borderColor: 'var(--border-default)' }}>
           <div className="card__row" style={{ flexWrap: 'wrap' }}>
             <span className="icon-tile">
@@ -305,41 +338,76 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
                 Antigravity
                 <span className="pill pill--ok">Connected</span>
                 {antigravity.plan && <span className="pill pill--accent">{antigravity.plan} plan</span>}
+                <span className="pill pill--ok">IDE not needed</span>
               </div>
               <div className="card__subtitle">
-                Read directly from the Antigravity agent on this machine — {antigravity.models.length} models, no
-                key and no bridge. Endpoint {antigravity.endpoint}
-                {antigravity.service === 'klyro' ? ' (the service Klyro started)' : ' (the IDE\'s own service)'}.
+                {antigravity.running ? (
+                  <>
+                    Read directly from the Antigravity agent on this machine — {antigravity.models.length} models, no key
+                    and no bridge. Endpoint {antigravity.endpoint}
+                    {antigravity.service === 'klyro' ? ' (the service Klyro started)' : ' (the IDE\'s own service)'}.
+                  </>
+                ) : (
+                  <>
+                    Your Antigravity account is saved, so Klyro can start the agent service itself — the IDE does not
+                    need to be open.
+                  </>
+                )}
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <button
-                className="btn btn--primary btn--sm"
-                onClick={() => void useAntigravityModels()}
-                disabled={startingAgent}
-              >
-                <Cpu className="icon icon--xs" aria-hidden="true" />
-                <span>Use these models</span>
-              </button>
+              {antigravity.running ? (
+                <button
+                  className="btn btn--primary btn--sm"
+                  onClick={() => void useAntigravityModels()}
+                  disabled={startingAgent}
+                >
+                  <Cpu className="icon icon--xs" aria-hidden="true" />
+                  <span>Use these models</span>
+                </button>
+              ) : (
+                <button
+                  className="btn btn--primary btn--sm"
+                  onClick={() => void startAntigravityService()}
+                  disabled={startingAgent}
+                >
+                  {startingAgent ? (
+                    <Loader2 className="icon icon--xs spin" aria-hidden="true" />
+                  ) : (
+                    <Cpu className="icon icon--xs" aria-hidden="true" />
+                  )}
+                  <span>{startingAgent ? 'Starting…' : 'Start the service'}</span>
+                </button>
+              )}
               <button className="btn btn--ghost btn--sm" onClick={() => void scan()}>
                 <RefreshCcw className="icon icon--xs" aria-hidden="true" />
                 <span>Refresh</span>
               </button>
+              <button className="btn btn--ghost btn--sm" onClick={() => void disconnectAntigravity()} disabled={startingAgent}>
+                <span>Disconnect</span>
+              </button>
             </div>
           </div>
-          <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {antigravity.models.slice(0, 8).map((model) => (
-              <span key={model.id} className="pill" title={`${model.id} · ${model.provider}`}>
-                {model.name}
-                {model.quota !== null && model.quota < 1 ? ` · ${Math.round(model.quota * 100)}%` : ''}
-              </span>
-            ))}
-            {antigravity.models.length > 8 && (
-              <span className="muted" style={{ fontSize: 11, alignSelf: 'center' }}>
-                +{antigravity.models.length - 8} more
-              </span>
-            )}
-          </div>
+          {antigravity.running && (
+            <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {antigravity.models.slice(0, 8).map((model) => (
+                <span key={model.id} className="pill" title={`${model.id} · ${model.provider}`}>
+                  {model.name}
+                  {model.quota !== null && model.quota < 1 ? ` · ${Math.round(model.quota * 100)}%` : ''}
+                </span>
+              ))}
+              {antigravity.models.length > 8 && (
+                <span className="muted" style={{ fontSize: 11, alignSelf: 'center' }}>
+                  +{antigravity.models.length - 8} more
+                </span>
+              )}
+            </div>
+          )}
+          {agentNote && (
+            <div className="notice notice--info" style={{ marginTop: 12 }}>
+              <span className="notice__body">{agentNote}</span>
+            </div>
+          )}
         </div>
       )}
 

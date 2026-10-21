@@ -840,12 +840,18 @@ export interface KlyroApi {
   localAgentClis(): Promise<Array<{ id: string; name: string; installed: boolean; providerId: string; note: string }>>
   /** Start Klyro's own Antigravity agent service (no IDE needed). */
   antigravityStartService(): Promise<{ started: boolean; error?: string; note?: string }>
+  /** Connect the Antigravity account once, so the IDE is not needed later. */
+  antigravityConnect(): Promise<{ ok: boolean; error?: string; note?: string }>
+  /** Forget the saved Antigravity session. */
+  antigravityDisconnect(): Promise<{ ok: boolean }>
   /** The local Antigravity IDE: plan, quota and the models it can reach. */
   antigravityStatus(): Promise<{
     supported: boolean
     running: boolean
     installed?: boolean
     service?: 'ide' | 'klyro' | null
+    connected?: boolean
+    connectedAt?: string | null
     plan: string | null
     account: string | null
     models: Array<{ id: string; name: string; provider: string; quota: number | null }>

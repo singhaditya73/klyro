@@ -6,6 +6,14 @@ import {
   listeningPorts,
   startLanguageServer
 } from './antigravity-service'
+import {
+  ReplaySidecar,
+  captureIdeState,
+  clearSession,
+  loadSession,
+  saveSession,
+  type AntigravitySession
+} from './antigravity-session'
 
 /**
  * Antigravity, the local agent IDE — read directly from its own service.
@@ -47,6 +55,10 @@ export interface AntigravityStatus {
   service?: 'ide' | 'klyro' | null
   /** The IDE is installed, so Klyro can start it. */
   installed?: boolean
+  /** Klyro has a saved Antigravity session, so the IDE is not needed. */
+  connected?: boolean
+  /** When the session was captured. */
+  connectedAt?: string | null
   plan: string | null
   account: string | null
   models: AntigravityModel[]
@@ -101,6 +113,10 @@ class AntigravityDomain {
   private connection: Connection | null = null
   /** A language server we started ourselves. */
   private service: { child: ChildProcess; token: string } | null = null
+  /** The sidecar that replays the saved session to our own language server. */
+  private sidecar: ReplaySidecar | null = null
+  /** Starting the service takes a few seconds, so it is only done once. */
+  private starting: Promise<Connection | null> | null = null
 
   /**
    * Talk to the language server, finding it if we have not yet.
@@ -109,12 +125,15 @@ class AntigravityDomain {
    * connection is never assumed to be good: every call re-checks, and a dead
    * connection is dropped so the next call discovers the new one.
    */
-  private async connect(force = false): Promise<Connection | null> {
+  private async connectToServer(force = false): Promise<Connection | null> {
     if (this.connection && !force) return this.connection
+    if (force && this.starting) return this.starting
     const servers = findLanguageServers()
     if (servers.length === 0) {
+      // The IDE is not running — but a saved session means Klyro can serve
+      // Antigravity on its own.
       this.connection = null
-      return null
+      return this.startOwnService()
     }
     // The server listens on several ports (one of them is HTTPS); ask them all
     // at once instead of waiting for each timeout in turn.
@@ -137,6 +156,59 @@ class AntigravityDomain {
         }
       : null
     return this.connection
+  }
+
+  /**
+   * Start Antigravity's language server ourselves and feed it the saved
+   * session — this is what makes the IDE unnecessary after the one-time
+   * connect.
+   */
+  private async startOwnService(): Promise<Connection | null> {
+    if (this.starting) return this.starting
+    const session = loadSession()
+    if (!session) return null
+    const extension = findAntigravityExtension()
+    if (!extension) return null
+
+    this.starting = (async () => {
+      try {
+        const sidecar = new ReplaySidecar(session)
+        const sidecarPort = await sidecar.listen()
+        this.sidecar = sidecar
+        const started = startLanguageServer(extension.serverBinary, extension.extensionPath, {
+          sidecar: { port: sidecarPort, token: sidecar.token }
+        })
+        this.service = { child: started.child, token: started.token }
+        // The server binds its ports a moment after it starts.
+        for (let attempt = 0; attempt < 30; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 500))
+          const candidates = listeningPorts(String(started.child.pid))
+          const probes = await Promise.all(
+            candidates.map(async (port) => {
+              const probe = await this.rpc(port, started.token, 'GetUserStatus', METADATA, 2500)
+              return probe.ok ? port : null
+            })
+          )
+          const port = probes.find((value) => value !== null)
+          if (port) {
+            this.connection = { port, token: started.token, pid: String(started.child.pid), ours: true }
+            return this.connection
+          }
+        }
+      } catch {
+        // Fall through: the caller reports that Antigravity is not available.
+      }
+      this.service = null
+      this.sidecar?.close()
+      this.sidecar = null
+      return null
+    })()
+
+    try {
+      return await this.starting
+    } finally {
+      this.starting = null
+    }
   }
 
   /** One Connect-RPC call against the language server. */
@@ -187,9 +259,9 @@ class AntigravityDomain {
    * IDE uses — so Klyro can talk to Antigravity without the IDE being open.
    *
    * The server needs an initial-metadata protobuf on stdin (built from the
-   * descriptor in the binary) and, for a signed-in agent, the account token
-   * and the model config that normally come from the IDE's sidecar. This
-   * reports honestly what is missing rather than pretending.
+   * descriptor in the binary) and, for a signed-in agent, the account session
+   * that normally comes from the IDE's sidecar. With a saved session Klyro
+   * replays that itself.
    */
   async startService(): Promise<{ started: boolean; error?: string; note?: string }> {
     if (process.platform !== 'linux') {
@@ -199,42 +271,97 @@ class AntigravityDomain {
     if (!extension) {
       return { started: false, error: 'The Antigravity IDE is not installed on this machine.' }
     }
-    let child: ChildProcess
-    let token: string
-    try {
-      const started = startLanguageServer(extension.serverBinary, extension.extensionPath)
-      child = started.child
-      token = started.token
-    } catch (error) {
-      return { started: false, error: `Could not start the Antigravity service: ${(error as Error).message}` }
-    }
-    this.service = { child, token }
-    // Give the server a moment to bind its ports.
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 500))
-      const connection = await this.connect(true)
-      if (connection) {
-        return {
-          started: true,
-          note: 'The Antigravity service is running. Sign-in and model configuration still come from the IDE the first time.'
-        }
+    const session = loadSession()
+    if (!session) {
+      return {
+        started: false,
+        error:
+          'Connect your Antigravity account first — open the Antigravity IDE once and press Connect in Integrations.'
       }
     }
+    const connection = await this.startOwnService()
+    if (!connection) {
+      return { started: false, error: 'The Antigravity service did not answer. Try again in a moment.' }
+    }
     return {
-      started: false,
-      error: 'The Antigravity service did not answer. Open the Antigravity IDE once so it can finish signing in.'
+      started: true,
+      note: 'The Antigravity service is running. The Antigravity IDE does not need to be open.'
+    }
+  }
+
+  /**
+   * The one-time connect.
+   *
+   * The IDE owns the account session, so it has to be running for this. We
+   * take a snapshot of what its sidecar hands the language server and save it;
+   * from then on Klyro can start Antigravity's service itself and the IDE
+   * never has to be opened again.
+   */
+  async connect(): Promise<{ ok: boolean; error?: string; note?: string }> {
+    if (process.platform !== 'linux') {
+      return { ok: false, error: 'The Antigravity integration is currently Linux-only.' }
+    }
+    // Our own service has a sidecar too (the replay one) — it is not the IDE.
+    const ours = this.service ? [String(this.service.child.pid)] : []
+    const result = await captureIdeState(1200, ours)
+    if (!result.ok) {
+      return { ok: false, error: result.error }
+    }
+    const session: AntigravitySession = {
+      capturedAt: new Date().toISOString(),
+      topics: result.topics ?? {}
+    }
+    if (!session.topics['uss-oauth']) {
+      return {
+        ok: false,
+        error:
+          'Antigravity did not hand over an account session. Sign in to Antigravity in the IDE, then try again.'
+      }
+    }
+    saveSession(session)
+    return {
+      ok: true,
+      note: 'Connected. Klyro can use your Antigravity models now — the IDE does not have to be open.'
+    }
+  }
+
+  /** Forget the saved session. */
+  disconnect(): void {
+    clearSession()
+    this.stopService()
+  }
+
+  /** Is there a saved session? */
+  isConnected(): boolean {
+    return loadSession() !== null
+  }
+
+  /**
+   * Start the service ahead of time, so the first question does not wait for
+   * it. Used at launch; failures are quiet, because the service is started
+   * again on demand.
+   */
+  async warmUp(): Promise<void> {
+    try {
+      if (!loadSession()) return
+      await this.connectToServer(true)
+    } catch {
+      // Nothing to do: the service is started on demand.
     }
   }
 
   /** Stop a service we started. */
   stopService(): void {
-    if (!this.service) return
-    try {
-      this.service.child.kill()
-    } catch {
-      // Already gone.
+    if (this.service) {
+      try {
+        this.service.child.kill()
+      } catch {
+        // Already gone.
+      }
     }
     this.service = null
+    this.sidecar?.close()
+    this.sidecar = null
     this.connection = null
   }
 
@@ -246,9 +373,11 @@ class AntigravityDomain {
    * models (Claude Opus 4.6, Sonnet 4.6, Gemini 3.5 …) as a provider.
    */
   async complete(model: string, prompt: string): Promise<string> {
-    const connection = await this.connect()
+    const connection = await this.connectToServer()
     if (!connection) {
-      throw new Error('Antigravity is not running. Open the Antigravity IDE, or start its service from Integrations.')
+      throw new Error(
+        'Antigravity is not available. Open the Antigravity IDE, or connect your account in Integrations.'
+      )
     }
     const result = await this.rpc(connection.port, connection.token, 'GetModelResponse', {
       ...METADATA,
@@ -275,24 +404,30 @@ class AntigravityDomain {
         error: 'The Antigravity integration is currently Linux-only.'
       }
     }
-    let connection = await this.connect()
+    const session = loadSession()
+    let connection = await this.connectToServer()
     if (connection) {
       // The port and token change when the IDE restarts: if the call fails,
       // discover the new server instead of trusting the cached one.
       const probe = await this.rpc(connection.port, connection.token, 'GetUserStatus', METADATA, 4000)
       if (!probe.ok) {
-        connection = await this.connect(true)
+        connection = await this.connectToServer(true)
       }
     }
     if (!connection) {
       return {
         supported: true,
         running: false,
+        installed: isAntigravityInstalled(),
+        connected: session !== null,
+        connectedAt: session?.capturedAt ?? null,
         plan: null,
         account: null,
         models: [],
         endpoint: null,
-        error: 'Antigravity is not running. Open the Antigravity IDE and Klyro will pick it up.'
+        error: session
+          ? 'Antigravity could not be started. Try again in a moment.'
+          : 'Antigravity is not running. Open the Antigravity IDE, or connect your account in Integrations.'
       }
     }
 
@@ -318,6 +453,8 @@ class AntigravityDomain {
       supported: true,
       running: true,
       installed: isAntigravityInstalled(),
+      connected: session !== null,
+      connectedAt: session?.capturedAt ?? null,
       plan: planInfo.planName ?? null,
       account,
       models: list,

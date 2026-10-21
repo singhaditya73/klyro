@@ -4,6 +4,47 @@ All notable changes to Klyro are recorded here. Versions follow [SemVer](https:/
 
 ## [Unreleased]
 
+### Fixed
+- **Provider errors named the wrong provider.** The OpenAI-compatible adapter
+  is shared by three Settings slots (OpenAI, Groq, OpenAI-compatible
+  endpoint), but it hardcoded "openai" — so a Groq that could not be reached
+  was reported as *"Could not reach OpenAI"*, sending the user to the wrong
+  Settings card. Each slot now carries its own identity into every error.
+- **Network failures showed "fetch failed" and nothing else.** `fetch` wraps
+  the real reason (DNS failure, refused connection, rejected certificate) in a
+  generic message that Klyro threw away. The reason is now shown, and the
+  message names the endpoint that was contacted:
+  *"Could not reach Groq at api.groq.com. … getaddrinfo ENOTFOUND
+  api.groq.com"*.
+- **Answers from a local OpenCode server were cut off.** The server lists a
+  session newest first and splits one turn across several messages — a
+  progress line, a tool call, then the answer. Klyro read the wrong end of
+  that list, so a reply stopped at its first sentence, or came out empty when
+  the first message held only a tool call. The whole turn is now read, in
+  order, and the answer ends when the server says the turn is done.
+
+## [0.9.3] — 2026-10-21
+
+Antigravity without the IDE: connect once, use it any day.
+
+### Added
+- **Antigravity, connected** — Integrations → Antigravity → *Connect* takes a
+  snapshot of your Antigravity account session while the IDE is open. From
+  then on Klyro starts Antigravity's own agent service itself and uses its
+  models (Claude Opus 4.6, Sonnet 4.6, Gemini 3.5) **with the IDE never
+  opened**. No API key, no copy-paste.
+  - The session is stored in `~/.config/klyro/antigravity-session.json` (mode
+    600) and can be removed again with *Disconnect*.
+  - Verified live end to end with the Antigravity IDE fully closed: Pro plan,
+    the account, 19 models, and a question answered by Claude Opus 4.6.
+- The saved session is refreshed by the agent service itself, so it keeps
+  working after the access token expires.
+
+### Fixed
+- Antigravity model calls went to `cloudcode-pa.googleapis.com`, which answers
+  `429 RESOURCE_EXHAUSTED` even for an entitled account. The service now uses
+  the same `daily-cloudcode-pa.googleapis.com` host the IDE uses.
+
 ## [0.2.2] — 2026-10-19
 
 Groq first-class support plus provider-UX and workflow fixes.

@@ -108,21 +108,67 @@ itself:
   Connect-RPC. Klyro's own status call finds it and reports it as *"the service
   Klyro started"*.
 
-- **The one thing still missing** is the *sidecar*: the IDE's own extension
-  server (`--extension_server_port`, `--extension_server_csrf_token`) is where
-  the language server gets the account session and the cascade model config.
-  A headless server with no sidecar answers with
+## Connect once, use it with the IDE closed (0.9.3)
 
-  ```
-  500 {"code":"unknown","message":"GetCascadeModelConfigData() is nil"}
-  ```
+The gap above — the *sidecar* — turned out to be solvable, and it is what makes
+the IDE unnecessary after a single connect.
 
-  — the account, plan and model catalogue are therefore not available to a
-  Klyro-started service on its own. Closing that gap means Klyro also
-  answering the extension-server calls the language server makes at startup
-  (`GetCascadeModelConfigData`, `GetSecretValue`, …), seeded from a one-time
-  snapshot taken while the IDE is running. That is the remaining piece of work,
-  and it is now precisely specified.
+The IDE's extension server (`--extension_server_port`,
+`--extension_server_csrf_token`) does not just answer calls: it **publishes
+state**. The language server subscribes to one topic per kind of state:
+
+```http
+POST http://127.0.0.1:<port>/exa.extension_server_pb.ExtensionServerService/SubscribeToUnifiedStateSyncTopic
+content-type: application/connect+proto
+x-codeium-csrf-token: <the IDE's token>
+<connect frame> <protobuf: field 1 = "uss-oauth">
+```
+
+The answer is a stream of Connect frames, each a `UnifiedStateSyncUpdate`:
+
+```
+UnifiedStateSyncUpdate { 1: initial_state Topic }
+Topic                 { 2: data map<string, Row> }
+Row                   { 1: value bytes, 2: e_tag varint }
+```
+
+The topics the server subscribes to at startup are `uss-agentPreferences`,
+`uss-oauth`, `uss-browserPreferences`, `uss-enterprisePreferences`,
+`uss-userStatus`, `uss-modelPreferences` and a few more.
+
+**The `uss-oauth` topic carries the account session** — the OAuth access token
+*and* the refresh token. That is what makes "connect once" possible: the
+captured state is not a snapshot that goes stale, because the server refreshes
+the access token itself when it expires (it holds the OAuth client
+credentials). Verified: replaying a capture with a deliberately expired access
+token still authenticated and answered a question.
+
+So Klyro's flow is:
+
+1. **Connect** (the IDE must be running once): subscribe to every topic on the
+   IDE's sidecar and save what it sends, in
+   `~/.config/klyro/antigravity-session.json` (mode 600).
+2. **Any day after**: start the language server yourself and point it at a
+   *replay sidecar* — a small HTTP server that answers each subscription with
+   the captured frames. The server authenticates, refreshes the token on its
+   own, and serves the account, plan, quota and models.
+
+**Verified live, end to end, with the Antigravity IDE fully closed**: Klyro
+started its own service (`service: "klyro"`), reported the Pro plan, the
+account and 19 models, and answered a question with Claude Opus 4.6.
+
+Two details that matter and cost time to find:
+
+- The IDE points the server at **`https://daily-cloudcode-pa.googleapis.com`**.
+  The plain host answers model calls with `429 RESOURCE_EXHAUSTED` even for an
+  entitled account, so the endpoint has to match the IDE exactly.
+- The subscription stream must be **left open**. Ending it makes the server
+  report `internal: protocol error: unexpected EOF` and retry forever, so the
+  replay sidecar keeps the connection alive.
+
+`src/main/domains/antigravity-session.ts` implements the capture, the storage
+and the replay sidecar; `src/main/domains/antigravity.ts` wires them into the
+domain and the IPC.
 
 ## The port changes on every start
 
