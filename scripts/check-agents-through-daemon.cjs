@@ -7,6 +7,7 @@
  */
 const { app, BrowserWindow } = require('electron')
 const { writeFileSync } = require('node:fs')
+const { execSync } = require('node:child_process')
 const os = require('node:os')
 
 const lines = []
@@ -84,6 +85,19 @@ app.whenReady().then(async () => {
     `window.klyro.localAgentClis().then((c) => JSON.stringify(c.map((x) => ({ id: x.id, installed: x.installed })))).catch((e) => 'ERR ' + e.message)`
   )
   log('agent clis:', clis)
+
+  // A server left on 4096 makes the launcher's own test fail on the next run,
+  // so the one this script started goes away with it.
+  if (JSON.parse(started).spawned) {
+    try {
+      const out = execSync("ss -ltnp 2>/dev/null | grep '127.0.0.1:4096'", { encoding: 'utf8' })
+      const pid = out.match(/pid=(\d+)/)?.[1]
+      if (pid) process.kill(Number(pid))
+      log('opencode stopped:', pid ?? 'not found')
+    } catch {
+      log('opencode stopped: not reachable')
+    }
+  }
 
   app.exit(0)
 })

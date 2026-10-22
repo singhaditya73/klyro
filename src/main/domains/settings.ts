@@ -20,7 +20,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   documentRecallCount: 4,
   allowUnencryptedSecrets: false,
   diagnosticsOptIn: false,
-  overlayPrivateMode: false,
+  // On by default: the overlay is the one thing that must never show up in a
+  // screen share during the meeting it is meant for.
+  overlayPrivateMode: true,
   overlayOpacity: 100,
   screenAutoCapture: true,
   screenPreWarm: true,

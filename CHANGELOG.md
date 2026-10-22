@@ -4,6 +4,26 @@ All notable changes to Klyro are recorded here. Versions follow [SemVer](https:/
 
 ## [Unreleased]
 
+## [0.9.13] — 2026-10-22
+
+Stealth is the default.
+
+### Changed
+- **The overlay is excluded from screen shares from the first launch.** Private
+  mode — which keeps the overlay out of screen captures and shares on Windows
+  and macOS — used to be off until you found the toggle. It is now on by
+  default, because an overlay that turns up in a shared screen has done the
+  opposite of its job. It is still a switch, and Linux/X11 still says plainly
+  that it cannot do it: the platform has no per-window exclusion, so anything
+  that captures the whole display keeps the overlay in it.
+- **The overlay stays where it is when the meeting has focus**, which is what
+  private mode already implied: the answer does not vanish because you clicked
+  back into the call.
+
+### Added
+- A test over the defaults, so the stealth setting cannot be flipped back
+  without a test saying so.
+
 ## [0.9.12] — 2026-10-22
 
 Every provider in the daemon: the local agents join the hot path in Rust.
