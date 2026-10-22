@@ -43,8 +43,13 @@ app.whenReady().then(async () => {
     chip.click()
     for (let attempt = 0; attempt < 40; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, 250))
+      // The group head holds the provider name and a local/hosted badge; the
+      // name is what the check reports.
       const groups = [...document.querySelectorAll('.model-picker__group-head')]
-        .map((element) => element.textContent.trim())
+        .map((element) => {
+          const name = element.querySelector('span span')
+          return (name ?? element).textContent.trim()
+        })
       if (groups.length > 0) {
         return {
           chip: before,
