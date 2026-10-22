@@ -32,7 +32,7 @@ Status legend: **✅ done** · **🟡 partial** · **⬜ planned**
 | Feature | Status | Notes |
 | --- | --- | --- |
 | Models & agents | ✅ | Every model and agent you already have, with their own sign-in: OpenAI, Anthropic, Gemini, Groq, Ollama, any OpenAI-compatible server, **OpenCode**, **Claude Code**, **Codex**, **Antigravity**. One click to connect a local server; Klyro reads the password it printed and keeps it encrypted. |
-| Antigravity, with the IDE closed | ✅ | Connect once while the IDE is open; Klyro saves the account session and afterwards starts Antigravity's own agent service itself. Verified end to end with the IDE fully closed: the Pro plan, the account, 19 models, an answer from Claude Opus 4.6. |
+| Antigravity, with the IDE closed | ✅ | Connect once while the IDE is open; Klyro saves the account session and afterwards starts Antigravity's own agent service itself. Verified end to end with the IDE fully closed: the Pro plan, the account, 15 chat models, an answer from Claude Opus 4.6 — through the app and through the Rust daemon. The catalogue also lists internal `MODEL_CHAT_*` aliases (they answer 404) and `tab_*` autocomplete models (they take no conversation); Klyro offers only the ones that answer. |
 | A model picker for every provider | ✅ | Filled from the provider itself: Antigravity's catalogue (with the remaining quota on each entry), the OpenCode server, Ollama, the `/models` endpoint of OpenAI, Anthropic, Gemini, Groq and any OpenAI-compatible server, and the ids the Claude Code and Codex CLIs accept. A model that is not advertised can still be typed in. |
 | What Klyro knows | ✅ | Memories and documents (text, Markdown, code, CSV, JSON, HTML, PDF, Office), recalled with BM25 and injected into every answer — a resume, a project description, a document you were sent. Optional automatic fact extraction; near-duplicate suppression. |
 | Interviews | ✅ | **0.9.11:** every recorded interview, kept on this machine — company, role, date, duration, the questions, the transcript, the answers, your notes and a summary Klyro writes. Search, filter by company or role, bookmark, and see how far you got. One click deletes a session, or all of them. |
@@ -54,8 +54,8 @@ Status legend: **✅ done** · **🟡 partial** · **⬜ planned**
 | Nothing leaves the machine unless you say so | ✅ | A local model never sends anything. A cloud provider gets the question and the picture, and the app says which provider is in use and whether it is local. |
 | Secrets never reach a log | ✅ | Prompts, answers, transcripts, keys and frames are not logged. |
 | Data you can see and clear | ✅ | Counts per scope, one click to clear, a storage report and a clean-up. |
-| Configurable retention | ⬜ | Not yet: data can be cleared per scope, but there is no retention policy yet. |
-| Private sessions | 🟡 | Private mode keeps the overlay out of captures; a session that is never written to disk is not implemented yet. |
+| Configurable retention | ✅ | **0.9.15:** one window covers what Klyro wrote in words — interview transcripts, the chat history and the audit log: 7, 30, 90 or 365 days, or until you delete it. Applied at startup and the moment the window changes. The usage ledger is counts only (no words, no timestamps) and is cleared on demand. |
+| Private sessions | ✅ | **0.9.15:** an interview can be ephemeral. The questions, the answers, the transcript and the conversation behind them are held in memory — not in the history file, not in the answer cache, not in the memory extractor — and are gone when Klyro quits. Turn it on for every new session (Settings → History), and a session you decide was worth keeping can be written down deliberately with **Keep this one**. |
 
 ## Part 4 — The engines
 

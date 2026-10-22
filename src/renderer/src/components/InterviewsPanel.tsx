@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Bookmark, Check, ChevronDown, Clock, FileText, Loader2, Search, Sparkles, Trash2, X } from 'lucide-react'
+import { Bookmark, Check, ChevronDown, Clock, FileText, Loader2, Save, Search, Sparkles, Trash2, X } from 'lucide-react'
 import { useModal } from '../hooks/useModal'
 
 /**
@@ -58,6 +58,8 @@ interface Summary {
   stage?: string
   hasSummary: boolean
   preview: string
+  /** Held in memory only: never written to disk. */
+  ephemeral: boolean
 }
 
 const KIND_LABEL: Record<string, string> = {
@@ -141,6 +143,15 @@ export function InterviewsPanel({ onClose }: { onClose: () => void }) {
       await refresh()
     },
     [openId, refresh]
+  )
+
+  const keep = useCallback(
+    async (id: string): Promise<void> => {
+      await window.klyro.interviewsKeep(id)
+      setOpen(await window.klyro.interviewsGet(id))
+      await refresh()
+    },
+    [refresh]
   )
 
   const toggleBookmark = useCallback(
@@ -260,6 +271,7 @@ export function InterviewsPanel({ onClose }: { onClose: () => void }) {
                         {session.answeredCount}/{session.questionCount} answered
                       </span>
                       {session.stage && <span className="pill">{KIND_LABEL[session.stage] ?? session.stage}</span>}
+                      {session.ephemeral && <span className="pill">not saved</span>}
                     </div>
                     {session.preview && <div className="interviews__preview">{session.preview}</div>}
                   </div>
@@ -287,6 +299,12 @@ export function InterviewsPanel({ onClose }: { onClose: () => void }) {
                   )}
                   <span>{open.summary ? 'Write it again' : 'Summarise'}</span>
                 </button>
+                {open.ephemeral && (
+                  <button className="btn btn--ghost btn--sm" onClick={() => void keep(open.id)}>
+                    <Save className="icon icon--xs" aria-hidden="true" />
+                    <span>Keep this one</span>
+                  </button>
+                )}
                 <button className="btn btn--ghost btn--sm" onClick={() => void remove(open.id)}>
                   <Trash2 className="icon icon--xs" aria-hidden="true" />
                   <span>Delete</span>

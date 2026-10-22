@@ -28,6 +28,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   screenPreWarm: true,
   overlayDisplay: 'primary',
   overlayAnswerCache: true,
+  // Keep the history until it is deleted. A number of days prunes it.
+  retentionDays: 0,
+  interviewEphemeralDefault: false,
   onboardingComplete: false
 }
 

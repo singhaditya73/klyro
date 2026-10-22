@@ -10,6 +10,10 @@ import { settingsDomain } from './domains/settings'
 import { createTray } from './domains/tray'
 import { createMainWindow, createOverlayWindow, showMainWindow } from './domains/windows'
 import { maintenance } from './domains/maintenance'
+import { interviews } from './domains/interviews'
+import { conversations } from './domains/conversations'
+import { audit } from './domains/audit'
+import { answerCache } from './domains/answer-cache'
 import { warmupScreenPermission } from './domains/screenshot'
 import { localAgentLauncher } from './domains/local-agent-launcher'
 import { antigravity } from './domains/antigravity'
@@ -86,6 +90,13 @@ if (!gotLock) {
     settingsDomain.get() // applies the plaintext-secrets policy before any key is written
     // Remove leftovers from a previous run before anything writes again.
     maintenance.sweep()
+    // A retention policy is only a policy if it is applied: what is older than
+    // the user's window is gone before any of it is ever shown.
+    interviews.prune()
+    conversations.prune()
+    audit.prune()
+    // The answer cache promises fifteen minutes; make the file say the same.
+    answerCache.sweep()
     applyContentSecurityPolicy()
     applyPermissionPolicy()
     applyDisplayMediaPolicy()

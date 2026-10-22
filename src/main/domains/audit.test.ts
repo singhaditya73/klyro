@@ -8,8 +8,19 @@ const userData = mkdtempSync(join(tmpdir(), 'klyro-audit-'))
 vi.mock('electron', () => ({
   app: { getPath: () => userData, on: () => undefined }
 }))
+// The retention window lives in the settings, and settings touch the keychain.
+vi.mock('../security/secrets', () => ({
+  secrets: {
+    get: () => null,
+    set: () => undefined,
+    remove: () => undefined,
+    count: () => 0,
+    setPlaintextPolicy: () => undefined
+  }
+}))
 
 const { audit } = await import('./audit')
+const { settingsDomain: settings } = await import('./settings')
 
 describe('audit log', () => {
   it('records, lists newest-first, and clears', () => {
@@ -40,5 +51,35 @@ describe('audit log', () => {
     const [entry] = audit.list(1)
     expect(entry.detail).not.toMatch(/\n/)
     expect(entry.detail.length).toBeLessThanOrEqual(500)
+  })
+})
+
+/** The log says what Klyro did, in words; the window applies to it too. */
+describe('the audit log and the retention window', () => {
+  it('drops the entries outside the window', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T09:00:00Z'))
+    audit.clear()
+    audit.record('chat.answer', 'an entry from January')
+
+    vi.setSystemTime(new Date('2026-06-01T09:00:00Z'))
+    audit.record('chat.answer', 'an entry from June')
+
+    settings.update({ retentionDays: 30 })
+    expect(audit.prune()).toBeGreaterThan(0)
+
+    const entries = audit.list()
+    expect(entries.some((entry) => entry.detail.includes('January'))).toBe(false)
+    expect(entries.some((entry) => entry.detail.includes('June'))).toBe(true)
+
+    vi.useRealTimers()
+    settings.update({ retentionDays: 0 })
+  })
+
+  it('keeps everything when the window is zero days', () => {
+    settings.update({ retentionDays: 0 })
+    audit.record('app.test', 'a kept entry')
+    expect(audit.prune()).toBe(0)
+    expect(audit.list().some((entry) => entry.detail.includes('kept entry'))).toBe(true)
   })
 })

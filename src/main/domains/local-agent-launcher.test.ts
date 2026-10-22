@@ -35,6 +35,9 @@ while true; do sleep 1; done
 }
 
 let fakeBinary = ''
+// PATH is process-wide and the worker is shared between test files, so the
+// fake binary comes off again when this file is done.
+const originalPath = process.env.PATH
 
 beforeAll(() => {
   fakeBinary = writeFakeBinary()
@@ -44,6 +47,7 @@ beforeAll(() => {
 
 afterAll(() => {
   localAgentLauncher.stopOpenCode()
+  process.env.PATH = originalPath
 })
 
 describe('local agent launcher', () => {

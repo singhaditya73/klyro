@@ -41,3 +41,39 @@ describe('answer cache', () => {
     expect(AnswerCache.captureHash(undefined)).toBe('none')
   })
 })
+
+/**
+ * The cache may only replay an answer for fifteen minutes. The file used to
+ * keep whatever was last written, which is longer than the promise.
+ */
+describe('the cache file', () => {
+  it('does not replay an answer after the window', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T09:00:00Z'))
+    answerCache.clear()
+    const key = answerCache.key('model-a', 'a question', 'capture')
+    answerCache.set(key, 'an answer', 'model-a')
+    expect(answerCache.get(key)?.answer).toBe('an answer')
+
+    vi.setSystemTime(new Date('2026-01-01T09:30:00Z'))
+    // Reading it makes it worthless, so there is nothing left to sweep.
+    expect(answerCache.get(key)).toBeNull()
+    expect(answerCache.sweep()).toBe(0)
+
+    vi.useRealTimers()
+  })
+
+  it('sweeps what the clock made worthless while Klyro was closed', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-02-01T09:00:00Z'))
+    answerCache.clear()
+    const key = answerCache.key('model-b', 'another question', 'capture')
+    answerCache.set(key, 'an answer from February', 'model-b')
+
+    vi.setSystemTime(new Date('2026-02-01T12:00:00Z'))
+    expect(answerCache.sweep()).toBeGreaterThan(0)
+    expect(JSON.stringify(answerCache.get(key))).not.toContain('an answer from February')
+
+    vi.useRealTimers()
+  })
+})

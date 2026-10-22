@@ -173,9 +173,13 @@ class LocalAgentLauncher {
       }
     }
 
-    // An OpenCode server that is already running is the best case: use it.
-    const existing = await probeOpenCode(`http://127.0.0.1:${DEFAULT_PORT}`, secrets.get(SECRET_ID))
-    if (existing.healthy) {
+    // An OpenCode server that is already running is the best case — but only
+    // when it accepts the password we have. A server we cannot authenticate
+    // with is someone else's: adopting it would turn every question into a 401,
+    // so a port of our own is used instead.
+    const storedPassword = secrets.get(SECRET_ID) ?? process.env.OPENCODE_SERVER_PASSWORD ?? null
+    const existing = await probeOpenCode(`http://127.0.0.1:${DEFAULT_PORT}`, storedPassword)
+    if (existing.healthy && !existing.needsAuth) {
       return { started: true, baseUrl: `http://127.0.0.1:${DEFAULT_PORT}`, spawned: false }
     }
     const port = (await portFree(DEFAULT_PORT)) ? DEFAULT_PORT : DEFAULT_PORT + 1

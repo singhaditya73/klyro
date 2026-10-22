@@ -153,11 +153,13 @@ So Klyro's flow is:
    the captured frames. The server authenticates, refreshes the token on its
    own, and serves the account, plan, quota and models.
 
-**Verified live, end to end, with the Antigravity IDE fully closed**: Klyro
+**Verified live, end to end, with the Antigravity IDE fully closed** (again in
+0.9.15, from a machine with no Antigravity process running at all): Klyro
 started its own service (`service: "klyro"`), reported the Pro plan, the
-account and 19 models, and answered a question with Claude Opus 4.6.
+account and 15 chat models, and answered a question with Claude Opus 4.6 —
+4.3 s through the app, 5.8 s through the Rust daemon.
 
-Two details that matter and cost time to find:
+Three details that matter and cost time to find:
 
 - The IDE points the server at **`https://daily-cloudcode-pa.googleapis.com`**.
   The plain host answers model calls with `429 RESOURCE_EXHAUSTED` even for an
@@ -165,6 +167,14 @@ Two details that matter and cost time to find:
 - The subscription stream must be **left open**. Ending it makes the server
   report `internal: protocol error: unexpected EOF` and retry forever, so the
   replay sidecar keeps the connection alive.
+- **The catalogue is not a list of chat models.** `GetAvailableModels` also
+  returns internal aliases (`MODEL_CHAT_20706`, `chat_20706`) that answer model
+  calls with `404 NOT_FOUND`, and autocomplete models (`tab_flash_lite_preview`,
+  `tab_jump_flash_lite_preview`) that take no conversation. They arrive first,
+  so taking "the first model" — which is what a picker does — meant a 404 that
+  looked like a broken connection. `isChatModel` in
+  `src/main/domains/antigravity.ts` keeps the ones that answer; the remaining
+  first entry is Claude Opus 4.6 (Thinking).
 
 `src/main/domains/antigravity-session.ts` implements the capture, the storage
 and the replay sidecar; `src/main/domains/antigravity.ts` wires them into the
@@ -184,8 +194,8 @@ language server process, read its token, find the port that answers, and read
 the account, plan, quota and model catalogue. Integrations shows:
 
 > **Antigravity — Connected — Pro plan**
-> Read directly from the Antigravity agent on this machine — 22 models, no key
-> and no bridge. Endpoint 127.0.0.1:34839.
+> Read directly from the Antigravity agent on this machine — 15 chat models, no
+> key and no bridge. Endpoint 127.0.0.1:34839.
 
 No key, no bridge, no scraping of private files: the token is handed to us by
 the same machine that runs the IDE.

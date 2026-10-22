@@ -91,6 +91,7 @@ export const IPC = {
   interviewsUpdate: 'interviews:update',
   interviewsUpdateQuestion: 'interviews:updateQuestion',
   interviewsToggleBookmark: 'interviews:toggleBookmark',
+  interviewsKeep: 'interviews:keep',
   interviewsRemove: 'interviews:remove',
   interviewsClear: 'interviews:clear',
   interviewsFacets: 'interviews:facets',

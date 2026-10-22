@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { AuditEntry } from '@shared/types'
 import { JsonStore } from '../store/json-store'
+import { configuredCutoff } from './retention'
 
 /**
  * Append-only, local audit log. Every consequential thing Klyro does outside a
@@ -44,6 +45,19 @@ class AuditDomain {
     this.store.update((state) => {
       state.entries = []
     })
+  }
+
+  /** Drop the entries older than the retention window. */
+  prune(now = Date.now()): number {
+    const cutoff = configuredCutoff(now)
+    if (cutoff === null) return 0
+    let removed = 0
+    this.store.update((state) => {
+      const kept = state.entries.filter((entry) => entry.at >= cutoff)
+      removed = state.entries.length - kept.length
+      state.entries = kept
+    })
+    return removed
   }
 }
 

@@ -83,6 +83,17 @@ export interface AppSettings {
   overlayDisplay: 'primary' | number
   /** Replay an answer instantly when the same question meets the same screen. */
   overlayAnswerCache: boolean
+  /**
+   * How long Klyro keeps what it wrote — interview transcripts, the chat
+   * history and the audit log — in days. `0` keeps it until it is deleted.
+   * Older entries are pruned when the app starts and when the window changes.
+   */
+  retentionDays: number
+  /**
+   * Start every interview without writing it to disk: the questions, the
+   * answers and the transcript live in memory and are gone when Klyro quits.
+   */
+  interviewEphemeralDefault: boolean
   /** The welcome tour has been completed (or skipped). */
   onboardingComplete: boolean
 }
@@ -319,6 +330,8 @@ export interface InterviewSummary {
   stage?: QuestionKind
   hasSummary: boolean
   preview: string
+  /** Held in memory only: never written to disk. */
+  ephemeral: boolean
 }
 
 /** How the history is filtered. */
@@ -591,6 +604,9 @@ export interface DataSummary {
   conversations: number
   memories: number
   documents: number
+  /** Interview sessions kept on disk, and the ones held only in memory. */
+  interviews: number
+  ephemeralInterviews: number
   meetings: number
   agentTasks: number
   credentials: number
@@ -787,7 +803,6 @@ export interface KlyroApi {
     summary?: string
     tags?: string[]
     stage?: QuestionKind
-    ephemeral?: boolean
   }): Promise<InterviewSession | null>
   interviewsUpdateQuestion(input: {
     id: string
@@ -798,6 +813,8 @@ export interface KlyroApi {
     bookmarked?: boolean
   }): Promise<boolean>
   interviewsToggleBookmark(input: { id: string; questionId?: string }): Promise<boolean>
+  /** Write an ephemeral session down, deliberately. */
+  interviewsKeep(id: string): Promise<InterviewSession | null>
   interviewsRemove(id: string): Promise<boolean>
   interviewsClear(): Promise<boolean>
   interviewsFacets(): Promise<{ companies: string[]; roles: string[]; kinds: QuestionKind[] }>

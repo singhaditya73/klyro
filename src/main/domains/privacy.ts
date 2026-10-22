@@ -5,6 +5,7 @@ import { documents } from './documents'
 import { maintenance } from './maintenance'
 import { memory } from './memory'
 import { settingsDomain } from './settings'
+import { interviews } from './interviews'
 
 function isLocalBaseUrl(baseUrl: string): boolean {
   try {
@@ -30,6 +31,8 @@ class PrivacyDomain {
       conversations: conversations.list().length,
       memories: memory.list().length,
       documents: documents.stats().documents,
+      interviews: interviews.storedCount(),
+      ephemeralInterviews: interviews.ephemeralCount(),
       meetings: 0,
       agentTasks: 0,
       credentials: secrets.count(),
@@ -51,8 +54,12 @@ class PrivacyDomain {
         documents.clear()
         break
       case 'meetings':
+        // "Meetings" is the interview history: the transcripts, the questions
+        // and the answers.
+        interviews.clear()
+        break
       case 'agentTasks':
-        // Nothing of these is kept any more.
+        // Nothing of this is kept any more.
         break
       default:
         throw new Error('Unknown data scope')

@@ -74,6 +74,8 @@ const settingsPatchSchema = z
     screenPreWarm: z.boolean().optional(),
     overlayDisplay: z.union([z.literal('primary'), z.number().int().min(0).max(7)]).optional(),
     overlayAnswerCache: z.boolean().optional(),
+    retentionDays: z.number().int().min(0).max(3650).optional(),
+    interviewEphemeralDefault: z.boolean().optional(),
     onboardingComplete: z.boolean().optional(),
     allowUnencryptedSecrets: z.boolean().optional(),
     overlayPrivateMode: z.boolean().optional(),
@@ -142,6 +144,11 @@ export function registerIpcHandlers(): void {
     if ('overlayPrivateMode' in parsed) applyOverlayPrivateMode()
     if ('overlayOpacity' in parsed) applyOverlayOpacity()
     if ('overlayDisplay' in parsed) applyOverlayDisplay()
+    if ('retentionDays' in parsed) {
+      interviews.prune()
+      conversations.prune()
+      audit.prune()
+    }
     return next
   })
 
@@ -318,8 +325,14 @@ export function registerIpcHandlers(): void {
   })
   handle(IPC.interviewsGet, (_event, id: unknown) => interviews.get(z.string().min(1).max(80).parse(id)))
   handle(IPC.interviewsStart, (_event, input: unknown) => {
-    const parsed = z.object({ company: z.string().max(120).optional(), role: z.string().max(120).optional() }).parse(input ?? {})
-    return interviews.start(parsed.company ?? '', parsed.role ?? '')
+    const parsed = z
+      .object({
+        company: z.string().max(120).optional(),
+        role: z.string().max(120).optional(),
+        ephemeral: z.boolean().optional()
+      })
+      .parse(input ?? {})
+    return interviews.start(parsed.company ?? '', parsed.role ?? '', { ephemeral: parsed.ephemeral })
   })
   handle(IPC.interviewsAddQuestion, (_event, input: unknown) => {
     const parsed = z
@@ -376,6 +389,9 @@ export function registerIpcHandlers(): void {
     interviews.toggleBookmark(parsed.id, parsed.questionId)
     return true
   })
+  handle(IPC.interviewsKeep, (_event, id: unknown) =>
+    interviews.keep(z.string().min(1).max(80).parse(id))
+  )
   handle(IPC.interviewsRemove, (_event, id: unknown) => {
     interviews.remove(z.string().min(1).max(80).parse(id))
     return true

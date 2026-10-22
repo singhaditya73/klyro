@@ -129,6 +129,7 @@ export function toSummary(session: InterviewSession): InterviewSummary {
     bookmarked: session.bookmarked,
     stage: session.stage,
     hasSummary: session.summary.trim().length > 0,
-    preview: (session.questions[0]?.text ?? session.notes ?? '').replace(/\s+/g, ' ').slice(0, 90)
+    preview: (session.questions[0]?.text ?? session.notes ?? '').replace(/\s+/g, ' ').slice(0, 90),
+    ephemeral: session.ephemeral
   }
 }

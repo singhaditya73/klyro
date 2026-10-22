@@ -685,6 +685,39 @@ export function SettingsPanel({ onClose }: Props) {
         </section>
 
         <section style={{ marginTop: '32px' }}>
+          <h3 className="section-label">History</h3>
+          <p className="muted" style={{ margin: '0 0 16px', fontSize: '13px', lineHeight: 1.5 }}>
+            What a session heard, what Klyro answered and the record of what it did are kept on this machine, so you can go back over an interview. Nothing is sent anywhere.
+          </p>
+          <div className="provider-card__grid">
+            <label className="field">
+              <span className="field__label">Keep history for</span>
+              <select
+                value={settings.retentionDays}
+                onChange={(event) => void patch({ retentionDays: Number(event.target.value) })}
+                className="field"
+              >
+                <option value={0}>Until I delete it</option>
+                <option value={7}>7 days</option>
+                <option value={30}>30 days</option>
+                <option value={90}>90 days</option>
+                <option value={365}>1 year</option>
+              </select>
+            </label>
+          </div>
+          <label className="checkbox" style={{ marginTop: '16px' }}>
+            <input
+              type="checkbox"
+              checked={settings.interviewEphemeralDefault}
+              onChange={(event) => void patch({ interviewEphemeralDefault: event.target.checked })}
+            />
+            <span>
+              Don't keep new interviews — nothing is written to disk, and the session is gone when Klyro quits
+            </span>
+          </label>
+        </section>
+
+        <section style={{ marginTop: '32px' }}>
           <h3 className="section-label">Security & data</h3>
           {security && (
             <div className="permissions-section" style={{ marginBottom: '24px' }}>
@@ -743,15 +776,11 @@ export function SettingsPanel({ onClose }: Props) {
                 </button>
               </div>
               <div className="data-row">
-                <span>Meetings: {data.meetings}</span>
+                <span>
+                  Interview sessions: {data.interviews}
+                  {data.ephemeralInterviews > 0 ? ` (+${data.ephemeralInterviews} not saved)` : ''}
+                </span>
                 <button className="btn btn--ghost btn--sm" onClick={() => void clearScope('meetings')}>
-                  <Trash2 className="icon icon--xs" aria-hidden="true" />
-                  <span>Clear</span>
-                </button>
-              </div>
-              <div className="data-row">
-                <span>Agent task history: {data.agentTasks}</span>
-                <button className="btn btn--ghost btn--sm" onClick={() => void clearScope('agentTasks')}>
                   <Trash2 className="icon icon--xs" aria-hidden="true" />
                   <span>Clear</span>
                 </button>

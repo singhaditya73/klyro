@@ -137,14 +137,16 @@ interface KlyroApi {
     stage?: string
     hasSummary: boolean
     preview: string
+    ephemeral: boolean
   }>>
   interviewsGet(id: string): Promise<any>
-  interviewsStart(input?: { company?: string; role?: string }): Promise<any>
+  interviewsStart(input?: { company?: string; role?: string; ephemeral?: boolean }): Promise<any>
   interviewsAddQuestion(input: { id: string; text: string; source: 'voice' | 'text'; answer?: string; answerMs?: number }): Promise<any>
   interviewsAddTranscript(input: { id: string; line: string }): Promise<boolean>
-  interviewsUpdate(input: { id: string; company?: string; role?: string; notes?: string; summary?: string; tags?: string[]; stage?: string; ephemeral?: boolean }): Promise<any>
+  interviewsUpdate(input: { id: string; company?: string; role?: string; notes?: string; summary?: string; tags?: string[]; stage?: string }): Promise<any>
   interviewsUpdateQuestion(input: { id: string; questionId: string; note?: string; progress?: string; answer?: string; bookmarked?: boolean }): Promise<boolean>
   interviewsToggleBookmark(input: { id: string; questionId?: string }): Promise<boolean>
+  interviewsKeep(id: string): Promise<any>
   interviewsRemove(id: string): Promise<boolean>
   interviewsClear(): Promise<boolean>
   interviewsFacets(): Promise<{ companies: string[]; roles: string[]; kinds: string[] }>

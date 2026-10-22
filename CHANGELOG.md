@@ -4,6 +4,67 @@ All notable changes to Klyro are recorded here. Versions follow [SemVer](https:/
 
 ## [Unreleased]
 
+## [0.9.15] — 2026-10-22
+
+The history can be kept for a while, or not at all — and Antigravity works with
+the IDE closed.
+
+### Added
+- **A session that is never written down.** An interview can be ephemeral: the
+  company, the questions, the answers, the transcript and the conversation
+  behind them live in memory and nowhere else. Not in `interviews.json`, not in
+  `conversations.json`, not in the answer cache, not in the memory extractor.
+  It is gone when Klyro quits, and it never appears in history or in search.
+  Turn it on for every new session under **Settings → History → Don't keep new
+  interviews**. If you change your mind about one that turned out to matter,
+  **Keep this one** writes it down deliberately; it then says so like any other
+  session.
+- **A retention window for everything Klyro writes in words.** Interview
+  transcripts, the chat history and the audit log share one setting — until you
+  delete it, or 7 / 30 / 90 / 365 days. It is applied at startup, when a session
+  begins, and the moment the setting changes; the data panel counts what is
+  there, including the sessions that are held only in memory. The usage ledger
+  has no words and no timestamps, so it stays a count and is cleared on demand.
+- The data panel's "Meetings" row now names the thing it clears: **Interview
+  sessions**, with the number held in memory beside it. Clearing it actually
+  clears the interviews.
+
+### Fixed
+- **Antigravity, with the IDE fully closed, answers again.** The model
+  catalogue the server hands over is not a list of chat models: it starts with
+  internal `MODEL_CHAT_*` aliases that answer a model call with
+  `404 NOT_FOUND`, and includes `tab_*` autocomplete models that take no
+  conversation. Taking the first entry — which is what a picker does — looked
+  like a broken connection. Klyro now offers only the models that answer, so
+  the first entry is Claude Opus 4.6 (Thinking). Verified from a machine with no
+  Antigravity process running: Klyro started its own service, reported the Pro
+  plan, the account and 15 chat models, and answered in 4.3 s through the app
+  and 5.8 s through the Rust daemon.
+- **The answer cache no longer outlives its own promise.** It replays an answer
+  for fifteen minutes, but the file kept the last fifty answers until the same
+  question was asked again — possibly months later. What is older than the
+  window is now swept at startup.
+- **The launcher no longer adopts an OpenCode server it cannot sign in to.** If
+  something already listens on 4096 and rejects the password Klyro has (or has
+  none), every question became a 401. It now starts its own server on the next
+  port instead, and it honours `OPENCODE_SERVER_PASSWORD` from the environment.
+- **Antigravity's language server can no longer be stalled by its own log.**
+  Its stderr pipe was never read, so a chatty boot could fill the buffer and
+  stop the process. The tail is kept, and a failed start now logs it instead of
+  reporting only that nothing happened.
+- **The test suite is deterministic.** Two test files start an OpenCode server
+  on the same port, and one of them put a fake `opencode` on `PATH`; run in
+  parallel, both outcomes depended on which file the worker picked up first.
+  Files now run one at a time, the fake binary leaves `PATH` when its file is
+  done, and the live OpenCode check tries a few models before it gives up — a
+  model that says nothing is a bad model, not a broken connection, and it no
+  longer fails the suite.
+
+### Changed
+- `interviews.update` no longer accepts `ephemeral`: whether a session is
+  written down is fixed when it starts. Deciding afterwards is its own action
+  (`interviews.keep`).
+
 ## [0.9.14] — 2026-10-22
 
 A slow model is waited for.

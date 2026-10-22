@@ -90,6 +90,7 @@ const api: KlyroApi = {
   }) => ipcRenderer.invoke(IPC.interviewsUpdateQuestion, input),
   interviewsToggleBookmark: (input: { id: string; questionId?: string }) =>
     ipcRenderer.invoke(IPC.interviewsToggleBookmark, input),
+  interviewsKeep: (id: string) => ipcRenderer.invoke(IPC.interviewsKeep, id),
   interviewsRemove: (id: string) => ipcRenderer.invoke(IPC.interviewsRemove, id),
   interviewsClear: () => ipcRenderer.invoke(IPC.interviewsClear),
   interviewsFacets: () => ipcRenderer.invoke(IPC.interviewsFacets),

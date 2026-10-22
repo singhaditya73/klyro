@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import type { ChildProcess } from 'node:child_process'
+import { logger } from '../logger'
 import {
   findAntigravityExtension,
   findLanguageServerPids,
@@ -39,6 +40,22 @@ import {
 
 const SERVICE = 'exa.language_server_pb.LanguageServerService'
 const RPC_TIMEOUT_MS = 8000
+
+/**
+ * Can this catalogue entry answer a chat request?
+ *
+ * The server lists more than chat models: `MODEL_CHAT_*` are internal aliases
+ * that answer 404 when asked, and the `tab_*` entries are autocomplete models
+ * that take no conversation at all. Offering them is a trap: the first entry
+ * in the catalogue would be the one a picker chooses, and it would fail.
+ */
+export function isChatModel(model: { id: string; name: string }): boolean {
+  const id = model.id.toUpperCase()
+  const name = model.name.toLowerCase()
+  if (id.startsWith('MODEL_CHAT_')) return false
+  if (name.startsWith('tab_') || name.includes('tab_jump') || name.includes('tab_flash')) return false
+  return true
+}
 
 export interface AntigravityModel {
   id: string
@@ -171,6 +188,8 @@ class AntigravityDomain {
     if (!extension) return null
 
     this.starting = (async () => {
+      // The server explains a failed boot on stderr and nowhere else.
+      let output: () => string = () => ''
       try {
         const sidecar = new ReplaySidecar(session)
         const sidecarPort = await sidecar.listen()
@@ -178,6 +197,7 @@ class AntigravityDomain {
         const started = startLanguageServer(extension.serverBinary, extension.extensionPath, {
           sidecar: { port: sidecarPort, token: sidecar.token }
         })
+        output = started.output
         this.service = { child: started.child, token: started.token }
         // The server binds its ports a moment after it starts.
         for (let attempt = 0; attempt < 30; attempt += 1) {
@@ -198,6 +218,8 @@ class AntigravityDomain {
       } catch {
         // Fall through: the caller reports that Antigravity is not available.
       }
+      const tail = output().split('\n').slice(-8).join(' | ')
+      logger.warn(`Antigravity's own service did not start${tail ? `: ${tail}` : '.'}`)
       this.service = null
       this.sidecar?.close()
       this.sidecar = null
@@ -469,7 +491,7 @@ class AntigravityDomain {
       connectedAt: session?.capturedAt ?? null,
       plan: planInfo.planName ?? null,
       account,
-      models: list,
+      models: list.filter(isChatModel),
       endpoint: `127.0.0.1:${connection.port}`,
       service: connection.ours ? 'klyro' : 'ide',
       error: status.error

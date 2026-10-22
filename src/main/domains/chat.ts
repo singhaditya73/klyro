@@ -116,8 +116,17 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
   // Recorded on the message even when the request never reaches the provider.
   const displayModel = (settings.providers[providerId]?.model ?? '').trim() || DEFAULT_PROVIDERS[providerId].model
 
+  // The session this question belongs to. When it is ephemeral, nothing about
+  // the exchange may reach a file: not the conversation, not the answer cache,
+  // not the memory extractor.
+  const session = request.interviewId ? interviews.get(request.interviewId) : null
+  const ephemeral = session?.ephemeral === true
+
   let conversation = conversations.get(request.conversationId)
-  if (!conversation) conversation = conversations.create()
+  if (!conversation) conversation = conversations.create({ ephemeral })
+  // A conversation that existed before the session turned private does not
+  // get to keep what it already wrote down.
+  else if (ephemeral) conversations.makeEphemeral(conversation.id)
   const conversationId = conversation.id
 
   conversations.addMessage(conversationId, {
@@ -151,9 +160,8 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
   })
 
   const turns = buildTurns(conversations.get(conversationId) ?? conversation)
-  // The session this question belongs to: it carries what has been decided and
-  // what the terms mean, and the answer goes back into the history.
-  const session = request.interviewId ? interviews.get(request.interviewId) : null
+  // The session carries what has been decided and what the terms mean, and the
+  // answer goes back into it.
   const questionKind = classifyQuestion(request.content)
   const advice = adviceFor(questionKind)
   // What the assistant knows about the user: their notes, their documents,
@@ -225,7 +233,7 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
 
     // Turbo: the same question about the same screen was answered moments
     // ago, so replay it instead of paying for the same answer twice.
-    if (request.useFastModel && settings.overlayAnswerCache) {
+    if (request.useFastModel && settings.overlayAnswerCache && !ephemeral) {
       const cacheKey = answerCache.key(
         route.model,
         request.content,
@@ -321,14 +329,19 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
     usage.record(providerId, 'chat')
     recordInHistory(text, firstTokenMs ?? totalMs)
     // Extraction costs a model call, so only run it for substantive exchanges.
-    if (settings.memoryAutoExtract && text.trim().length >= 24 && request.content.trim().length >= 24) {
+    if (
+      settings.memoryAutoExtract &&
+      !ephemeral &&
+      text.trim().length >= 24 &&
+      request.content.trim().length >= 24
+    ) {
       const origin = `conversation:${conversation.title || conversationId}`
       void memory
         .extractFromExchange(request.content, text, origin)
         .catch((error) => logger.warn('Memory extraction failed', (error as Error).message))
     }
     // Remember it: the same question about the same screen is instant next time.
-    if (request.useFastModel && settings.overlayAnswerCache && text.trim().length > 0) {
+    if (request.useFastModel && settings.overlayAnswerCache && !ephemeral && text.trim().length > 0) {
       answerCache.set(
         answerCache.key(
           route.model,

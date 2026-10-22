@@ -131,7 +131,7 @@ export function startLanguageServer(
   serverBinary: string,
   extensionPath: string,
   options: { apiKey?: string; sidecar?: { port: number; token: string } } = {}
-): { child: ChildProcess; token: string } {
+): { child: ChildProcess; token: string; output: () => string } {
   const token = randomUUID()
   const args = [
     '--csrf_token',
@@ -153,6 +153,18 @@ export function startLanguageServer(
     detached: false,
     env: process.env
   })
+  // The server is chatty on stderr, and a pipe nobody reads fills up and stops
+  // the process. Keep the tail instead: it is where a failed boot explains
+  // itself.
+  const recent: string[] = []
+  child.stderr?.on('data', (chunk: Buffer) => {
+    for (const line of chunk.toString('utf8').split('\n')) {
+      if (!line.trim()) continue
+      recent.push(line.trim())
+    }
+    if (recent.length > 200) recent.splice(0, recent.length - 200)
+  })
+  const output = (): string => recent.join('\n')
   const metadata = buildInitialMetadata({
     extensionPath,
     apiKey: options.apiKey ?? '',
@@ -160,7 +172,7 @@ export function startLanguageServer(
   })
   child.stdin?.write(metadata)
   child.stdin?.end()
-  return { child, token }
+  return { child, token, output }
 }
 
 /** The pids of every Antigravity language server on this machine. */
