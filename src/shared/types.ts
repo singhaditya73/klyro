@@ -101,6 +101,26 @@ export interface AppSettings {
 /** Whether a model can read images; `unknown` is honest for local/custom endpoints. */
 export type VisionSupport = 'yes' | 'no' | 'unknown'
 
+/** One model a provider can serve, as the pickers show it. */
+export interface CatalogueModel {
+  id: string
+  name: string
+  /** Which company serves it, for the row's hint. */
+  provider: string
+  /** 0..1 — how much of the user's quota is left, when the provider says. */
+  quota: number | null
+  free: boolean
+}
+
+/** A provider and the models it can serve right now. */
+export interface CatalogueGroup {
+  id: ProviderId
+  label: string
+  models: CatalogueModel[]
+  /** Why the group is empty, when it is. */
+  note: string | null
+}
+
 export interface ProviderStatus {
   id: ProviderId
   label: string
@@ -825,6 +845,11 @@ export interface KlyroApi {
     models: Array<{ id: string; name: string; provider: string; quota: number | null; free: boolean }>
     note: string | null
   }>
+  /**
+   * Every model the overlay may answer with, from every provider that is
+   * usable right now. The first group is the one in use.
+   */
+  overlayCatalogue(): Promise<CatalogueGroup[]>
   /** The local Antigravity IDE: plan, quota and the models it can reach. */
   antigravityStatus(): Promise<{
     supported: boolean

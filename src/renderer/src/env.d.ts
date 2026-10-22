@@ -151,6 +151,12 @@ interface KlyroApi {
   interviewsClear(): Promise<boolean>
   interviewsFacets(): Promise<{ companies: string[]; roles: string[]; kinds: string[] }>
   interviewsSummarize(id: string): Promise<{ summary: string; model: string } | null>
+  overlayCatalogue(): Promise<Array<{
+    id: string
+    label: string
+    models: Array<{ id: string; name: string; provider: string; quota: number | null; free: boolean }>
+    note: string | null
+  }>>
   providerModels(providerId: string): Promise<{
     models: Array<{ id: string; name: string; provider: string; quota: number | null; free: boolean }>
     note: string | null

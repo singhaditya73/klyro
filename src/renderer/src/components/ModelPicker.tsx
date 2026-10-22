@@ -3,13 +3,12 @@ import { createPortal } from 'react-dom'
 import { Check, ChevronDown, Loader2, RefreshCcw, Search } from 'lucide-react'
 
 /**
- * Pick a model, for any provider.
+ * Pick a model, for one provider or for all of them.
  *
- * Every provider is asked what it has — the local agents (Antigravity,
- * OpenCode, Ollama), the hosted ones (OpenAI, Anthropic, Gemini, Groq) and
- * the agent CLIs. The user picks from the list; a model that is not listed can
- * still be typed in, because a provider may serve a model it does not
- * advertise.
+ * In single-provider mode the picker asks that provider for its models, as
+ * before. In catalogue mode it is given every usable provider's models at once,
+ * grouped by provider, and picking one reports which provider it came from —
+ * that is what lets the overlay switch provider without being restarted.
  *
  * The list is rendered in a portal, because the pickers live inside panels
  * that clip their overflow.
@@ -23,18 +22,35 @@ export interface PickerModel {
   free: boolean
 }
 
+export interface PickerGroup {
+  id: string
+  label: string
+  models: PickerModel[]
+  note?: string | null
+}
+
 interface Props {
-  /** The provider whose models are listed. */
-  providerId: string
+  /** The provider whose models are listed (single-provider mode). */
+  providerId?: string
+  /** Every provider's models (catalogue mode). Takes precedence over providerId. */
+  groups?: PickerGroup[]
   /** The model currently in use. */
   value: string
-  onChange: (modelId: string) => void
+  onChange: (modelId: string, providerId?: string) => void
   /** Where the picker is used — it changes the compactness. */
   variant?: 'field' | 'chip'
   /** What to call the provider in the empty list. */
   providerLabel?: string
   /** Called when the list is refreshed. */
   onRefresh?: () => void
+  /** Called when the menu opens — catalogue mode loads its list here. */
+  onOpen?: () => void
+  /** Catalogue mode: the list is being fetched. */
+  loading?: boolean
+  /** Catalogue mode: why the list is empty. */
+  note?: string | null
+  /** Override the chip label (catalogue mode, before the list has loaded). */
+  label?: string
 }
 
 interface Placement {
@@ -47,11 +63,16 @@ interface Placement {
 
 export function ModelPicker({
   providerId,
+  groups,
   value,
   onChange,
   variant = 'field',
   providerLabel,
-  onRefresh
+  onRefresh,
+  onOpen,
+  loading: externalLoading,
+  note: externalNote,
+  label: labelOverride
 }: Props) {
   const [models, setModels] = useState<PickerModel[] | null>(null)
   const [note, setNote] = useState<string | null>(null)
@@ -65,9 +86,15 @@ export function ModelPicker({
   const providerRef = useRef(providerId)
 
   providerRef.current = providerId
+  const catalogue = groups !== undefined
 
   const load = useCallback(async (): Promise<void> => {
+    if (catalogue) {
+      onRefresh?.()
+      return
+    }
     const requested = providerId
+    if (!requested) return
     setLoading(true)
     try {
       const result = await window.klyro.providerModels(requested)
@@ -84,12 +111,13 @@ export function ModelPicker({
     } finally {
       if (providerRef.current === requested) setLoading(false)
     }
-  }, [providerId, onRefresh])
+  }, [catalogue, onRefresh, providerId])
 
   // Ask the provider what it has, and again whenever the provider changes.
   useEffect(() => {
+    if (catalogue) return
     void load()
-  }, [load])
+  }, [catalogue, load])
 
   // Place the list next to the control, flipping up when there is no room.
   useLayoutEffect(() => {
@@ -109,7 +137,7 @@ export function ModelPicker({
       width: Math.max(240, rect.width),
       above: flip
     })
-  }, [open, models])
+  }, [open, models, groups])
 
   // Close when the click lands outside the picker.
   useEffect(() => {
@@ -131,31 +159,55 @@ export function ModelPicker({
     }
   }, [open])
 
-  const filtered = useMemo(() => {
-    const list = models ?? []
-    const needle = query.trim().toLowerCase()
-    if (!needle) return list
-    return list.filter(
-      (entry) =>
-        entry.id.toLowerCase().includes(needle) ||
-        entry.name.toLowerCase().includes(needle) ||
-        entry.provider.toLowerCase().includes(needle)
-    )
-  }, [models, query])
+  const allModels = useMemo(
+    () => (catalogue ? (groups ?? []).flatMap((group) => group.models) : (models ?? [])),
+    [catalogue, groups, models]
+  )
 
-  const selected = (models ?? []).find((entry) => entry.id === value)
-  const label = selected?.name || value || 'Pick a model'
+  /** The groups after the search box, with empty groups dropped. */
+  const filteredGroups = useMemo((): PickerGroup[] => {
+    const source: PickerGroup[] = catalogue
+      ? (groups ?? [])
+      : [{ id: providerId ?? '', label: providerLabel ?? '', models: models ?? [] }]
+    const needle = query.trim().toLowerCase()
+    if (!needle) return source
+    return source
+      .map((group) => ({
+        ...group,
+        models: group.models.filter(
+          (entry) =>
+            entry.id.toLowerCase().includes(needle) ||
+            entry.name.toLowerCase().includes(needle) ||
+            entry.provider.toLowerCase().includes(needle)
+        )
+      }))
+      .filter((group) => group.models.length > 0)
+  }, [catalogue, groups, models, providerId, providerLabel, query])
+
+  const isBusy = externalLoading === true || loading
+  const shownNote = catalogue ? (externalNote ?? null) : note
+  const selected = allModels.find((entry) => entry.id === value)
+  const label = selected?.name || labelOverride || value || 'Pick a model'
+  const hasQuery = query.trim().length > 0
+
+  const openMenu = (): void => {
+    setOpen((previous) => {
+      const next = !previous
+      if (next) onOpen?.()
+      return next
+    })
+  }
 
   const menu = open ? (
     <ModelList
-      providerId={providerId}
-      models={filtered}
-      loading={loading}
+      groups={filteredGroups}
+      showHeaders={catalogue}
+      loading={isBusy}
       query={query}
       onQuery={setQuery}
       value={value}
-      onPick={(id) => {
-        onChange(id)
+      onPick={(id, groupId) => {
+        onChange(id, groupId)
         setOpen(false)
       }}
       onReload={() => void load()}
@@ -164,55 +216,57 @@ export function ModelPicker({
         setOpen(false)
       }}
       providerLabel={providerLabel}
-      note={note}
-      hasQuery={query.trim().length > 0}
+      note={shownNote}
+      hasQuery={hasQuery}
       placement={placement}
     />
   ) : null
 
+  const customInput = custom ? (
+    <div className="model-picker__custom">
+      <input
+        className="field"
+        value={value}
+        autoFocus
+        placeholder="Type a model id"
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === 'Escape') setCustom(false)
+        }}
+      />
+      <button className="btn btn--ghost btn--sm" onClick={() => setCustom(false)}>
+        Done
+      </button>
+    </div>
+  ) : null
+
   if (variant === 'chip') {
     return (
-      <div className="model-picker model-picker--chip" data-provider={providerId}>
+      <div className="model-picker model-picker--chip" data-provider={providerId ?? 'catalogue'}>
         <button
           type="button"
           ref={triggerRef}
           className="model-picker__chip"
-          onClick={() => setOpen((previous) => !previous)}
+          onClick={openMenu}
           title={`Model: ${value || 'not set'}`}
         >
           <span className="model-picker__chip-label">{label}</span>
           <ChevronDown className="icon icon--xs" aria-hidden="true" />
         </button>
-        {custom && (
-          <div className="model-picker__custom">
-            <input
-              className="field"
-              value={value}
-              autoFocus
-              placeholder="Type a model id"
-              onChange={(event) => onChange(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === 'Escape') setCustom(false)
-              }}
-            />
-            <button className="btn btn--ghost btn--sm" onClick={() => setCustom(false)}>
-              Done
-            </button>
-          </div>
-        )}
+        {customInput}
         {menu}
       </div>
     )
   }
 
   return (
-    <div className="model-picker" data-provider={providerId}>
+    <div className="model-picker" data-provider={providerId ?? 'catalogue'}>
       <div className="model-picker__control">
         <button
           type="button"
           ref={triggerRef}
           className="model-picker__button"
-          onClick={() => setOpen((previous) => !previous)}
+          onClick={openMenu}
           aria-haspopup="listbox"
           aria-expanded={open}
         >
@@ -223,42 +277,32 @@ export function ModelPicker({
           type="button"
           className="btn btn--icon btn--ghost"
           onClick={() => void load()}
-          disabled={loading}
-          title="Ask the provider for its models"
+          disabled={isBusy}
+          title={catalogue ? 'Ask every provider for its models' : 'Ask the provider for its models'}
           aria-label="Detect models"
         >
-          {loading ? (
+          {isBusy ? (
             <Loader2 className="icon icon--xs spin" aria-hidden="true" />
           ) : (
             <RefreshCcw className="icon icon--xs" aria-hidden="true" />
           )}
         </button>
       </div>
-      {custom && (
-        <input
-          className="field"
-          value={value}
-          autoFocus
-          placeholder="Type a model id"
-          onChange={(event) => onChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === 'Escape') setCustom(false)
-          }}
-        />
-      )}
+      {customInput}
       {menu}
     </div>
   )
 }
 
 interface ListProps {
-  providerId: string
-  models: PickerModel[]
+  groups: PickerGroup[]
+  /** Catalogue mode: say which provider each group belongs to. */
+  showHeaders: boolean
   loading: boolean
   query: string
   onQuery: (value: string) => void
   value: string
-  onPick: (id: string) => void
+  onPick: (id: string, providerId?: string) => void
   onReload: () => void
   onCustom: () => void
   providerLabel?: string
@@ -268,8 +312,8 @@ interface ListProps {
 }
 
 function ModelList({
-  providerId,
-  models,
+  groups,
+  showHeaders,
   loading,
   query,
   onQuery,
@@ -292,25 +336,27 @@ function ModelList({
       }
     : { position: 'fixed', top: 0, left: 0, opacity: 0 }
 
+  const total = groups.reduce((sum, group) => sum + group.models.length, 0)
+
   return createPortal(
-    <div className="model-picker__menu" role="listbox" style={style} data-provider={providerId}>
+    <div className="model-picker__menu" role="listbox" style={style}>
       <div className="model-picker__search">
         <Search className="icon icon--xs" aria-hidden="true" />
         <input
           value={query}
           onChange={(event) => onQuery(event.target.value)}
-          placeholder="Search models"
+          placeholder={groupLabelPlaceholder(showHeaders)}
           aria-label="Search models"
           autoFocus
         />
       </div>
       <div className="model-picker__list">
-        {loading && models.length === 0 && (
+        {loading && total === 0 && (
           <div className="model-picker__empty">
-            <Loader2 className="icon icon--xs spin" aria-hidden="true" /> Asking the provider…
+            <Loader2 className="icon icon--xs spin" aria-hidden="true" /> Asking the providers…
           </div>
         )}
-        {!loading && models.length === 0 && !hasQuery && (
+        {!loading && total === 0 && !hasQuery && (
           <div className="model-picker__empty">
             {note ?? `No models to show${providerLabel ? ` for ${providerLabel}` : ''}.`}
             <button className="btn btn--ghost btn--sm" onClick={onReload}>
@@ -318,29 +364,42 @@ function ModelList({
             </button>
           </div>
         )}
-        {!loading && models.length === 0 && hasQuery && (
+        {!loading && total === 0 && hasQuery && (
           <div className="model-picker__empty">No model matches “{query}”.</div>
         )}
-        {models.map((entry) => (
-          <button
-            key={entry.id}
-            type="button"
-            className={`model-picker__option${entry.id === value ? ' model-picker__option--active' : ''}`}
-            onClick={() => onPick(entry.id)}
-            role="option"
-            aria-selected={entry.id === value}
-            title={entry.id}
-          >
-            <span className="model-picker__option-name">{entry.name}</span>
-            {entry.provider && (
-              <span className="model-picker__option-provider">{entry.provider.replace(/^MODEL_PROVIDER_/, '')}</span>
+        {groups.map((group) => (
+          <div key={group.id || 'models'} className="model-picker__group">
+            {showHeaders && (
+              <div className="model-picker__group-head">
+                <span>{group.label}</span>
+                <span className="model-picker__group-count">{group.models.length}</span>
+              </div>
             )}
-            {entry.free && <span className="pill pill--ok">Free</span>}
-            {entry.quota !== null && entry.quota < 0.2 && (
-              <span className="pill pill--warn">{Math.round(entry.quota * 100)}%</span>
+            {group.models.map((entry) => (
+              <button
+                key={`${group.id}:${entry.id}`}
+                type="button"
+                className={`model-picker__option${entry.id === value ? ' model-picker__option--active' : ''}`}
+                onClick={() => onPick(entry.id, group.id || undefined)}
+                role="option"
+                aria-selected={entry.id === value}
+                title={entry.id}
+              >
+                <span className="model-picker__option-name">{entry.name}</span>
+                {entry.provider && (
+                  <span className="model-picker__option-provider">{entry.provider.replace(/^MODEL_PROVIDER_/, '')}</span>
+                )}
+                {entry.free && <span className="pill pill--ok">Free</span>}
+                {entry.quota !== null && entry.quota < 0.2 && (
+                  <span className="pill pill--warn">{Math.round(entry.quota * 100)}%</span>
+                )}
+                {entry.id === value && <Check className="icon icon--xs" aria-hidden="true" />}
+              </button>
+            ))}
+            {showHeaders && group.note && group.models.length === 0 && (
+              <div className="model-picker__empty">{group.note}</div>
             )}
-            {entry.id === value && <Check className="icon icon--xs" aria-hidden="true" />}
-          </button>
+          </div>
         ))}
       </div>
       <button type="button" className="model-picker__custom-link" onClick={onCustom}>
@@ -349,4 +408,8 @@ function ModelList({
     </div>,
     document.body
   )
+}
+
+function groupLabelPlaceholder(showHeaders: boolean): string {
+  return showHeaders ? 'Search every connected model' : 'Search models'
 }

@@ -57,6 +57,8 @@ export const IPC = {
   windowToggleOverlay: 'window:toggleOverlay',
   windowPrivateModeStatus: 'window:privateModeStatus',
   overlaySetRecordingSticky: 'overlay:setRecordingSticky',
+  /** Every usable provider's models, for the overlay's picker. */
+  overlayCatalogue: 'overlay:catalogue',
 
   /* MCP connector */
 

@@ -17,7 +17,7 @@ import {
   type SilenceWatcher
 } from './lib/listen'
 import type { Attachment } from '@shared/types'
-import { ModelPicker } from './components/ModelPicker'
+import { ModelPicker, type PickerGroup } from './components/ModelPicker'
 import KlyroMark from './assets/logo/klyro-mark.svg'
 
 type AssistMode = 'idle' | 'recording' | 'listening'
@@ -50,6 +50,10 @@ export default function OverlayApp() {
   // The provider the overlay answers with, and the model it uses.
   const [overlayProvider, setOverlayProvider] = useState('')
   const [overlayModel, setOverlayModel] = useState('')
+  // Every connected provider's models, loaded when the picker opens.
+  const [catalogue, setCatalogue] = useState<PickerGroup[]>([])
+  const [catalogueNote, setCatalogueNote] = useState<string | null>(null)
+  const [catalogueLoading, setCatalogueLoading] = useState(false)
   // True while a capture is in flight — the shot takes a moment, so say so.
   const [capturing, setCapturing] = useState(false)
   // How long the last answer took, and whether it was replayed instantly.
@@ -74,19 +78,59 @@ export default function OverlayApp() {
   const isWindows = /Win/i.test(navigator.platform)
   const isLinux = /Linux/i.test(navigator.platform) && !isWindows
 
+  /**
+   * Re-read the provider in use.
+   *
+   * The overlay window is created at launch and stays alive while it is hidden,
+   * so a provider connected afterwards in the control panel would otherwise be
+   * invisible here until the app restarted. It re-syncs whenever it is shown.
+   */
+  const syncProvider = useCallback(async (): Promise<void> => {
+    try {
+      const settings = await window.klyro.getSettings()
+      const provider = settings.providers[settings.activeProvider]
+      setOverlayProvider(settings.activeProvider)
+      // An empty fast model means "the same model as the chat", so that is
+      // what the picker shows.
+      setOverlayModel(provider?.fastModel || provider?.model || '')
+    } catch {
+      // Keep the last known provider; it still answers.
+    }
+  }, [])
+
+  /** Ask every connected provider for its models — only when the menu opens. */
+  const loadCatalogue = useCallback(async (): Promise<void> => {
+    setCatalogueLoading(true)
+    try {
+      const groups = await window.klyro.overlayCatalogue()
+      setCatalogue(groups)
+      setCatalogueNote(
+        groups.length === 0
+          ? 'No provider is connected yet. Connect one in the control panel.'
+          : null
+      )
+    } catch (error) {
+      setCatalogueNote((error as Error).message)
+    } finally {
+      setCatalogueLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     void window.klyro.privateModeStatus().then(setPrivateMode).catch(() => setPrivateMode(null))
-    void window.klyro
-      .getSettings()
-      .then((settings) => {
-        const provider = settings.providers[settings.activeProvider]
-        setOverlayProvider(settings.activeProvider)
-        // An empty fast model means "the same model as the chat", so that is
-        // what the picker shows.
-        setOverlayModel(provider?.fastModel || provider?.model || '')
-      })
-      .catch(() => undefined)
-    return window.klyro.onChatStream((event) => {
+    void syncProvider()
+    // Load the names in the background so the chip shows "Claude Sonnet 4"
+    // instead of a raw id; the list is refreshed again when it is opened.
+    void loadCatalogue()
+    // The hotkey shows and focuses the overlay; both events mean "settings may
+    // have changed while I was hidden".
+    const onFocus = (): void => void syncProvider()
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible') void syncProvider()
+    }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisible)
+    const offChat = window.klyro.onChatStream((event) => {
       if (event.type === 'start') {
         setAnswer('')
         talkRef.current.answering = true
@@ -106,7 +150,12 @@ export default function OverlayApp() {
         if (modeRef.current === 'idle') void window.klyro.setRecordingSticky(false)
       }
     })
-  }, [])
+    return () => {
+      offChat()
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [loadCatalogue, syncProvider])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -631,18 +680,31 @@ export default function OverlayApp() {
         <span className="overlay__brand">Klyro</span>
         {overlayProvider && (
           <ModelPicker
-            providerId={overlayProvider}
+            groups={catalogue}
             value={overlayModel}
             variant="chip"
-            onChange={(next) => {
+            label={overlayModel || 'Pick a model'}
+            loading={catalogueLoading}
+            note={catalogueNote}
+            onOpen={() => {
+              void syncProvider()
+              void loadCatalogue()
+            }}
+            onRefresh={() => void loadCatalogue()}
+            onChange={(next, providerId) => {
+              // A model from another provider switches the overlay to that
+              // provider; the control panel uses the same choice.
+              const target = providerId || overlayProvider
               setOverlayModel(next)
+              setOverlayProvider(target)
               void (async () => {
                 try {
                   const settings = await window.klyro.getSettings()
                   await window.klyro.updateSettings({
+                    activeProvider: target,
                     providers: {
                       ...settings.providers,
-                      [overlayProvider]: { ...settings.providers[overlayProvider], fastModel: next }
+                      [target]: { ...settings.providers[target], fastModel: next }
                     }
                   })
                 } catch {

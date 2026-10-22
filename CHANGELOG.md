@@ -4,6 +4,24 @@ All notable changes to Klyro are recorded here. Versions follow [SemVer](https:/
 
 ## [Unreleased]
 
+## [0.9.16] — 2026-10-22
+
+The overlay's model chip lists every provider you have connected, including one
+you connected a moment ago.
+
+### Fixed
+- **A provider connected in the control panel now shows up in the overlay.**
+  The overlay window lives from launch, so it read the active provider once and
+  kept it: connecting OpenCode (or Antigravity, Claude Code, Codex, a hosted
+  key…) left the chip on Ollama until Klyro restarted. It re-reads the settings
+  whenever it is shown, and again when the chip is opened.
+- **The chip lists every connected provider, not just the one in use.** The
+  models are grouped by provider and searchable across all of them; choosing
+  one switches Klyro to that provider and remembers the model. The providers
+  are asked in parallel, a provider that is down is left out with a note rather
+  than an error, and the one in use is always shown — even when it is empty, so
+  the reason is visible.
+
 ## [0.9.15] — 2026-10-22
 
 The history can be kept for a while, or not at all — and Antigravity works with

@@ -20,6 +20,7 @@ import { summarizeInterview } from './interview-summary'
 import { transcribeAudio } from './audio'
 import { applyOverlayDisplay, applyOverlayOpacity, applyOverlayPrivateMode, listDisplays, overlayPrivateModeSupported, setOverlayStickyRecording } from './windows'
 import { conversations } from './conversations'
+import { overlayCatalogue } from './overlay-models'
 import { checkPermissions } from './permissions'
 import { grabScreen, listCaptureSources, probeOverlayVisibility } from './screenshot'
 import { settingsDomain } from './settings'
@@ -411,6 +412,7 @@ export function registerIpcHandlers(): void {
     return written
   })
 
+  handle(IPC.overlayCatalogue, () => overlayCatalogue())
   handle(IPC.providerModels, (_event, input: unknown) => {
     const providerId = z.enum(PROVIDER_IDS).parse(input)
     return listProviderModels(providerId)

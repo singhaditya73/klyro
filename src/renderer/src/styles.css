@@ -657,6 +657,25 @@ button.pill:hover { background: var(--surface-hover); color: var(--text-primary)
   outline: none;
 }
 .model-picker__list { display: flex; flex-direction: column; gap: 2px; max-height: 280px; overflow-y: auto; }
+.model-picker__group { display: flex; flex-direction: column; gap: 2px; }
+.model-picker__group + .model-picker__group { margin-top: var(--space-2); }
+.model-picker__group-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  background: var(--surface-elevated);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.model-picker__group-count { font-weight: 400; opacity: 0.7; }
 .model-picker__option {
   display: flex;
   align-items: center;

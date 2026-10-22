@@ -59,6 +59,7 @@ const api: KlyroApi = {
   antigravityConnect: () => ipcRenderer.invoke(IPC.antigravityConnect),
   antigravityDisconnect: () => ipcRenderer.invoke(IPC.antigravityDisconnect),
   providerModels: (providerId: string) => ipcRenderer.invoke(IPC.providerModels, providerId),
+  overlayCatalogue: () => ipcRenderer.invoke(IPC.overlayCatalogue),
   interviewsList: (query?: unknown) => ipcRenderer.invoke(IPC.interviewsList, query),
   interviewsGet: (id: string) => ipcRenderer.invoke(IPC.interviewsGet, id),
   interviewsStart: (input?: { company?: string; role?: string }) => ipcRenderer.invoke(IPC.interviewsStart, input),

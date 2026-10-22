@@ -22,7 +22,7 @@ Status legend: **✅ done** · **🟡 partial** · **⬜ planned**
 | Talks to you | ✅ | *Talk*: the microphone stays open, voice activity detection starts and ends your utterance, and Klyro answers when you stop — with the screen attached. Speak again mid-answer and the answer is cut off: you interrupted. |
 | Asks about the screen | ✅ | *Capture screen*: one click takes what is below the overlay (Klyro hides itself for the shot) and attaches it to the next question. A source picker is available when instant capture is off. |
 | Hears the meeting | ✅ | System audio (Windows loopback, Linux monitor device, macOS mic fallback) or the microphone. The transcript runs in the overlay. |
-| Switches the model mid-meeting | ✅ | The model chip next to the input; the choice is per provider and remembered. |
+| Switches the model mid-meeting | ✅ | The chip next to the input lists the models of **every provider you have connected**, grouped by provider and searchable; picking one switches Klyro to that provider and remembers the choice. Connecting a provider in the control panel shows up here at once — no restart. |
 | Keeps out of a share | ✅ | Three routes: **private mode** (excludes the window from captures and live shares on Windows and macOS — the same APIs password managers use), the **overlay screen** (put it on a display you are not sharing), and the **privacy check** (two real captures, compared pixel by pixel, so the number is measured rather than claimed). |
 | Instant replay | ✅ | The same question about an unchanged screen comes back instantly, labelled as a replay. |
 | Closing | ✅ | Escape closes it when idle. |
