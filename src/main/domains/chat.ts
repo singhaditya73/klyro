@@ -248,11 +248,10 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
 
     // The daemon, when it is there, answers the question: it is a process that
     // starts in milliseconds and lives in a few megabytes, so the overlay's
-    // answer does not wait on a browser runtime. The providers it cannot
-    // carry — the local agents, with their own protocols — still go through
-    // the app.
-    // The daemon serves the overlay's hot path — the question you ask in the
-    // middle of a meeting. Everything else goes through the app.
+    // answer does not wait on a browser runtime. It carries every provider,
+    // local agents included; this is the overlay's hot path, and everything
+    // else — the control panel's own chats, the summaries — goes through the
+    // app. When the daemon is absent the app answers with the same clients.
     const daemonCanAnswer = request.useFastModel === true && DAEMON_PROVIDERS.has(providerId)
     // Antigravity's service belongs to the app; the daemon only places the
     // call. When the service is not reachable the app's own client answers,
