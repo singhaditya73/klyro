@@ -9,13 +9,23 @@ log). Nothing here is marked done by intent — only by running the commands.
 | Command | Passes on this machine | Asserts |
 | --- | --- | --- |
 | `npm run typecheck` | ✅ | Main (`tsc -p tsconfig.node.json`) and renderer (`tsconfig.web.json`) both clean |
-| `npm test` | ✅ | 295 unit/integration tests in 48 files, 8 skipped (`vitest run`) |
+| `npm test` | ✅ | 296 unit/integration tests in 48 files, 8 skipped (`vitest run`) |
 | `npm run build` | ✅ | `out/main`, `out/preload`, `out/renderer` produced by electron-vite |
 | `npx electron scripts/smoke.cjs` (needs a display; CI: `xvfb-run -a …`) | ✅ | Boots the **real built app**; both windows render, the `window.klyro` bridge is present, no renderer errors and no CSP violations |
 | `DISPLAY=:0 npm run smoke` | ✅ | Same, invoked via the package script |
 
 CI runs the same gate on every push/pull-request (`.github/workflows/ci.yml`,
 Ubuntu, Node 22, `ELECTRON_DISABLE_SANDBOX=1` under xvfb).
+
+### Live checks that need a real provider (0.9.15)
+
+These drive the built app, so they are not part of CI:
+
+| Script | What it proves |
+| --- | --- |
+| `npx electron scripts/check-ephemeral.cjs` (needs Ollama) | An ephemeral session leaves no text in `interviews.json`, `conversations.json`, `answer-cache.json`, `memory.json` or `audit.json` — and a conversation it borrowed keeps its earlier history. Verified 2026-10-22. |
+| `npx electron scripts/check-antigravity-capture.cjs` (IDE open) | The one-time capture: the account, plan and 15 chat models come from the running IDE. |
+| `npx electron scripts/check-antigravity-headless.cjs` (no Antigravity process) | Klyro starts Antigravity's own service from the saved session and answers through the app and through the Rust daemon. Verified 2026-10-22. |
 
 ### Extra runtime checks used during this program
 
