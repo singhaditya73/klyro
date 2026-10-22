@@ -7,6 +7,7 @@
 mod protocol;
 mod provider;
 mod server;
+mod transcribe;
 
 use std::io::Write;
 use std::process::ExitCode;

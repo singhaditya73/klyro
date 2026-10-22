@@ -2,6 +2,22 @@
 
 All notable changes to Klyro are recorded here. Versions follow [SemVer](https://semver.org/).
 
+## [0.9.21] — 2026-10-23
+
+Bundled local Whisper model for 100% offline, zero-key speech-to-text.
+
+### Added
+- **Bundled local Whisper speech recognition.** Klyro now packages a high-accuracy,
+  quantized Whisper base model directly with the app. Speech-to-text works out of
+  the box on day one with zero API keys and zero internet required.
+- **Smart audio fallback for local and coding agents.** When talking to OpenCode,
+  Antigravity, Ollama, Claude Code, or Codex, Klyro automatically transcribes
+  recorded speech using the bundled local engine, enabling full voice questions
+  and meeting assist across all local providers.
+- **All 3 voice modes supported offline.** Quick-ask conversation (Talk mode),
+  live meeting question detection (Listen mode), and targeted clip recording
+  (Record mode) all transcribe locally and instantly in memory.
+
 ## [0.9.20] — 2026-10-22
 
 Fix the control panel content column on wide and full-screen windows.

@@ -26,6 +26,10 @@ extraResources:
     to: .
     filter:
       - 'klyro-core*'
+  - from: resources/models/whisper
+    to: models/whisper
+    filter:
+      - '*.bin'
 compression: normal
 artifactName: ${productName}-${version}-${arch}.${ext}
 

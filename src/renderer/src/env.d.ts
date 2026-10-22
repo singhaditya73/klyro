@@ -32,7 +32,7 @@ interface KlyroApi {
 
   listCaptureSources(): Promise<any[]>
   grabScreen(sourceId?: string): Promise<any>
-  transcribe(audio: ArrayBuffer, mimeType: string): Promise<any>
+  transcribe(audio: ArrayBuffer, mimeType: string, pcmBase64?: string): Promise<any>
 
   checkPermissions(): Promise<any>
   hideOverlay(): Promise<void>

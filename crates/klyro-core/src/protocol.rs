@@ -46,6 +46,13 @@ pub enum Request {
         #[serde(default)]
         csrf: String,
     },
+    /// Transcribe 16kHz mono f32 PCM audio (base64 encoded).
+    Transcribe {
+        /// Base64-encoded little-endian f32 PCM audio samples (16000Hz mono).
+        audio_pcm_base64: String,
+        /// Path to the GGML/GGUF model file on disk.
+        model_path: String,
+    },
     /// Is the daemon there?
     Ping,
 }
@@ -83,6 +90,8 @@ pub enum Response {
     Done { ms: u64 },
     /// The models a provider can serve.
     Models { models: Vec<ModelInfo> },
+    /// Result of an audio transcription.
+    Transcribed { text: String },
     /// Something went wrong, said in a way worth showing a person.
     Error { message: String },
     /// An answer to a `Ping`.

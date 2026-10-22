@@ -30,3 +30,6 @@ coverage/
 audit.json
 mcp.json
 usage.json
+
+# Downloaded model files (fetched automatically by prebuild)
+resources/models/**/*.bin

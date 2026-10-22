@@ -28,6 +28,7 @@ import {
   snippetPrompt,
   utteranceEnded,
   utteranceWorthAsking,
+  decodeAudioToPcm16kBase64,
   type SilenceWatcher
 } from './lib/listen'
 import type { Attachment } from '@shared/types'
@@ -562,7 +563,8 @@ export default function OverlayApp() {
     const blob = new Blob(pieces, { type: talk.recorder?.mimeType || 'audio/webm' })
     try {
       const buffer = await blob.arrayBuffer()
-      const result = await window.klyro.transcribe(buffer, blob.type)
+      const pcmBase64 = await decodeAudioToPcm16kBase64(blob).catch(() => '')
+      const result = await window.klyro.transcribe(buffer, blob.type, pcmBase64 || undefined)
       const spoken = result.text.trim()
       if (!spoken) {
         setTalkState('listening')
@@ -659,7 +661,8 @@ export default function OverlayApp() {
 
   async function transcribeBlob(blob: Blob): Promise<string> {
     const buffer = await blob.arrayBuffer()
-    return (await window.klyro.transcribe(buffer, mimeRef.current)).text.trim()
+    const pcmBase64 = await decodeAudioToPcm16kBase64(blob).catch(() => '')
+    return (await window.klyro.transcribe(buffer, mimeRef.current, pcmBase64 || undefined)).text.trim()
   }
 
   // ---------------------------------------------------------------------

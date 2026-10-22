@@ -1,6 +1,6 @@
 [package]
 name = "klyro-core"
-version = "0.9.20"
+version = "0.9.21"
 edition = "2021"
 rust-version = "1.75"
 description = "The Klyro daemon: the always-on process that owns the hot path."
@@ -22,6 +22,8 @@ futures-util = "0.3"
 bytes = "1"
 getrandom = "0.2"
 async-stream = "0.3"
+whisper-rs = "0.16.0"
+base64 = "0.22"
 
 
 [profile.release]

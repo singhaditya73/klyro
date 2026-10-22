@@ -47,7 +47,8 @@ const api: KlyroApi = {
 
   listCaptureSources: () => ipcRenderer.invoke(IPC.captureSources),
   grabScreen: (sourceId?: string) => ipcRenderer.invoke(IPC.captureGrab, sourceId),
-  transcribe: (audio: ArrayBuffer, mimeType: string) => ipcRenderer.invoke(IPC.transcribe, audio, mimeType),
+  transcribe: (audio: ArrayBuffer, mimeType: string, pcmBase64?: string) =>
+    ipcRenderer.invoke(IPC.transcribe, audio, mimeType, pcmBase64),
 
   checkPermissions: () => ipcRenderer.invoke(IPC.permissionsCheck),
   hideOverlay: () => ipcRenderer.invoke(IPC.windowHideOverlay),

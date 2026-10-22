@@ -218,7 +218,7 @@ export function registerIpcHandlers(): void {
     grabScreen(sourceId === undefined ? undefined : z.string().max(300).parse(sourceId))
   )
 
-  handle(IPC.transcribe, (_event, audio: unknown, mimeType: unknown) => {
+  handle(IPC.transcribe, (_event, audio: unknown, mimeType: unknown, pcmBase64?: unknown) => {
     // MediaRecorder reports full mime types with codec parameters
     // ("audio/webm;codecs=opus", "audio/ogg;codecs=opus"). The codec suffix is
     // dropped here and only the bare type is validated, so the parameter keys
@@ -238,8 +238,9 @@ export function registerIpcHandlers(): void {
     if (!bytes) throw new Error('Invalid audio payload')
     if (bytes.byteLength === 0) throw new Error('The recording is empty')
     if (bytes.byteLength > 30 * 1024 * 1024) throw new Error('Audio clips are limited to 30 MB')
+    const pcm = typeof pcmBase64 === 'string' && pcmBase64.length > 0 ? pcmBase64 : undefined
     const copy = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
-    return transcribeAudio(copy, mime).then((text) => ({ text }))
+    return transcribeAudio(copy, mime, pcm).then((text) => ({ text }))
   })
 
   handle(IPC.permissionsCheck, () => checkPermissions())

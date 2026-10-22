@@ -1,6 +1,6 @@
 {
   "name": "klyro",
-  "version": "0.9.20",
+  "version": "0.9.21",
   "description": "Klyro — Your AI. Your entire computer. Understand. Remember. Act.",
   "homepage": "https://github.com/singhaditya73/klyro#readme",
   "repository": {
@@ -16,6 +16,7 @@
   "desktopName": "klyro.desktop",
   "main": "./out/main/index.js",
   "scripts": {
+    "prebuild": "node scripts/fetch-whisper-model.mjs",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "start": "electron-vite preview",

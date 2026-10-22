@@ -54,12 +54,26 @@ export type DaemonEvent =
   | { kind: 'delta'; text: string }
   | { kind: 'done'; ms: number }
   | { kind: 'models'; models: DaemonModel[] }
+  | { kind: 'transcribed'; text: string }
   | { kind: 'error'; message: string }
   | { kind: 'pong' }
 
 /** Where the daemon says it is listening. */
 export function daemonStatePath(): string {
   return join(process.env.KLYRO_STATE_DIR ?? join(homedir(), '.config', 'klyro'), STATE_NAME)
+}
+
+/** Where the bundled Whisper model file lives. */
+export function bundledWhisperModelPath(): string | null {
+  const candidates = [
+    join(process.resourcesPath ?? '', 'models', 'whisper', 'ggml-base.en-q5_1.bin'),
+    join(__dirname, '..', '..', 'resources', 'models', 'whisper', 'ggml-base.en-q5_1.bin'),
+    join(process.cwd(), 'resources', 'models', 'whisper', 'ggml-base.en-q5_1.bin')
+  ]
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate
+  }
+  return null
 }
 
 /** What the daemon told us about itself. */
@@ -326,6 +340,38 @@ class DaemonClient {
     })
   }
 
+  /** Transcribe 16kHz mono float32 audio samples using local bundled whisper. */
+  async transcribe(audioPcmBase64: string, modelPath: string): Promise<string> {
+    if (!(await this.connect())) throw new Error('Local speech engine daemon is not running')
+    const socket = this.socket
+    if (!socket) throw new Error('Local speech engine socket is not connected')
+    return new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.listeners.delete(listener)
+        reject(new Error('Local transcription timed out'))
+      }, 60000)
+      const listener = (event: DaemonEvent): void => {
+        if (event.kind === 'transcribed') {
+          clearTimeout(timer)
+          this.listeners.delete(listener)
+          resolve(event.text)
+        } else if (event.kind === 'error') {
+          clearTimeout(timer)
+          this.listeners.delete(listener)
+          reject(new Error(event.message))
+        }
+      }
+      this.listeners.add(listener)
+      socket.write(
+        `${JSON.stringify({
+          kind: 'transcribe',
+          audio_pcm_base64: audioPcmBase64,
+          model_path: modelPath
+        })}\n`
+      )
+    })
+  }
+
   /** Stop listening to the daemon's events. */
   onEvent(listener: (event: DaemonEvent) => void): () => void {
     this.listeners.add(listener)
@@ -428,6 +474,12 @@ class DaemonDomain {
   async ask(request: DaemonAsk, onEvent: (event: DaemonEvent) => void): Promise<boolean> {
     if (!(await this.start())) return false
     return this.client.ask(request, onEvent)
+  }
+
+  /** Transcribe speech locally using the bundled whisper model. */
+  async transcribe(audioPcmBase64: string, modelPath: string): Promise<string> {
+    if (!(await this.start())) throw new Error('Could not start local speech engine')
+    return this.client.transcribe(audioPcmBase64, modelPath)
   }
 }
 

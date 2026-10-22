@@ -177,6 +177,24 @@ async fn handle(
             Request::Ping => {
                 write_line(&mut write_half, &Response::Pong).await?;
             }
+            Request::Transcribe {
+                audio_pcm_base64,
+                model_path,
+            } => {
+                let result = tokio::task::spawn_blocking(move || {
+                    crate::transcribe::transcribe(&audio_pcm_base64, &model_path)
+                })
+                .await;
+
+                let response = match result {
+                    Ok(Ok(text)) => Response::Transcribed { text },
+                    Ok(Err(message)) => Response::Error { message },
+                    Err(error) => Response::Error {
+                        message: format!("Transcription task failed: {error}"),
+                    },
+                };
+                write_line(&mut write_half, &response).await?;
+            }
             Request::Models { provider } => {
                 let client = state.lock().await.client_for_models(&provider);
                 let response = match client {

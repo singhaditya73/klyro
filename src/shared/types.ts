@@ -767,7 +767,7 @@ export interface KlyroApi {
 
   listCaptureSources(): Promise<CaptureSource[]>
   grabScreen(sourceId?: string): Promise<CaptureResult>
-  transcribe(audio: ArrayBuffer, mimeType: string): Promise<TranscribeResult>
+  transcribe(audio: ArrayBuffer, mimeType: string, pcmBase64?: string): Promise<TranscribeResult>
 
   checkPermissions(): Promise<PermissionState>
   hideOverlay(): Promise<void>

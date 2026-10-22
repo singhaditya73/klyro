@@ -293,3 +293,45 @@ export function createSilenceWatcher(stream: MediaStream): SilenceWatcher | null
     return null
   }
 }
+
+/**
+ * Decodes any browser-recorded audio blob into 16000Hz mono Float32 PCM samples,
+ * base64-encoded. Used for instantaneous local Whisper offline transcription.
+ */
+export async function decodeAudioToPcm16kBase64(blob: Blob): Promise<string> {
+  const arrayBuffer = await blob.arrayBuffer()
+  const AudioContextClass =
+    typeof window !== 'undefined'
+      ? window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+      : null
+  if (!AudioContextClass) return ''
+
+  const tempContext = new AudioContextClass()
+  try {
+    const audioBuffer = await tempContext.decodeAudioData(arrayBuffer.slice(0))
+    const sampleRate = 16000
+    const length = Math.ceil(audioBuffer.duration * sampleRate)
+    if (length <= 0) return ''
+
+    const offlineContext = new OfflineAudioContext(1, length, sampleRate)
+    const source = offlineContext.createBufferSource()
+    source.buffer = audioBuffer
+    source.connect(offlineContext.destination)
+    source.start(0)
+
+    const rendered = await offlineContext.startRendering()
+    const channelData = rendered.getChannelData(0)
+
+    const u8 = new Uint8Array(channelData.buffer, channelData.byteOffset, channelData.byteLength)
+    let binary = ''
+    const chunkSize = 8192
+    for (let i = 0; i < u8.length; i += chunkSize) {
+      binary += String.fromCharCode.apply(null, Array.from(u8.subarray(i, i + chunkSize)))
+    }
+    return btoa(binary)
+  } catch {
+    return ''
+  } finally {
+    void tempContext.close().catch(() => undefined)
+  }
+}
