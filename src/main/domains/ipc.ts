@@ -21,6 +21,7 @@ import { transcribeAudio } from './audio'
 import { applyOverlayDisplay, applyOverlayOpacity, applyOverlayPrivateMode, listDisplays, overlayPrivateModeSupported, setOverlayStickyRecording } from './windows'
 import { conversations } from './conversations'
 import { overlayCatalogue } from './overlay-models'
+import { providersPatchSchema } from './provider-settings'
 import { checkPermissions } from './permissions'
 import { grabScreen, listCaptureSources, probeOverlayVisibility } from './screenshot'
 import { settingsDomain } from './settings'
@@ -82,9 +83,7 @@ const settingsPatchSchema = z
     overlayPrivateMode: z.boolean().optional(),
     overlayOpacity: z.number().int().min(20).max(100).optional(),
     diagnosticsOptIn: z.boolean().optional(),
-    providers: z
-      .record(z.string(), z.object({ baseUrl: z.string().max(500), model: z.string().max(200) }))
-      .optional()
+    providers: providersPatchSchema.optional()
   })
   .strict()
 

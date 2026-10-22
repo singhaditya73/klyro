@@ -21,6 +21,11 @@ you connected a moment ago.
   are asked in parallel, a provider that is down is left out with a note rather
   than an error, and the one in use is always shown — even when it is empty, so
   the reason is visible.
+- **The model choice is actually saved.** The settings schema listed only
+  `baseUrl` and `model`, and zod drops unknown keys, so the `fastModel` written
+  by the overlay (and by Settings → Fast model) was silently discarded: the
+  choice showed in the UI and the next launch used the old model. The schema
+  now carries every provider field and has a regression test.
 
 ## [0.9.15] — 2026-10-22
 
