@@ -110,6 +110,9 @@ export interface RouteInput {
 
 const KEY_REQUIRED: ReadonlySet<ProviderId> = new Set<ProviderId>(['openai', 'anthropic', 'gemini'])
 
+/** Providers that are a program on this machine, not a service with a URL. */
+const NO_ENDPOINT: ReadonlySet<ProviderId> = new Set<ProviderId>(['claude-code', 'codex'])
+
 export function resolveRoute({ settings, apiKey, purpose = 'chat' }: RouteInput): ResolvedRoute {
   const providerId = settings.activeProvider
   const meta = PROVIDER_META[providerId] ?? PROVIDER_META.openai
@@ -125,7 +128,8 @@ export function resolveRoute({ settings, apiKey, purpose = 'chat' }: RouteInput)
       : (configured?.model ?? '').trim() || defaults.model
   const baseUrl = (configured?.baseUrl ?? '').trim() || defaults.baseUrl
 
-  if (!baseUrl) {
+  // The agent CLIs are programs, not endpoints: they have no URL to set.
+  if (!baseUrl && !NO_ENDPOINT.has(providerId)) {
     throw new ProviderError(`No endpoint URL is set for ${meta.label}. Add one in Settings.`, {
       kind: 'bad_request',
       provider: providerId

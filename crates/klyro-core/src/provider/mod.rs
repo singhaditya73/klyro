@@ -1,22 +1,37 @@
 //! The provider clients the daemon speaks to.
 //!
-//! Two shapes to begin with:
+//! Five shapes, one contract:
 //!
-//!   - the **OpenAI-shaped** family: OpenAI, Groq, any OpenAI-compatible
-//!     server. `POST {base}/chat/completions`, streamed as server-sent events.
+//!   - the **OpenAI-shaped** family (OpenAI, Groq, any OpenAI-compatible
+//!     server): `POST {base}/chat/completions`, streamed as server-sent events.
 //!   - **Ollama**, which has its own native API: `POST {base}/api/chat`,
 //!     streamed as newline-delimited JSON.
+//!   - **OpenCode**: a local server with its own session API, and its own
+//!     idea of a turn.
+//!   - the **agent CLIs** — Claude Code and Codex — which are programs, not
+//!     endpoints: they are run, and they answer on stdout.
+//!   - **Antigravity**: a Connect-RPC call to the agent IDE's own language
+//!     server.
 //!
-//! The local agents (OpenCode, Claude Code, Codex, Antigravity) have their own
-//! protocols and join the daemon one by one; the point of the daemon is that
-//! the *hot path* does not depend on Electron.
+//! The point of the daemon is that the hot path — the question asked in the
+//! middle of a meeting — does not wait on a browser runtime. Every one of
+//! these runs here.
 
-use std::pin::Pin;
+pub mod antigravity;
+pub mod cli;
+pub mod opencode;
+pub mod stream;
 
-use bytes::Bytes;
-use futures_core::Stream;
+#[cfg(test)]
+mod tests;
 
-use crate::protocol::{ImageInput, ModelInfo};
+use crate::protocol::ImageInput;
+
+pub use antigravity::Antigravity;
+pub use cli::{ClaudeCode, Codex};
+pub use opencode::OpenCode;
+
+use stream::{ndjson_stream, sse_stream, ByteStream};
 
 /// One piece of an answer, as it arrives.
 pub enum Chunk {
@@ -24,24 +39,26 @@ pub enum Chunk {
     Done,
 }
 
-/// The byte stream a provider sends, boxed so the types stay simple.
-type ByteStream = Pin<Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Send>>;
-
-/// The answer, as it arrives.
-type AnswerStream = Pin<Box<dyn Stream<Item = Result<Chunk, String>> + Send>>;
+/// The answer, as a stream.
+pub type AnswerStream = std::pin::Pin<Box<dyn futures_core::Stream<Item = Result<Chunk, String>> + Send>>;
 
 /// A provider the daemon can talk to.
 pub enum Client {
     OpenAi(OpenAi),
     Ollama(Ollama),
+    OpenCode(OpenCode),
+    ClaudeCode(ClaudeCode),
+    Codex(Codex),
+    Antigravity(Antigravity),
 }
 
 impl Client {
-    /// The models this provider serves.
-    pub async fn models(&self) -> Result<Vec<ModelInfo>, String> {
+    /// The models this provider serves, when it can be asked.
+    pub async fn models(&self) -> Result<Vec<crate::protocol::ModelInfo>, String> {
         match self {
             Client::OpenAi(client) => client.models().await,
             Client::Ollama(client) => client.models().await,
+            _ => Ok(Vec::new()),
         }
     }
 
@@ -55,6 +72,10 @@ impl Client {
         match self {
             Client::OpenAi(client) => Ok(Box::pin(client.ask(model, prompt, images).await?)),
             Client::Ollama(client) => Ok(Box::pin(client.ask(model, prompt, images).await?)),
+            Client::OpenCode(client) => Ok(Box::pin(client.ask(model, prompt, images).await?)),
+            Client::ClaudeCode(client) => Ok(Box::pin(client.ask(model, prompt, images).await?)),
+            Client::Codex(client) => Ok(Box::pin(client.ask(model, prompt, images).await?)),
+            Client::Antigravity(client) => Ok(Box::pin(client.ask(model, prompt).await?)),
         }
     }
 }
@@ -75,7 +96,7 @@ impl OpenAi {
         }
     }
 
-    pub async fn models(&self) -> Result<Vec<ModelInfo>, String> {
+    pub async fn models(&self) -> Result<Vec<crate::protocol::ModelInfo>, String> {
         let mut request = self.client.get(format!("{}/models", self.base_url));
         if let Some(key) = &self.api_key {
             request = request.bearer_auth(key);
@@ -105,7 +126,7 @@ impl OpenAi {
                     .and_then(|value| value.as_str())
                     .unwrap_or("")
                     .to_string();
-                Some(ModelInfo {
+                Some(crate::protocol::ModelInfo {
                     name: id.clone(),
                     id,
                     provider: owner,
@@ -178,7 +199,7 @@ impl Ollama {
         }
     }
 
-    pub async fn models(&self) -> Result<Vec<ModelInfo>, String> {
+    pub async fn models(&self) -> Result<Vec<crate::protocol::ModelInfo>, String> {
         let response = self
             .client
             .get(format!("{}/api/tags", self.base_url))
@@ -205,7 +226,7 @@ impl Ollama {
                     .or_else(|| entry.get("model"))
                     .and_then(|value| value.as_str())?
                     .to_string();
-                Some(ModelInfo {
+                Some(crate::protocol::ModelInfo {
                     name: id.clone(),
                     id,
                     provider: "ollama".to_string(),
@@ -259,99 +280,9 @@ impl Ollama {
 }
 
 /// A client that does not hold a connection open for no reason.
-fn http_client() -> reqwest::Client {
+pub fn http_client() -> reqwest::Client {
     reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(120))
         .build()
         .unwrap_or_default()
-}
-
-/// Read a server-sent-events body and pull the text out of it.
-fn sse_stream(stream: ByteStream) -> impl Stream<Item = Result<Chunk, String>> {
-    futures_util::stream::unfold(
-        (stream, String::new()),
-        |(mut stream, mut buffer)| async move {
-            use futures_util::StreamExt;
-            loop {
-                let chunk = match stream.next().await {
-                    Some(Ok(chunk)) => chunk,
-                    Some(Err(error)) => {
-                        return Some((Err(error.to_string()), (stream, buffer)))
-                    }
-                    None => return None,
-                };
-                buffer.push_str(&String::from_utf8_lossy(&chunk));
-                while let Some(index) = buffer.find('\n') {
-                    let line: String = buffer.drain(..=index).collect();
-                    let line = line.trim().to_string();
-                    if line.is_empty() {
-                        continue;
-                    }
-                    let Some(data) = line.strip_prefix("data:") else {
-                        continue;
-                    };
-                    let data = data.trim();
-                    if data == "[DONE]" {
-                        return Some((Ok(Chunk::Done), (stream, buffer)));
-                    }
-                    let Ok(value) = serde_json::from_str::<serde_json::Value>(data) else {
-                        continue;
-                    };
-                    let delta = value
-                        .get("choices")
-                        .and_then(|choices| choices.get(0))
-                        .and_then(|choice| choice.get("delta"))
-                        .and_then(|delta| delta.get("content"))
-                        .and_then(|content| content.as_str());
-                    if let Some(text) = delta {
-                        if !text.is_empty() {
-                            return Some((Ok(Chunk::Text(text.to_string())), (stream, buffer)));
-                        }
-                    }
-                }
-            }
-        },
-    )
-}
-
-/// Read Ollama's newline-delimited JSON and pull the text out of it.
-fn ndjson_stream(stream: ByteStream) -> impl Stream<Item = Result<Chunk, String>> {
-    futures_util::stream::unfold(
-        (stream, String::new()),
-        |(mut stream, mut buffer)| async move {
-            use futures_util::StreamExt;
-            loop {
-                let chunk = match stream.next().await {
-                    Some(Ok(chunk)) => chunk,
-                    Some(Err(error)) => {
-                        return Some((Err(error.to_string()), (stream, buffer)))
-                    }
-                    None => return None,
-                };
-                buffer.push_str(&String::from_utf8_lossy(&chunk));
-                while let Some(index) = buffer.find('\n') {
-                    let line: String = buffer.drain(..=index).collect();
-                    let line = line.trim().to_string();
-                    if line.is_empty() {
-                        continue;
-                    }
-                    let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) else {
-                        continue;
-                    };
-                    if value.get("done").and_then(|done| done.as_bool()) == Some(true) {
-                        return Some((Ok(Chunk::Done), (stream, buffer)));
-                    }
-                    let text = value
-                        .get("message")
-                        .and_then(|message| message.get("content"))
-                        .and_then(|content| content.as_str());
-                    if let Some(text) = text {
-                        if !text.is_empty() {
-                            return Some((Ok(Chunk::Text(text.to_string())), (stream, buffer)));
-                        }
-                    }
-                }
-            }
-        },
-    )
 }

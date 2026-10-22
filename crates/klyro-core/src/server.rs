@@ -14,7 +14,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 
 use crate::protocol::{ProviderConfig, Request, Response};
-use crate::provider::{Chunk, Client, Ollama, OpenAi};
+use crate::provider::{Antigravity, Chunk, ClaudeCode, Client, Codex, Ollama, OpenAi, OpenCode};
 
 /// The version of the daemon, reported to the app.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -46,6 +46,9 @@ impl State {
         provider: &str,
         base_url: &str,
         api_key: Option<String>,
+        binary: &str,
+        port: u16,
+        csrf: &str,
     ) -> Option<Client> {
         let stored = self.providers.get(provider);
         let url = if base_url.is_empty() {
@@ -54,14 +57,20 @@ impl State {
             base_url.to_string()
         };
         let key = api_key.or_else(|| stored.and_then(|config| config.api_key.clone()));
-        if url.is_empty() {
-            return None;
-        }
-        Some(if provider == "ollama" {
-            Client::Ollama(Ollama::new(&url))
+        // The agent CLIs are programs: the request names the one to run.
+        let program = if binary.is_empty() {
+            String::new()
         } else {
-            Client::OpenAi(OpenAi::new(&url, key))
-        })
+            binary.to_string()
+        };
+        match provider {
+            "ollama" => (!url.is_empty()).then(|| Client::Ollama(Ollama::new(&url))),
+            "opencode" => (!url.is_empty()).then(|| Client::OpenCode(OpenCode::new(&url, key))),
+            "claude-code" => (!program.is_empty()).then(|| Client::ClaudeCode(ClaudeCode::new(&program))),
+            "codex" => (!program.is_empty()).then(|| Client::Codex(Codex::new(&program))),
+            "antigravity" => (port > 0).then(|| Client::Antigravity(Antigravity::new(port, csrf))),
+            _ => (!url.is_empty()).then(|| Client::OpenAi(OpenAi::new(&url, key))),
+        }
     }
 
     /// The client for a catalogue lookup.
@@ -70,10 +79,10 @@ impl State {
         if stored.base_url.is_empty() {
             return None;
         }
-        Some(if provider == "ollama" {
-            Client::Ollama(Ollama::new(&stored.base_url))
-        } else {
-            Client::OpenAi(OpenAi::new(&stored.base_url, stored.api_key.clone()))
+        Some(match provider {
+            "ollama" => Client::Ollama(Ollama::new(&stored.base_url)),
+            "opencode" => Client::OpenCode(OpenCode::new(&stored.base_url, stored.api_key.clone())),
+            _ => Client::OpenAi(OpenAi::new(&stored.base_url, stored.api_key.clone())),
         })
     }
 }
@@ -188,11 +197,18 @@ async fn handle(
                 api_key,
                 prompt,
                 images,
+                binary,
+                port,
+                csrf,
             } => {
-                let client = state
-                    .lock()
-                    .await
-                    .client_for_ask(&provider, &base_url, api_key.clone());
+                let client = state.lock().await.client_for_ask(
+                    &provider,
+                    &base_url,
+                    api_key.clone(),
+                    &binary,
+                    port,
+                    &csrf,
+                );
                 let client = match client {
                     Some(client) => client,
                     None => {

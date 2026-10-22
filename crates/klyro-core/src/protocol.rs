@@ -36,6 +36,15 @@ pub enum Request {
         /// Images as data URLs, for the providers that can read them.
         #[serde(default)]
         images: Vec<ImageInput>,
+        /// The program to run, for the agent CLIs.
+        #[serde(default)]
+        binary: String,
+        /// The port the Antigravity service listens on.
+        #[serde(default)]
+        port: u16,
+        /// The token the Antigravity service was given.
+        #[serde(default)]
+        csrf: String,
     },
     /// Is the daemon there?
     Ping,

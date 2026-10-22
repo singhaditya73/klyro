@@ -4,6 +4,36 @@ All notable changes to Klyro are recorded here. Versions follow [SemVer](https:/
 
 ## [Unreleased]
 
+## [0.9.12] — 2026-10-22
+
+Every provider in the daemon: the local agents join the hot path in Rust.
+
+### Added
+- **OpenCode in the daemon.** The session API, both generations: a session is
+  created, the model is chosen, the prompt is queued, and the turn is read
+  back until the server says it is over (`idle`). A failed turn is reported
+  with the server's own reason, and a wrong HTTP method is refused rather than
+  guessed at.
+- **Claude Code and Codex in the daemon.** The CLIs are run as programs, with
+  the user's own login: Claude Code as a JSON-line stream (pictures travel on
+  stdin), Codex as `codex exec` with `--image` for a picture.
+- **Antigravity in the daemon.** The Connect-RPC call to the IDE's own
+  language server, with its CSRF token. The service stays the app's to start;
+  the daemon places the call, so the model's answer no longer waits on the
+  renderer.
+- **Protocol-specific tests for each agent.** `cargo test` runs every client
+  against a fake of the real thing: an OpenCode server that refuses a wrong
+  method, a failed turn with its own reason, a Claude Code CLI fed a picture, a
+  Codex CLI answering on stdout, and an Antigravity service that checks the
+  path, the header and the model.
+
+### Fixed
+- **A local agent no longer needs a URL.** The route check demanded an
+  endpoint for Claude Code and Codex, which are programs, not services — so a
+  default install could not ask them anything. They now pass without one.
+- **Antigravity falls back to the app when its service is not there**, so the
+  message says which window to open instead of a generic "not set up".
+
 ## [0.9.11] — 2026-10-21
 
 Interview history, a session that remembers, and answers that fit the question.

@@ -350,6 +350,18 @@ class AntigravityDomain {
     }
   }
 
+  /**
+   * Where the Antigravity service is listening, and the token it answers to.
+   *
+   * The daemon asks the service over this, so the call itself happens in
+   * Rust while the session stays where it is: the app's own store.
+   */
+  async endpoint(): Promise<{ port: number; token: string } | null> {
+    const connection = await this.connectToServer()
+    if (!connection) return null
+    return { port: connection.port, token: connection.token }
+  }
+
   /** Stop a service we started. */
   stopService(): void {
     if (this.service) {

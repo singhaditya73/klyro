@@ -40,6 +40,12 @@ export interface DaemonAsk {
   apiKey?: string | null
   prompt: string
   images?: Array<{ dataUrl: string; mime: string }>
+  /** The program to run, for the agent CLIs. */
+  binary?: string
+  /** The port the Antigravity service listens on. */
+  port?: number
+  /** The token the Antigravity service answers to. */
+  csrf?: string
 }
 
 export type DaemonEvent =
@@ -242,7 +248,10 @@ class DaemonClient {
           base_url: request.baseUrl ?? '',
           api_key: request.apiKey ?? null,
           prompt: request.prompt,
-          images: (request.images ?? []).map((image) => ({ data_url: image.dataUrl, mime: image.mime }))
+          images: (request.images ?? []).map((image) => ({ data_url: image.dataUrl, mime: image.mime })),
+          binary: request.binary ?? '',
+          port: request.port ?? 0,
+          csrf: request.csrf ?? ''
         })}\n`
       )
     })

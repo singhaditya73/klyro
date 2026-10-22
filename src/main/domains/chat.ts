@@ -16,6 +16,9 @@ import { buildKnowledgeContext } from './context'
 import { adviceFor, classifyQuestion, contextBlock } from './interview-model'
 import { daemon } from './daemon'
 import { interviews } from './interviews'
+import { antigravity as antigravityDomain } from './antigravity'
+import { findClaudeBinary } from '../providers/claude-code'
+import { findCodexBinary } from '../providers/codex'
 import { documents } from './documents'
 import { memory } from './memory'
 import { settingsDomain } from './settings'
@@ -56,7 +59,23 @@ function styleSuffix(style: ResponseStyle): string {
  * The providers the daemon can answer for: the OpenAI-shaped family, which
  * is the same shape the daemon speaks.
  */
-const DAEMON_PROVIDERS = new Set<ProviderId>(['openai', 'groq', 'openai-compatible', 'ollama'])
+/** The agent CLI to run, for the providers that are programs. */
+function binaryFor(providerId: ProviderId): string | null {
+  if (providerId === 'claude-code') return findClaudeBinary()
+  if (providerId === 'codex') return findCodexBinary()
+  return null
+}
+
+const DAEMON_PROVIDERS = new Set<ProviderId>([
+  'openai',
+  'groq',
+  'openai-compatible',
+  'ollama',
+  'opencode',
+  'claude-code',
+  'codex',
+  'antigravity'
+])
 
 /**
  * How much history is sent to the model. Without a bound, a long conversation
@@ -235,7 +254,13 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
     // The daemon serves the overlay's hot path — the question you ask in the
     // middle of a meeting. Everything else goes through the app.
     const daemonCanAnswer = request.useFastModel === true && DAEMON_PROVIDERS.has(providerId)
-    if (daemonCanAnswer && (await daemon.available())) {
+    // Antigravity's service belongs to the app; the daemon only places the
+    // call. When the service is not reachable the app's own client answers,
+    // because it can say what to open.
+    const antigravity =
+      daemonCanAnswer && providerId === 'antigravity' ? await antigravityDomain.endpoint() : null
+    const antigravityReady = providerId !== 'antigravity' || antigravity !== null
+    if (daemonCanAnswer && antigravityReady && (await daemon.available())) {
       let daemonError: string | null = null
       const answered = await daemon.ask(
         {
@@ -247,7 +272,13 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
           images: (request.attachments ?? []).map((attachment) => ({
             dataUrl: attachment.dataUrl,
             mime: attachment.mime
-          }))
+          })),
+          // The agent CLIs are programs: the daemon runs the same one the app
+          // would have run.
+          binary: binaryFor(providerId) ?? '',
+          // Antigravity's service speaks Connect-RPC on its own port.
+          port: antigravity?.port ?? 0,
+          csrf: antigravity?.token ?? ''
         },
         (event) => {
           if (event.kind === 'delta') {

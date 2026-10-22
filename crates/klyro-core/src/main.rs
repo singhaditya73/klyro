@@ -114,7 +114,7 @@ fn daemon_is_answering(path: &std::path::Path) -> bool {
     let (Some(port), Some(token)) = (state.get("port"), state.get("token")) else {
         return false;
     };
-    let (Some(port), Some(token)) = (port.as_u64(), token.as_str()) else {
+    let (Some(port), Some(_token)) = (port.as_u64(), token.as_str()) else {
         return false;
     };
     // A quick connect is enough: the daemon answers the token and then hangs up.
