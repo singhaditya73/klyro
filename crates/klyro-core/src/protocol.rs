@@ -53,6 +53,11 @@ pub enum Request {
         /// Path to the GGML/GGUF model file on disk.
         model_path: String,
     },
+    /// Prewarm the Whisper model into RAM.
+    Prewarm {
+        /// Path to the GGML/GGUF model file on disk.
+        model_path: String,
+    },
     /// Is the daemon there?
     Ping,
 }
@@ -92,6 +97,8 @@ pub enum Response {
     Models { models: Vec<ModelInfo> },
     /// Result of an audio transcription.
     Transcribed { text: String },
+    /// Prewarm completed.
+    Prewarmed,
     /// Something went wrong, said in a way worth showing a person.
     Error { message: String },
     /// An answer to a `Ping`.

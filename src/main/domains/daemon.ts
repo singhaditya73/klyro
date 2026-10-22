@@ -55,6 +55,7 @@ export type DaemonEvent =
   | { kind: 'done'; ms: number }
   | { kind: 'models'; models: DaemonModel[] }
   | { kind: 'transcribed'; text: string }
+  | { kind: 'prewarmed' }
   | { kind: 'error'; message: string }
   | { kind: 'pong' }
 
@@ -372,6 +373,15 @@ class DaemonClient {
     })
   }
 
+  /** Prewarm the local Whisper model in RAM for zero first-utterance latency. */
+  async prewarm(modelPath: string): Promise<boolean> {
+    const answer = await this.request<{ kind: 'prewarmed' }>(
+      { kind: 'prewarm', model_path: modelPath },
+      (event) => event.kind === 'prewarmed' || event.kind === 'error'
+    )
+    return Boolean(answer && answer.kind === 'prewarmed')
+  }
+
   /** Stop listening to the daemon's events. */
   onEvent(listener: (event: DaemonEvent) => void): () => void {
     this.listeners.add(listener)
@@ -399,7 +409,11 @@ class DaemonDomain {
     if (await this.client.available()) {
       const running = await this.client.version()
       const expected = binary ? binaryVersion(binary) : null
-      if (!expected || !running || running === expected) return true
+      if (!expected || !running || running === expected) {
+        const model = bundledWhisperModelPath()
+        if (model) void this.client.prewarm(model).catch(() => undefined)
+        return true
+      }
       await this.replaceStale()
     }
     if (!binary) return false
@@ -417,7 +431,11 @@ class DaemonDomain {
     // Give it a moment to bind its socket.
     for (let attempt = 0; attempt < 20; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 50))
-      if (await this.client.available()) return true
+      if (await this.client.available()) {
+        const model = bundledWhisperModelPath()
+        if (model) void this.client.prewarm(model).catch(() => undefined)
+        return true
+      }
     }
     return false
   }
@@ -480,6 +498,12 @@ class DaemonDomain {
   async transcribe(audioPcmBase64: string, modelPath: string): Promise<string> {
     if (!(await this.start())) throw new Error('Could not start local speech engine')
     return this.client.transcribe(audioPcmBase64, modelPath)
+  }
+
+  /** Prewarm the bundled Whisper model into memory. */
+  async prewarm(modelPath: string): Promise<boolean> {
+    if (!(await this.start())) return false
+    return this.client.prewarm(modelPath)
   }
 }
 

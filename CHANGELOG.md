@@ -2,6 +2,21 @@
 
 All notable changes to Klyro are recorded here. Versions follow [SemVer](https://semver.org/).
 
+## [0.9.22] — 2026-10-23
+
+Overlay drag and resize anywhere, multi-turn session Q&A history, audio feedback glow, multi-threaded Whisper inference, model pre-warming, and hardware echo cancellation.
+
+### Added
+- **Multi-turn overlay session history.** Past questions and answers are now preserved in the overlay for the current session in a toggleable history tray with individual copy buttons.
+- **Drag & resize anywhere on screen.** The overlay is now resizable and can be freely moved and repositioned anywhere on screen. Position and custom dimensions are remembered across toggles.
+- **Continuous stealth protection.** Re-affirms OS-level capture exclusion (`WDA_EXCLUDEFROMCAPTURE` / `CGWindowSharingNone`) across drag, repositioning, and resize events to guarantee the overlay remains 100% invisible during screen shares.
+- **Glowing audio feedback borders.** Real-time visual pulse along the overlay borders indicating hearing (cyan glow), thinking (purple glow), listening (emerald glow), and recording (red glow).
+- **Whisper model pre-warming on launch.** Pre-loads Whisper model weights into memory upon daemon launch so the first voice prompt starts inference instantly with zero disk read delay.
+- **Multi-threaded Whisper inference.** Leverages CPU parallelism dynamically with clamped thread pools for 2–4x faster local speech recognition.
+- **Hardware echo cancellation and noise suppression.** Activates native Chromium WebRTC DSP audio constraints (`echoCancellation`, `noiseSuppression`, `autoGainControl`) across all microphone streams.
+- **Smarter VAD (Voice Activity Detection).** Integrates speech threshold hysteresis and transient debouncing to ignore momentary keyboard clicks, mouse taps, and ambient spikes.
+- **Zero-copy PCM audio pipeline.** Eliminates intermediate JavaScript array allocation during PCM 16kHz base64 conversions.
+
 ## [0.9.21] — 2026-10-23
 
 Bundled local Whisper model for 100% offline, zero-key speech-to-text.

@@ -195,6 +195,21 @@ async fn handle(
                 };
                 write_line(&mut write_half, &response).await?;
             }
+            Request::Prewarm { model_path } => {
+                let result = tokio::task::spawn_blocking(move || {
+                    crate::transcribe::prewarm(&model_path)
+                })
+                .await;
+
+                let response = match result {
+                    Ok(Ok(())) => Response::Prewarmed,
+                    Ok(Err(message)) => Response::Error { message },
+                    Err(error) => Response::Error {
+                        message: format!("Prewarm task failed: {error}"),
+                    },
+                };
+                write_line(&mut write_half, &response).await?;
+            }
             Request::Models { provider } => {
                 let client = state.lock().await.client_for_models(&provider);
                 let response = match client {

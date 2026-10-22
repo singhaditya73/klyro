@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
+  ChevronDown,
+  ChevronUp,
   Copy,
   Check,
   Eye,
   EyeOff,
+  GripVertical,
   Headphones,
+  History,
   Info,
   Loader2,
   Mic,
@@ -12,6 +16,7 @@ import {
   RefreshCcw,
   ScanEye,
   Square,
+  Trash2,
   TriangleAlert
 } from 'lucide-react'
 import {
@@ -29,6 +34,7 @@ import {
   utteranceEnded,
   utteranceWorthAsking,
   decodeAudioToPcm16kBase64,
+  HARDWARE_AUDIO_CONSTRAINTS,
   type SilenceWatcher
 } from './lib/listen'
 import type { Attachment } from '@shared/types'
@@ -47,11 +53,50 @@ const SLICE_MS = 250
 const MIN_OVERLAY_HEIGHT = 150
 const MAX_OVERLAY_HEIGHT = 520
 
+export interface SessionTurn {
+  id: string
+  question: string
+  answer: string
+  timing?: { ms: number; totalMs: number; model?: string; cached?: boolean } | null
+}
+
 export default function OverlayApp() {
   const [text, setText] = useState('')
   const [answer, setAnswer] = useState('')
   /** The question as it was asked, so the answer has a subject. */
   const [question, setQuestion] = useState('')
+  const [history, setHistory] = useState<SessionTurn[]>([])
+  const [showHistory, setShowHistory] = useState(true)
+  const [copiedHistoryId, setCopiedHistoryId] = useState<string | null>(null)
+  const currentTurnRef = useRef<{
+    question: string
+    answer: string
+    timing: { ms: number; totalMs: number; model?: string; cached?: boolean } | null
+  }>({
+    question: '',
+    answer: '',
+    timing: null
+  })
+
+  const archiveCurrentTurnIfAny = useCallback(() => {
+    const cur = currentTurnRef.current
+    if (cur.question && cur.answer && !isNoAnswer(cur.answer)) {
+      setHistory((prev) => {
+        const last = prev[prev.length - 1]
+        if (last && last.question === cur.question && last.answer === cur.answer) return prev
+        return [
+          ...prev,
+          {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            question: cur.question,
+            answer: cur.answer,
+            timing: cur.timing
+          }
+        ]
+      })
+    }
+  }, [])
+
   const [busy, setBusy] = useState(false)
   const [conversationId, setConversationId] = useState<string | null>(null)
   /** The interview this overlay is recording into, when it is recording one. */
@@ -195,7 +240,7 @@ export default function OverlayApp() {
 
   useLayoutEffect(() => {
     resizeToContent()
-  }, [answer, question, transcript, capture, overlaySources, mode, talkState, timing, resizeToContent])
+  }, [answer, question, history, showHistory, transcript, capture, overlaySources, mode, talkState, timing, resizeToContent])
 
   /**
    * Make room for the model menu.
@@ -241,18 +286,22 @@ export default function OverlayApp() {
     const offChat = window.klyro.onChatStream((event) => {
       if (event.type === 'start') {
         setAnswer('')
+        currentTurnRef.current.answer = ''
         talkRef.current.answering = true
         // The conversation mode has its own status line; a typed question does
         // not need one.
         if (talkRef.current.timer !== null) setTalkState('thinking')
       } else if (event.type === 'delta') {
+        currentTurnRef.current.answer += event.text
         setAnswer((prev) => prev + event.text)
       } else if (event.type === 'done' || event.type === 'error') {
         setBusy(false)
         talkRef.current.answering = false
         if (talkRef.current.timer !== null) setTalkState('listening')
         if (event.type === 'done') {
-          setTiming({ ms: event.ms ?? 0, totalMs: event.totalMs ?? 0, model: event.model, cached: event.cached })
+          const timingObj = { ms: event.ms ?? 0, totalMs: event.totalMs ?? 0, model: event.model, cached: event.cached }
+          currentTurnRef.current.timing = timingObj
+          setTiming(timingObj)
         }
         if (event.type === 'error') setErrorText(event.message)
         // Once the answer landed and nothing is still recording, the overlay
@@ -334,7 +383,7 @@ export default function OverlayApp() {
         // records from via @DEFAULT_MONITOR@. Chromium hears the playback bus,
         // which includes the headphone feed. Device labels only populate after
         // a microphone grant, so take a throwaway mic grant first.
-        const grant = await navigator.mediaDevices.getUserMedia({ audio: true })
+        const grant = await navigator.mediaDevices.getUserMedia({ audio: HARDWARE_AUDIO_CONSTRAINTS })
         grant.getTracks().forEach((track) => track.stop())
         const devices = await navigator.mediaDevices.enumerateDevices()
         const monitor = devices.find(
@@ -357,7 +406,7 @@ export default function OverlayApp() {
       // BlackHole); Linux without a monitor source or with denied access;
       // any other failure: fall back to the microphone, which hears the room
       // but not the output bus.
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: HARDWARE_AUDIO_CONSTRAINTS })
       streamRef.current = stream
       setAssistSource('Microphone')
       if (isWindows) {
@@ -516,6 +565,8 @@ export default function OverlayApp() {
   /** Answer a spoken question, with the screen attached when possible. */
   const askSpoken = useCallback(async (spoken: string): Promise<void> => {
     if (!spoken.trim()) return
+    archiveCurrentTurnIfAny()
+    currentTurnRef.current = { question: spoken, answer: '', timing: null }
     setAnswer('')
     setQuestion(spoken)
     setTiming(null)
@@ -598,7 +649,7 @@ export default function OverlayApp() {
   const startTalking = useCallback(async (): Promise<void> => {
     setAssistNote(null)
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: HARDWARE_AUDIO_CONSTRAINTS })
       const talk = talkRef.current
       talk.stream = stream
 
@@ -696,6 +747,8 @@ export default function OverlayApp() {
         setAssistNote('Nothing was said in that clip.')
         return
       }
+      archiveCurrentTurnIfAny()
+      currentTurnRef.current = { question, answer: '', timing: null }
       setTranscript([`Q: ${question}`])
       setQuestion(question)
       await askAssist(snippetPrompt(question))
@@ -755,6 +808,8 @@ export default function OverlayApp() {
       const next = [...transcript.slice(-7), text]
       setTranscript(next)
       if (autoRef.current && !busyRef.current && looksLikeQuestion(text)) {
+        archiveCurrentTurnIfAny()
+        currentTurnRef.current = { question: text, answer: '', timing: null }
         setQuestion(text)
         await askAssist(listenPrompt(next))
       }
@@ -789,6 +844,8 @@ export default function OverlayApp() {
   async function ask(): Promise<void> {
     const content = text.trim()
     if (!content || busyRef.current) return
+    archiveCurrentTurnIfAny()
+    currentTurnRef.current = { question: content, answer: '', timing: null }
     lastQuestionRef.current = content
     let id = conversationId
     if (!id) {
@@ -826,6 +883,8 @@ export default function OverlayApp() {
   async function retry(): Promise<void> {
     const content = lastQuestionRef.current
     if (!content || busyRef.current) return
+    archiveCurrentTurnIfAny()
+    currentTurnRef.current = { question: content, answer: '', timing: null }
     setAnswer('')
     setTiming(null)
     setBusy(true)
@@ -868,10 +927,23 @@ export default function OverlayApp() {
   const recording = mode === 'recording' || mode === 'listening'
   const hasAnswer = Boolean(answer) && !isNoAnswer(answer)
 
+  const glowClass = talkState === 'hearing'
+    ? ' overlay--glow-hearing'
+    : busy || talkState === 'thinking'
+    ? ' overlay--glow-thinking'
+    : mode === 'listening' || talkState === 'listening'
+    ? ' overlay--glow-listening'
+    : mode === 'recording'
+    ? ' overlay--glow-recording'
+    : ''
+
   return (
-    <div className={`overlay${privateMode?.enabled ? ' overlay--private' : ''}`} ref={rootRef}>
+    <div className={`overlay${privateMode?.enabled ? ' overlay--private' : ''}${glowClass}`} ref={rootRef}>
       <div className="overlay__inner" ref={innerRef}>
       <header className="overlay__head">
+        <div className="overlay__drag-grip" title="Drag to move anywhere on screen" aria-hidden="true">
+          <GripVertical className="icon icon--xs" />
+        </div>
         <img src={KlyroMark} alt="" className="overlay__mark" aria-hidden="true" />
         <span className="overlay__brand">Klyro</span>
         {overlayProvider && (
@@ -1129,8 +1201,62 @@ export default function OverlayApp() {
         </div>
       )}
 
-      {(question || hasAnswer || errorText || busy) && (
+      {(question || hasAnswer || errorText || busy || history.length > 0) && (
         <section className="overlay__response" ref={responseRef} aria-live="polite">
+          {history.length > 0 && (
+            <div className="overlay__history">
+              <div className="overlay__history-head">
+                <button
+                  type="button"
+                  className="overlay__history-toggle"
+                  onClick={() => setShowHistory((prev) => !prev)}
+                  title="Toggle session Q&A history"
+                >
+                  <History className="icon icon--xs" aria-hidden="true" />
+                  <span>Session History ({history.length})</span>
+                  {showHistory ? <ChevronUp className="icon icon--xs" /> : <ChevronDown className="icon icon--xs" />}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--quiet btn--xs"
+                  onClick={() => setHistory([])}
+                  title="Clear session history"
+                >
+                  <Trash2 className="icon icon--xs" aria-hidden="true" />
+                  <span>Clear</span>
+                </button>
+              </div>
+              {showHistory && (
+                <div className="column" style={{ gap: 6, marginTop: 4 }}>
+                  {history.map((turn) => (
+                    <div key={turn.id} className="overlay__history-item">
+                      <div className="overlay__history-q">
+                        <span>Q: {turn.question}</span>
+                        <button
+                          type="button"
+                          className="btn btn--quiet btn--xs"
+                          onClick={async () => {
+                            await navigator.clipboard.writeText(turn.answer)
+                            setCopiedHistoryId(turn.id)
+                            window.setTimeout(() => setCopiedHistoryId(null), 1500)
+                          }}
+                          title="Copy answer"
+                        >
+                          {copiedHistoryId === turn.id ? (
+                            <Check className="icon icon--xs" aria-hidden="true" />
+                          ) : (
+                            <Copy className="icon icon--xs" aria-hidden="true" />
+                          )}
+                        </button>
+                      </div>
+                      <div className="overlay__history-a">{turn.answer}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {question && (
             <div className="overlay__question">
               <span className="overlay__question-label">Asked</span>
@@ -1201,6 +1327,7 @@ export default function OverlayApp() {
           </footer>
         </section>
       )}
+      <div className="overlay__resize-corner" aria-hidden="true" title="Drag corner to resize" />
       </div>
     </div>
   )

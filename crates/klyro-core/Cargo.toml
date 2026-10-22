@@ -1,6 +1,6 @@
 [package]
 name = "klyro-core"
-version = "0.9.21"
+version = "0.9.22"
 edition = "2021"
 rust-version = "1.75"
 description = "The Klyro daemon: the always-on process that owns the hot path."

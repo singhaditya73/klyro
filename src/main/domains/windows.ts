@@ -19,6 +19,8 @@ let overlayWindow: BrowserWindow | null = null
 let overlayStickyRecording = false
 /** The height the overlay's content asked for, so showing it is the right size. */
 let overlayContentHeight = 0
+/** User-customized position and dimensions remembered across moves and resizes. */
+let userOverlayBounds: { x: number; y: number; width: number; height: number } | null = null
 
 function isDev(): boolean {
   return Boolean(process.env.ELECTRON_RENDERER_URL)
@@ -102,11 +104,15 @@ export function createMainWindow(): BrowserWindow {
 export function createOverlayWindow(): BrowserWindow {
   if (overlayWindow && !overlayWindow.isDestroyed()) return overlayWindow
   overlayWindow = new BrowserWindow({
-    width: OVERLAY_WIDTH,
-    height: OVERLAY_HEIGHT,
+    width: userOverlayBounds?.width || OVERLAY_WIDTH,
+    height: userOverlayBounds?.height || OVERLAY_HEIGHT,
+    minWidth: 380,
+    minHeight: 120,
+    maxWidth: 1600,
+    maxHeight: 1200,
     show: false,
     frame: false,
-    resizable: false,
+    resizable: true,
     movable: true,
     alwaysOnTop: true,
     skipTaskbar: true,
@@ -120,6 +126,19 @@ export function createOverlayWindow(): BrowserWindow {
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   applyOverlayPrivateMode()
   applyOverlayOpacity()
+
+  const saveBounds = (): void => {
+    if (overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible()) {
+      userOverlayBounds = overlayWindow.getBounds()
+    }
+  }
+  overlayWindow.on('moved', saveBounds)
+  overlayWindow.on('resized', () => {
+    saveBounds()
+    // Re-affirm stealth capture exclusion whenever resized
+    applyOverlayPrivateMode()
+  })
+
   overlayWindow.on('blur', () => {
     // While meeting-assist recording is live the overlay must keep running even
     // when focus returns to the meeting app; private mode has the same need
@@ -208,6 +227,23 @@ function overlayDisplay(): Electron.Display {
 }
 
 function positionOverlay(win: BrowserWindow): void {
+  if (userOverlayBounds) {
+    const displays = screen.getAllDisplays()
+    const onScreen = displays.some((d) => {
+      const b = d.bounds
+      return (
+        userOverlayBounds!.x + userOverlayBounds!.width > b.x &&
+        userOverlayBounds!.x < b.x + b.width &&
+        userOverlayBounds!.y + userOverlayBounds!.height > b.y &&
+        userOverlayBounds!.y < b.y + b.height
+      )
+    })
+    if (onScreen) {
+      win.setBounds(userOverlayBounds)
+      return
+    }
+  }
+
   const { workArea } = overlayDisplay()
   win.setBounds({
     x: Math.round(workArea.x + (workArea.width - OVERLAY_WIDTH) / 2),
@@ -249,9 +285,12 @@ export function resizeOverlay(height: number): number {
   overlayContentHeight = clamped
   if (!win || win.isDestroyed() || !win.isVisible()) return clamped
   const bounds = win.getBounds()
-  if (Math.abs(bounds.height - clamped) < 2) return bounds.height
+  const width = userOverlayBounds?.width ?? bounds.width ?? OVERLAY_WIDTH
+  const targetHeight = userOverlayBounds?.height ? Math.max(userOverlayBounds.height, clamped) : clamped
+  if (Math.abs(bounds.height - targetHeight) < 2 && bounds.width === width) return bounds.height
   try {
-    win.setBounds({ x: bounds.x, y: bounds.y, width: OVERLAY_WIDTH, height: clamped })
+    win.setBounds({ x: bounds.x, y: bounds.y, width, height: targetHeight })
+    applyOverlayPrivateMode()
   } catch (error) {
     logger.warn('Could not resize the overlay', error)
     return bounds.height

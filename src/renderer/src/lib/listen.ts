@@ -86,6 +86,15 @@ export interface LevelWatcher {
 /** A gap that is long enough to be a new run of speech. */
 export const NEW_RUN_GAP_MS = 200
 
+/** Audio constraints enabling hardware echo cancellation, noise suppression & auto gain. */
+export const HARDWARE_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
+  channelCount: 1,
+  sampleRate: 16000
+}
+
 /** Watch the level of a stream. Null when Web Audio is unavailable. */
 export function createLevelWatcher(stream: MediaStream): LevelWatcher | null {
   try {
@@ -99,13 +108,31 @@ export function createLevelWatcher(stream: MediaStream): LevelWatcher | null {
     const buffer = new Uint8Array(analyser.fftSize)
     let lastVoicedAt = Date.now()
     let speechStartedAt = 0
+    let voicedStreak = 0
     const timer = window.setInterval(() => {
       analyser.getByteTimeDomainData(buffer)
-      if (rmsFromTimeDomain(buffer) < SILENCE_RMS_THRESHOLD) return
+      const rms = rmsFromTimeDomain(buffer)
+      // Hysteresis: entering speech requires crossing higher threshold; sustaining speech allows lower threshold.
+      const isVoiced = speechStartedAt > 0
+        ? rms >= SILENCE_RMS_THRESHOLD * 0.75
+        : rms >= SILENCE_RMS_THRESHOLD
+
+      if (!isVoiced) {
+        voicedStreak = 0
+        return
+      }
+
+      voicedStreak += 1
+      // Require at least 2 consecutive voiced samples (~200ms) before committing to a new speech run.
+      // This completely suppresses instantaneous transient clicks, mouse taps, or throat pops.
+      if (voicedStreak < 2 && speechStartedAt === 0) return
+
       const now = Date.now()
       // A voiced sample after a pause starts a new run of speech — and so
       // does the very first one, or the first question would never be heard.
-      if (now - lastVoicedAt > NEW_RUN_GAP_MS || speechStartedAt === 0) speechStartedAt = now
+      if (now - lastVoicedAt > NEW_RUN_GAP_MS || speechStartedAt === 0) {
+        speechStartedAt = now - 100 // account for debounce window
+      }
       lastVoicedAt = now
     }, 100)
     return {
@@ -324,9 +351,11 @@ export async function decodeAudioToPcm16kBase64(blob: Blob): Promise<string> {
 
     const u8 = new Uint8Array(channelData.buffer, channelData.byteOffset, channelData.byteLength)
     let binary = ''
-    const chunkSize = 8192
-    for (let i = 0; i < u8.length; i += chunkSize) {
-      binary += String.fromCharCode.apply(null, Array.from(u8.subarray(i, i + chunkSize)))
+    const chunkSize = 16384
+    const len = u8.length
+    for (let i = 0; i < len; i += chunkSize) {
+      const slice = u8.subarray(i, Math.min(i + chunkSize, len))
+      binary += String.fromCharCode.apply(null, slice as unknown as number[])
     }
     return btoa(binary)
   } catch {
