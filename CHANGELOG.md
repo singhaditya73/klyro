@@ -4,6 +4,34 @@ All notable changes to Klyro are recorded here. Versions follow [SemVer](https:/
 
 ## [Unreleased]
 
+## [0.9.19] — 2026-10-22
+
+The model selector, fixed: it shows a name instead of an internal id, and it
+fits inside the overlay.
+
+### Fixed
+- **The overlay's model menu was clipped by the overlay itself.** The window is
+  small and the menu hung below the chip, so the search box and the options
+  were cut off. The menu now takes the room the window actually has: it opens
+  upwards when there is more room above, it is never taller than the window,
+  and the list scrolls inside it, so the search box and every option stay
+  reachable. In the overlay the window grows for as long as the menu is open
+  and gives the room back when it closes.
+- **The model showed as an internal id.** `MODEL_PLACEHOLDER_M50` is what
+  Antigravity's catalogue calls a model; the name is "Claude Opus 4.6". When a
+  provider is not listing its models — an IDE closed, a server stopped — the
+  control now shows the name the model had last time it was listed, and the
+  provider's name when it has none: "Antigravity · M50" instead of
+  `MODEL_PLACEHOLDER_M50`. The ids themselves are untouched.
+- **A page could look empty when one thing failed to load.** Home, Models &
+  Agents, Settings, Privacy & Data, Knowledge and Interviews now load each
+  part on its own, and say which part could not be read. An empty list is
+  never mistaken for "nothing is connected".
+- **A window that throws no longer goes blank.** The interface is wrapped in
+  an error boundary: it says what went wrong and offers a reload.
+- **A preload that is a build behind no longer takes the window down.** The
+  bridge calls the renderer needs from a newer build are optional now.
+
 ## [0.9.18] — 2026-10-22
 
 The interface, rebuilt: a compact overlay that fits its content, a control

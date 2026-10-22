@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Bookmark, Clock, FileText, Loader2, Save, Search, Sparkles, Trash2 } from 'lucide-react'
+import { AlertCircle, Bookmark, Clock, FileText, Loader2, Save, Search, Sparkles, Trash2 } from 'lucide-react'
 import { Badge, EmptyState, Group, PageHeader } from './ui'
 
 /**
@@ -97,6 +97,7 @@ export function InterviewsView(): React.ReactNode {
   const [busy, setBusy] = useState(false)
   const [noteDraft, setNoteDraft] = useState<Record<string, string>>({})
   const [confirmClearAll, setConfirmClearAll] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async (): Promise<void> => {
     try {
@@ -106,8 +107,11 @@ export function InterviewsView(): React.ReactNode {
       if (onlyBookmarked) query.bookmarked = true
       setSessions(await window.klyro.interviewsList(query))
       setFacets(await window.klyro.interviewsFacets())
-    } catch {
+      setError(null)
+    } catch (caught) {
+      // An empty list must say why it is empty.
       setSessions([])
+      setError((caught as Error).message)
     }
   }, [search, company, role, onlyBookmarked])
 
@@ -260,6 +264,12 @@ export function InterviewsView(): React.ReactNode {
                 </label>
               </div>
 
+              {error && (
+                <div className="notice notice--error" style={{ marginBottom: 12 }}>
+                  <AlertCircle className="icon icon--sm notice__icon" aria-hidden="true" />
+                  <span className="notice__body">{error}</span>
+                </div>
+              )}
               {sessions === null ? (
                 <div className="loading-line">Loading…</div>
               ) : sessions.length === 0 ? (

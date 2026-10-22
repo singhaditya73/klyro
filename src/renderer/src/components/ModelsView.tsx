@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Bot, Cloud, Cpu, Server, Sparkles } from 'lucide-react'
+import { AlertCircle, Bot, Cloud, Cpu, Server, Sparkles } from 'lucide-react'
 import type { AppSettings, ProviderId, ProviderStatus } from '@shared/types'
 import { Badge, Group, PageHeader, StatusDot } from './ui'
 import { ProviderCard } from './ProviderCard'
@@ -26,23 +26,36 @@ export function ModelsView({ onNavigate }: { onNavigate: (route: Route) => void 
   const [agents, setAgents] = useState<LocalAgent[]>([])
   const [clis, setClis] = useState<CliAgent[]>([])
   const [notice, setNotice] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
+  /** Each part loads on its own: one unreachable provider must not empty the page. */
   const load = useCallback(async (): Promise<void> => {
-    try {
-      const [next, list, local, programs] = await Promise.all([
-        window.klyro.getSettings(),
-        window.klyro.listProviders(),
-        window.klyro.localAgentsDetect(),
-        window.klyro.localAgentClis()
-      ])
-      setSettings(next)
-      setProviders(list)
-      setAgents(local)
-      setClis(programs)
-    } finally {
-      setLoading(false)
-    }
+    const failures: string[] = []
+    const [next, list, local, programs] = await Promise.all([
+      window.klyro.getSettings().catch((caught) => {
+        failures.push(`settings: ${(caught as Error).message}`)
+        return null
+      }),
+      window.klyro.listProviders().catch((caught) => {
+        failures.push(`providers: ${(caught as Error).message}`)
+        return [] as ProviderStatus[]
+      }),
+      window.klyro.localAgentsDetect().catch((caught) => {
+        failures.push(`local services: ${(caught as Error).message}`)
+        return [] as LocalAgent[]
+      }),
+      window.klyro.localAgentClis().catch((caught) => {
+        failures.push(`agents: ${(caught as Error).message}`)
+        return [] as CliAgent[]
+      })
+    ])
+    if (next) setSettings(next)
+    setProviders(list)
+    setAgents(local)
+    setClis(programs)
+    setLoadError(failures.length > 0 ? failures.join(' · ') : null)
+    setLoading(false)
   }, [])
 
   useEffect(() => {
@@ -76,7 +89,7 @@ export function ModelsView({ onNavigate }: { onNavigate: (route: Route) => void 
         if (agent.kind === 'opencode') {
           setNotice(`Checking which ${agent.name} model answers…`)
           try {
-            const picked = await window.klyro.openCodePickModel(agent.baseUrl)
+            const picked = await window.klyro.openCodePickModel?.(agent.baseUrl)
             if (picked.model) {
               chosen = picked.model
               check = { verified: picked.verified, name: picked.name, tried: picked.tried.length }
@@ -157,6 +170,12 @@ export function ModelsView({ onNavigate }: { onNavigate: (route: Route) => void 
       {notice && (
         <div className="notice notice--info" style={{ marginBottom: 16 }}>
           <span className="notice__body">{notice}</span>
+        </div>
+      )}
+      {loadError && (
+        <div className="notice notice--error" style={{ marginBottom: 16 }}>
+          <AlertCircle className="icon icon--sm notice__icon" aria-hidden="true" />
+          <span className="notice__body">Some of this could not be read: {loadError}</span>
         </div>
       )}
 

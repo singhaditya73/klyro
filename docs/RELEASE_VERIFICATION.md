@@ -9,7 +9,7 @@ log). Nothing here is marked done by intent — only by running the commands.
 | Command | Passes on this machine | Asserts |
 | --- | --- | --- |
 | `npm run typecheck` | ✅ | Main (`tsc -p tsconfig.node.json`) and renderer (`tsconfig.web.json`) both clean |
-| `npm test` | ✅ | 340 unit/integration tests in 54 files, 8 skipped (`vitest run`) |
+| `npm test` | ✅ | 357 unit/integration tests in 57 files, 8 skipped (`vitest run`) |
 | `npm run build` | ✅ | `out/main`, `out/preload`, `out/renderer` produced by electron-vite |
 | `npx electron scripts/smoke.cjs` (needs a display; CI: `xvfb-run -a …`) | ✅ | Boots the **real built app**; both windows render, the `window.klyro` bridge is present, no renderer errors and no CSP violations |
 | `DISPLAY=:0 npm run smoke` | ✅ | Same, invoked via the package script |
@@ -29,6 +29,7 @@ These drive the built app, so they are not part of CI:
 | `npx electron scripts/check-overlay-catalogue.cjs` (app closed) | The overlay's model chip opens a menu grouped by every connected provider. Verified 2026-10-22 with Ollama, Claude Code and Antigravity in one list (2 + 6 + 15 models), and a pick from Claude Code moved `activeProvider` and saved its `fastModel`. |
 | `npx vitest run src/main/domains/local-agent-launcher.real.test.ts` (OpenCode installed) | Starts the real OpenCode server, reads its password, and runs the connect-time model check: it skipped `flint-40b-free` (no answer in 6 s) and selected `recursive/flint-v1.0:free`, which answered. Verified 2026-10-22. |
 | `npx electron --user-data-dir=/tmp/klyro-refresh scripts/check-daemon-refresh.cjs` (app built) | A daemon left over from another build is replaced on launch: the fake daemon reporting `0.1.0` is stopped, the binary on disk takes over, writes its version and answers. Verified 2026-10-22. |
+| `npx electron --user-data-dir=/tmp/klyro-real scripts/check-overlay-menu.cjs` (app built) | The overlay's model menu inside the real window: the chip shows a name and not an internal id, the menu is not clipped by the window, the search box is visible, the list scrolls, the LOCAL badges are there, and picking a model switches the provider and gives the window its room back. |
 | Screenshots of every surface (app built) | The six pages of the control panel and the overlay — idle, typed and answering — were captured from the running app and reviewed: the overlay fits its content, the answer shows the question, the timing, the copy and the retry, the drawer slides away on a narrow window, and the light theme is legible. |
 
 ### Extra runtime checks used during this program

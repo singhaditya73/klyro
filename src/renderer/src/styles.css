@@ -949,6 +949,9 @@ button.pill:hover { background: var(--surface-hover); color: var(--text-primary)
   max-width: 380px;
   display: flex;
   flex-direction: column;
+  /* The height is set where the menu is placed: it takes the room the window
+     has, and the list scrolls inside it. */
+  overflow: hidden;
   padding: var(--space-2);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
@@ -959,6 +962,7 @@ button.pill:hover { background: var(--surface-hover); color: var(--text-primary)
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  flex-shrink: 0;
   padding: var(--space-1) var(--space-2);
   margin-bottom: var(--space-2);
   border: 1px solid var(--border-subtle);
@@ -975,7 +979,17 @@ button.pill:hover { background: var(--surface-hover); color: var(--text-primary)
   font-size: var(--text-sm);
   outline: none;
 }
-.model-picker__list { display: flex; flex-direction: column; gap: 2px; max-height: 280px; overflow-y: auto; }
+/* The list takes what is left of the menu and scrolls: the search box above it
+   and the options below stay reachable in a short window. */
+.model-picker__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .model-picker__group { display: flex; flex-direction: column; gap: 2px; }
 .model-picker__group + .model-picker__group { margin-top: var(--space-2); }
 .model-picker__group-head {
@@ -1011,7 +1025,7 @@ button.pill:hover { background: var(--surface-hover); color: var(--text-primary)
 }
 .model-picker__option:hover { background: var(--surface-hover); }
 .model-picker__option--active { background: var(--accent-soft); }
-.model-picker__option-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-picker__option-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-picker__option-provider {
   font-size: var(--text-xs);
   color: var(--text-muted);
@@ -1027,6 +1041,7 @@ button.pill:hover { background: var(--surface-hover); color: var(--text-primary)
   color: var(--text-muted);
 }
 .model-picker__custom-link {
+  flex-shrink: 0;
   margin-top: var(--space-2);
   padding: var(--space-1) var(--space-2);
   border: 0;
@@ -1046,7 +1061,8 @@ button.pill:hover { background: var(--surface-hover); color: var(--text-primary)
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
   max-width: 220px;
   padding: var(--space-1) var(--space-2);
   border: 1px solid var(--border-subtle);
@@ -1057,7 +1073,7 @@ button.pill:hover { background: var(--surface-hover); color: var(--text-primary)
   cursor: pointer;
 }
 .model-picker__chip:hover { background: var(--surface-hover); color: var(--text-primary); }
-.model-picker__chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-picker__chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ==========================================================================
    Chat
@@ -1706,6 +1722,51 @@ button.pill:hover { background: var(--surface-hover); color: var(--text-primary)
   border: 1px solid var(--border-default);
   background: var(--surface-raised);
   color: var(--text-primary);
+}
+
+/* ==========================================================================
+   When something goes wrong
+   ========================================================================== */
+
+.fatal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  padding: var(--space-6);
+  background: var(--app-background);
+}
+.fatal__panel {
+  width: 100%;
+  max-width: 520px;
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-base);
+  text-align: center;
+}
+.fatal__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-md);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.fatal__title { margin-top: var(--space-3); font-size: var(--text-lg); font-weight: 600; }
+.fatal__text { margin-top: var(--space-2); font-size: var(--text-sm); color: var(--text-muted); line-height: 1.6; }
+.fatal__detail {
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-input);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-align: left;
+  overflow-wrap: anywhere;
 }
 
 /* ==========================================================================

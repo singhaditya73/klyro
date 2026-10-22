@@ -129,16 +129,33 @@ export function PrivacyView(): React.ReactNode {
   const [data, setData] = useState<DataSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  /** Each part is loaded on its own: one failure must not empty the page. */
   const load = useCallback(async (): Promise<void> => {
-    try {
-      setSettings(await window.klyro.getSettings())
-      setProviders(await window.klyro.listProviders())
-      setSecurity(await window.klyro.securityStatus())
-      setData(await window.klyro.dataSummary())
-      setError(null)
-    } catch (caught) {
-      setError((caught as Error).message)
-    }
+    const failures: string[] = []
+    const loaded = await window.klyro.getSettings().catch((caught) => {
+      failures.push(`settings: ${(caught as Error).message}`)
+      return null
+    })
+    if (loaded) setSettings(loaded)
+    setProviders(
+      await window.klyro.listProviders().catch((caught) => {
+        failures.push(`providers: ${(caught as Error).message}`)
+        return [] as ProviderStatus[]
+      })
+    )
+    setSecurity(
+      await window.klyro.securityStatus().catch((caught) => {
+        failures.push(`credential storage: ${(caught as Error).message}`)
+        return null
+      })
+    )
+    setData(
+      await window.klyro.dataSummary().catch((caught) => {
+        failures.push(`what is stored: ${(caught as Error).message}`)
+        return null
+      })
+    )
+    setError(failures.length > 0 ? failures.join(' · ') : null)
   }, [])
 
   useEffect(() => {

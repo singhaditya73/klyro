@@ -33,6 +33,7 @@ import {
 import type { Attachment } from '@shared/types'
 import { ModelPicker, type PickerGroup } from './components/ModelPicker'
 import { recentModels, rememberModel } from './lib/recent'
+import { knownModelNames, rememberModelNames } from './lib/modelNames'
 import { StatusDot } from './components/ui'
 import KlyroMark from './assets/logo/klyro-mark.svg'
 
@@ -80,6 +81,10 @@ export default function OverlayApp() {
   const [vision, setVision] = useState<'yes' | 'no' | 'unknown'>('unknown')
   /** The models used recently, offered first in the picker. */
   const [recent, setRecent] = useState<string[]>([])
+  /** The names models had when they were last listed, by id. */
+  const [knownNames, setKnownNames] = useState<Record<string, string>>({})
+  /** The name of the provider in use, for the chip. */
+  const [providerLabel, setProviderLabel] = useState('')
   // Every connected provider's models, loaded when the picker opens.
   const [catalogue, setCatalogue] = useState<PickerGroup[]>([])
   const [catalogueNote, setCatalogueNote] = useState<string | null>(null)
@@ -150,6 +155,15 @@ export default function OverlayApp() {
     try {
       const groups = await window.klyro.overlayCatalogue()
       setCatalogue(groups)
+      // Remember what the models are called: an agent IDE can be closed and a
+      // local server can be stopped while the model stays the same, and the
+      // chip should still say "Claude Opus 4.6".
+      rememberModelNames(groups.flatMap((group) => group.models))
+      setKnownNames(knownModelNames())
+      // The chip names the provider when the model itself has no name.
+      const settings = await window.klyro.getSettings().catch(() => null)
+      const active = groups.find((group) => group.id === settings?.activeProvider)
+      if (active) setProviderLabel(active.label)
       setCatalogueNote(
         groups.length === 0
           ? 'No provider is connected yet. Connect one in the control panel.'
@@ -175,15 +189,32 @@ export default function OverlayApp() {
     // The wrapper is as tall as its content wants to be; the window follows it.
     const wanted = inner.scrollHeight
     const height = Math.max(MIN_OVERLAY_HEIGHT, Math.min(MAX_OVERLAY_HEIGHT, Math.round(wanted)))
-    void window.klyro.resizeOverlay(height)
+    void window.klyro.resizeOverlay?.(height)
   }, [])
 
   useLayoutEffect(() => {
     resizeToContent()
   }, [answer, question, transcript, capture, overlaySources, mode, talkState, timing, resizeToContent])
 
+  /**
+   * Make room for the model menu.
+   *
+   * The overlay is a small window; a menu that hangs below the chip is
+   * clipped by the window's own edge. The window grows for as long as the
+   * menu is open, and shrinks back to its content when it closes.
+   */
+  const growForMenu = useCallback((): void => {
+    const base = innerRef.current?.scrollHeight ?? MIN_OVERLAY_HEIGHT
+    void window.klyro.resizeOverlay?.(Math.min(MAX_OVERLAY_HEIGHT, Math.max(base + 220, 350)))
+  }, [])
+
+  const shrinkAfterMenu = useCallback((): void => {
+    resizeToContent()
+  }, [resizeToContent])
+
   useEffect(() => {
     setRecent(recentModels())
+    setKnownNames(knownModelNames())
     void window.klyro.privateModeStatus().then(setPrivateMode).catch(() => setPrivateMode(null))
     void syncProvider()
     // Load the names in the background so the chip shows "Claude Sonnet 4"
@@ -202,7 +233,7 @@ export default function OverlayApp() {
     window.addEventListener('focus', onFocus)
     document.addEventListener('visibilitychange', onVisible)
     // The control panel can change the provider or the model at any time.
-    const offSettings = window.klyro.onSettingsChanged(() => {
+    const offSettings = window.klyro.onSettingsChanged?.(() => {
       void syncProvider()
       void loadCatalogue()
     })
@@ -230,7 +261,7 @@ export default function OverlayApp() {
     })
     return () => {
       offChat()
-      offSettings()
+      offSettings?.()
       window.removeEventListener('focus', onFocus)
       document.removeEventListener('visibilitychange', onVisible)
     }
@@ -845,14 +876,17 @@ export default function OverlayApp() {
             groups={catalogue}
             value={overlayModel}
             variant="chip"
-            label={overlayModel || 'Pick a model'}
             loading={catalogueLoading}
             note={catalogueNote}
             recent={recent}
+            knownNames={knownNames}
+            contextLabel={providerLabel}
             onOpen={() => {
               void syncProvider()
               void loadCatalogue()
+              growForMenu()
             }}
+            onClose={shrinkAfterMenu}
             onRefresh={() => void loadCatalogue()}
             onChange={(next, providerId) => {
               // A model from another provider switches the overlay to that

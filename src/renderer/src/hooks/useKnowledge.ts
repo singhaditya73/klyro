@@ -32,11 +32,18 @@ export function useKnowledge(): KnowledgeController {
   const [error, setError] = useState<string | null>(null)
 
   const refreshMemory = useCallback(async (): Promise<void> => {
-    setMemories(await window.klyro.memoryList())
+    // A failure here is reported, not thrown: the panel stays usable.
+    setMemories(await window.klyro.memoryList().catch((caught) => {
+      setError((caught as Error).message)
+      return []
+    }))
   }, [])
 
   const refreshDocuments = useCallback(async (): Promise<void> => {
-    setDocuments(await window.klyro.documentList())
+    setDocuments(await window.klyro.documentList().catch((caught) => {
+      setError((caught as Error).message)
+      return []
+    }))
   }, [])
 
   useEffect(() => {

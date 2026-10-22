@@ -72,7 +72,9 @@ export default function App() {
     media.addEventListener('change', onChange)
     // A change made in another window (or by the user in Settings) must show
     // up here without a restart.
-    const offSettings = window.klyro.onSettingsChanged(() => {
+    // A preload that is a build behind does not have this method: the app
+    // still works, it just does not follow the change until it is reopened.
+    const offSettings = window.klyro.onSettingsChanged?.(() => {
       void window.klyro
         .getSettings()
         .then((settings) => apply(settings?.theme ?? 'system'))
@@ -81,7 +83,7 @@ export default function App() {
     return () => {
       cancelled = true
       media.removeEventListener('change', onChange)
-      offSettings()
+      offSettings?.()
     }
   }, [])
 
@@ -163,7 +165,7 @@ export default function App() {
         </div>
 
         <div className="sidebar__footer">
-          <button className="btn btn--accent btn--sm" onClick={() => void window.klyro.toggleOverlay()}>
+          <button className="btn btn--accent btn--sm" onClick={() => void window.klyro.toggleOverlay?.()}>
             <Zap className="icon icon--xs" aria-hidden="true" />
             <span>Quick ask</span>
           </button>

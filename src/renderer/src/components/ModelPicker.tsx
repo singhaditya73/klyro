@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, ChevronDown, Loader2, RefreshCcw, Search } from 'lucide-react'
+import { knownModelNames, rememberModelNames, tidyModelId } from '../lib/modelNames'
 
 /**
  * Pick a model, for one provider or for all of them.
@@ -55,6 +56,23 @@ interface Props {
   label?: string
   /** Model ids the person used recently — shown first, in catalogue mode. */
   recent?: string[]
+  /**
+   * Names for models the provider is not listing right now, by id.
+   *
+   * An agent IDE can be closed and a local server can be stopped while the
+   * model stays the same. The name it had is used instead of its id.
+   */
+  knownNames?: Record<string, string>
+  /** Called when the menu closes — the overlay gives its room back. */
+  onClose?: () => void
+  /**
+   * The provider's name, for the chip.
+   *
+   * When a model has no name to show — its provider is not listing anything
+   * right now — the chip says which provider it is, which is something a
+   * person recognises, instead of an internal id.
+   */
+  contextLabel?: string
 }
 
 interface Placement {
@@ -63,7 +81,22 @@ interface Placement {
   width: number
   /** True when the list had to open upwards to stay on screen. */
   above: boolean
+  /** The height the menu may take. The list scrolls inside it. */
+  maxHeight: number
 }
+
+/** The id of the group that holds the models used recently. */
+const RECENT_GROUP_ID = '__recent__'
+
+/** The height the menu would like to have. */
+const MENU_HEIGHT = 320
+/** Below this the menu is barely usable, so it opens the other way. */
+const MENU_MIN_HEIGHT = 200
+/** The smallest menu worth showing; the list scrolls inside it. */
+const MENU_TINY_HEIGHT = 120
+/** The gap between the control and the menu, and to the window edge. */
+const MENU_GAP = 6
+const MENU_MARGIN = 8
 
 export function ModelPicker({
   providerId,
@@ -77,7 +110,10 @@ export function ModelPicker({
   loading: externalLoading,
   note: externalNote,
   label: labelOverride,
-  recent
+  recent,
+  knownNames,
+  onClose,
+  contextLabel
 }: Props) {
   const [models, setModels] = useState<PickerModel[] | null>(null)
   const [note, setNote] = useState<string | null>(null)
@@ -87,6 +123,10 @@ export function ModelPicker({
   const [custom, setCustom] = useState(false)
   const [placement, setPlacement] = useState<Placement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
+  /** Bumped when the window changes size, to place the menu again. */
+  const [placementTick, setPlacementTick] = useState(0)
+  /** The names models had when they were last listed, on this machine. */
+  const [storedNames, setStoredNames] = useState<Record<string, string>>({})
   /** The provider the list currently belongs to, so a stale answer is dropped. */
   const providerRef = useRef(providerId)
 
@@ -108,6 +148,10 @@ export function ModelPicker({
       if (providerRef.current !== requested) return
       setModels(result.models ?? [])
       setNote(result.note ?? null)
+      // Remember what the models are called: the name is shown even when this
+      // provider is not running.
+      rememberModelNames(result.models ?? [])
+      setStoredNames(knownModelNames())
       onRefresh?.()
     } catch {
       if (providerRef.current !== requested) return
@@ -124,7 +168,20 @@ export function ModelPicker({
     void load()
   }, [catalogue, load])
 
-  // Place the list next to the control, flipping up when there is no room.
+  // The names that were seen last time, for a provider that is not answering.
+  useEffect(() => {
+    setStoredNames(knownModelNames())
+  }, [])
+
+  /**
+   * Place the list next to the control, inside the window it belongs to.
+   *
+   * The overlay is a small window, so a menu that simply hangs below the
+   * control is clipped by the window's own edge. The space that actually
+   * exists decides: open downwards when there is room, upwards when there is
+   * more room above, and in the worst case take what is there and let the
+   * list scroll inside.
+   */
   useLayoutEffect(() => {
     if (!open) {
       setPlacement(null)
@@ -133,16 +190,29 @@ export function ModelPicker({
     const trigger = triggerRef.current
     if (!trigger) return
     const rect = trigger.getBoundingClientRect()
-    const below = window.innerHeight - rect.bottom
-    const above = rect.top
-    const flip = below < 260 && above > below
+    const spaceBelow = window.innerHeight - rect.bottom - MENU_MARGIN
+    const spaceAbove = rect.top - MENU_MARGIN
+    const flip = spaceBelow < MENU_MIN_HEIGHT && spaceAbove > spaceBelow
+    const room = flip ? spaceAbove : spaceBelow
+    const maxHeight = Math.max(MENU_TINY_HEIGHT, Math.min(MENU_HEIGHT, room))
+    const width = Math.min(Math.max(240, rect.width), window.innerWidth - MENU_MARGIN * 2)
     setPlacement({
-      top: flip ? Math.max(8, rect.top - 8) : rect.bottom + 6,
-      left: Math.min(Math.max(8, rect.left), window.innerWidth - 300),
-      width: Math.max(240, rect.width),
-      above: flip
+      top: flip ? Math.max(MENU_MARGIN, rect.top - MENU_GAP) : rect.bottom + MENU_GAP,
+      left: Math.min(Math.max(MENU_MARGIN, rect.left), window.innerWidth - width - MENU_MARGIN),
+      width,
+      above: flip,
+      maxHeight
     })
-  }, [open, models, groups])
+  }, [open, models, groups, placementTick])
+
+  // The window may grow while the menu is open — the overlay gives the menu
+  // room — so the placement is measured again whenever that happens.
+  useEffect(() => {
+    if (!open) return
+    const onResize = (): void => setPlacementTick((tick) => tick + 1)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [open])
 
   // Close when the click lands outside the picker.
   useEffect(() => {
@@ -152,9 +222,13 @@ export function ModelPicker({
       if (triggerRef.current?.contains(target)) return
       if ((target as HTMLElement).closest?.('.model-picker__menu')) return
       setOpen(false)
+      onClose?.()
     }
     function onKeyDown(event: KeyboardEvent): void {
-      if (event.key === 'Escape') setOpen(false)
+      if (event.key === 'Escape') {
+        setOpen(false)
+        onClose?.()
+      }
     }
     document.addEventListener('mousedown', onPointerDown)
     document.addEventListener('keydown', onKeyDown)
@@ -168,6 +242,21 @@ export function ModelPicker({
     () => (catalogue ? (groups ?? []).flatMap((group) => group.models) : (models ?? [])),
     [catalogue, groups, models]
   )
+
+  /**
+   * Which provider each model belongs to.
+   *
+   * A model that is shown under “Recent” belongs to whichever provider listed
+   * it, not to the “Recent” group — so picking it switches to that provider
+   * instead of writing a provider that does not exist.
+   */
+  const modelProviders = useMemo((): Map<string, string> => {
+    const map = new Map<string, string>()
+    for (const group of groups ?? []) {
+      for (const model of group.models) map.set(model.id, group.id)
+    }
+    return map
+  }, [groups])
 
   /** The groups after the search box, with empty groups dropped. */
   const filteredGroups = useMemo((): PickerGroup[] => {
@@ -192,13 +281,31 @@ export function ModelPicker({
   const isBusy = externalLoading === true || loading
   const shownNote = catalogue ? (externalNote ?? null) : note
   const selected = allModels.find((entry) => entry.id === value)
-  const label = selected?.name || labelOverride || value || 'Pick a model'
+  /**
+   * What the control says.
+   *
+   * The name the provider gives its model comes first. When the provider is
+   * not listing right now, the name it had last time is used — the id is
+   * internal and is never the first thing a person sees.
+   */
+  const names = knownNames ?? storedNames
+  const unknownId = value ? tidyModelId(value) : ''
+  const label =
+    selected?.name ||
+    names[value] ||
+    labelOverride ||
+    (unknownId
+      ? variant === 'chip' && contextLabel
+        ? `${contextLabel} · ${unknownId}`
+        : unknownId
+      : 'Pick a model')
   const hasQuery = query.trim().length > 0
 
   const openMenu = (): void => {
     setOpen((previous) => {
       const next = !previous
       if (next) onOpen?.()
+      else onClose?.()
       return next
     })
   }
@@ -211,12 +318,22 @@ export function ModelPicker({
    */
   const recentGroup = useMemo((): PickerGroup | null => {
     if (!catalogue || !recent || recent.length === 0) return null
+    const needle = query.trim().toLowerCase()
     const models = recent
       .map((id) => allModels.find((entry) => entry.id === id))
       .filter((entry): entry is PickerModel => Boolean(entry))
+      // The search applies here too: a recent model that does not match is
+      // not what was asked for.
+      .filter((entry) =>
+        needle
+          ? entry.id.toLowerCase().includes(needle) ||
+            entry.name.toLowerCase().includes(needle) ||
+            entry.provider.toLowerCase().includes(needle)
+          : true
+      )
     if (models.length === 0) return null
-    return { id: '__recent__', label: 'Recent', models }
-  }, [allModels, catalogue, recent])
+    return { id: RECENT_GROUP_ID, label: 'Recent', models }
+  }, [allModels, catalogue, query, recent])
 
   const menu = open ? (
     <ModelList
@@ -227,8 +344,12 @@ export function ModelPicker({
       onQuery={setQuery}
       value={value}
       onPick={(id, groupId) => {
-        onChange(id, groupId)
+        // A model from the “Recent” group is picked from the provider that
+        // listed it.
+        const provider = groupId === RECENT_GROUP_ID ? modelProviders.get(id) : groupId
+        onChange(id, provider)
         setOpen(false)
+        onClose?.()
       }}
       onReload={() => void load()}
       onCustom={() => {
@@ -268,7 +389,9 @@ export function ModelPicker({
           ref={triggerRef}
           className="model-picker__chip"
           onClick={openMenu}
-          title={`Model: ${value || 'not set'}`}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          title={value ? `${label} — ${value}` : 'Pick a model'}
         >
           <span className="model-picker__chip-label">{label}</span>
           <ChevronDown className="icon icon--xs" aria-hidden="true" />
@@ -352,6 +475,9 @@ function ModelList({
         top: placement.top,
         left: placement.left,
         width: placement.width,
+        // The menu never grows past the space the window has: the list scrolls
+        // inside it, so the search box and the options stay reachable.
+        maxHeight: placement.maxHeight,
         ...(placement.above ? { transform: 'translateY(-100%)' } : {})
       }
     : { position: 'fixed', top: 0, left: 0, opacity: 0 }
@@ -408,7 +534,7 @@ function ModelList({
                 onClick={() => onPick(entry.id, group.id || undefined)}
                 role="option"
                 aria-selected={entry.id === value}
-                title={entry.id}
+                title={entry.name && entry.name !== entry.id ? `${entry.name} — ${entry.id}` : entry.id}
               >
                 <span className="model-picker__option-name">{entry.name}</span>
                 {entry.provider && !showHeaders && (

@@ -36,3 +36,20 @@ describe('the application shell', () => {
     expect(html).toContain('Quick ask')
   })
 })
+
+describe('the shell and a preload that is a build behind', () => {
+  it('still draws when the bridge does not have every method', () => {
+    // A development session can have a main process from before a change. A
+    // missing method must not take the window down with it.
+    vi.stubGlobal('window', {
+      location: { hash: '#/home' },
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      matchMedia: () => ({ matches: false, addEventListener: () => undefined, removeEventListener: () => undefined }),
+      klyro: {}
+    })
+    const html = renderToStaticMarkup(<App />)
+    expect(html).toContain('Home')
+    expect(html).toContain('Privacy &amp; Data')
+  })
+})

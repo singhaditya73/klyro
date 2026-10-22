@@ -51,25 +51,46 @@ export function HomeView({ onNavigate }: { onNavigate: (route: Route) => void })
   const [shortcut, setShortcut] = useState('CommandOrControl+Shift+Space')
   const [error, setError] = useState<string | null>(null)
 
+  /**
+   * Load the dashboard.
+   *
+   * Every part is loaded on its own: one provider that cannot be reached must
+   * not leave the whole page empty. What failed is said out loud, so an empty
+   * list is never mistaken for "nothing is connected".
+   */
   const load = useCallback(async (): Promise<void> => {
-    try {
-      const [next, list, local, programs, summary] = await Promise.all([
-        window.klyro.getSettings(),
-        window.klyro.listProviders(),
-        window.klyro.localAgentsDetect(),
-        window.klyro.localAgentClis(),
-        window.klyro.dataSummary()
-      ])
+    const failures: string[] = []
+    const [next, list, local, programs, summary] = await Promise.all([
+      window.klyro.getSettings().catch((caught) => {
+        failures.push(`settings: ${(caught as Error).message}`)
+        return null
+      }),
+      window.klyro.listProviders().catch((caught) => {
+        failures.push(`providers: ${(caught as Error).message}`)
+        return [] as ProviderStatus[]
+      }),
+      window.klyro.localAgentsDetect().catch((caught) => {
+        failures.push(`local services: ${(caught as Error).message}`)
+        return [] as LocalAgentInfo[]
+      }),
+      window.klyro.localAgentClis().catch((caught) => {
+        failures.push(`agents: ${(caught as Error).message}`)
+        return [] as CliInfo[]
+      }),
+      window.klyro.dataSummary().catch((caught) => {
+        failures.push(`what Klyro knows: ${(caught as Error).message}`)
+        return null
+      })
+    ])
+    if (next) {
       setSettings(next)
-      setProviders(list)
-      setAgents(local)
-      setClis(programs)
-      setData(summary)
       setShortcut(next.toggleShortcut || 'CommandOrControl+Shift+Space')
-      setError(null)
-    } catch (caught) {
-      setError((caught as Error).message)
     }
+    setProviders(list)
+    setAgents(local)
+    setClis(programs)
+    setData(summary)
+    setError(failures.length > 0 ? failures.join(' · ') : null)
   }, [])
 
   useEffect(() => {
@@ -137,7 +158,7 @@ export function HomeView({ onNavigate }: { onNavigate: (route: Route) => void })
         title="Klyro"
         description="Your meeting assistant. It answers about the screen or the conversation, in place, using the models you already have."
         actions={
-          <button className="btn btn--accent" onClick={() => void window.klyro.toggleOverlay()}>
+          <button className="btn btn--accent" onClick={() => void window.klyro.toggleOverlay?.()}>
             <Zap className="icon icon--sm" aria-hidden="true" />
             <span>Open Klyro</span>
           </button>

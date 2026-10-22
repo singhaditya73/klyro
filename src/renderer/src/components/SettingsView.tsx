@@ -179,16 +179,33 @@ export function SettingsView({ onNavigate }: { onNavigate: (route: Route) => voi
   const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
+    // Each piece is loaded on its own: the permissions or the diagnostics
+    // being unavailable must not empty the settings.
     void (async () => {
-      try {
-        setVersion((await window.klyro.getAppInfo()).version)
-        setSettings(await window.klyro.getSettings())
-        setProviders(await window.klyro.listProviders())
-        setPermissions(await window.klyro.checkPermissions())
-        setReportCount((await window.klyro.diagnosticsList()).length)
-      } catch (error) {
-        setLoadError((error as Error).message)
-      }
+      const failures: string[] = []
+      const info = await window.klyro.getAppInfo().catch(() => null)
+      if (info) setVersion(info.version)
+      const loaded = await window.klyro.getSettings().catch((caught) => {
+        failures.push(`settings: ${(caught as Error).message}`)
+        return null
+      })
+      if (loaded) setSettings(loaded)
+      setProviders(
+        await window.klyro.listProviders().catch((caught) => {
+          failures.push(`providers: ${(caught as Error).message}`)
+          return []
+        })
+      )
+      setPermissions(
+        await window.klyro.checkPermissions().catch((caught) => {
+          failures.push(`permissions: ${(caught as Error).message}`)
+          return null
+        })
+      )
+      setReportCount(
+        await window.klyro.diagnosticsList().then((list) => list.length).catch(() => 0)
+      )
+      setLoadError(failures.length > 0 ? failures.join(' · ') : null)
     })()
     void window.klyro.screenListDisplays().then(setDisplays).catch(() => setDisplays([]))
   }, [])
