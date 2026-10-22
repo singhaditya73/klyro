@@ -9,7 +9,7 @@ log). Nothing here is marked done by intent — only by running the commands.
 | Command | Passes on this machine | Asserts |
 | --- | --- | --- |
 | `npm run typecheck` | ✅ | Main (`tsc -p tsconfig.node.json`) and renderer (`tsconfig.web.json`) both clean |
-| `npm test` | ✅ | 303 unit/integration tests in 35 files (`vitest run`) |
+| `npm test` | ✅ | 295 unit/integration tests in 48 files, 8 skipped (`vitest run`) |
 | `npm run build` | ✅ | `out/main`, `out/preload`, `out/renderer` produced by electron-vite |
 | `npx electron scripts/smoke.cjs` (needs a display; CI: `xvfb-run -a …`) | ✅ | Boots the **real built app**; both windows render, the `window.klyro` bridge is present, no renderer errors and no CSP violations |
 | `DISPLAY=:0 npm run smoke` | ✅ | Same, invoked via the package script |
