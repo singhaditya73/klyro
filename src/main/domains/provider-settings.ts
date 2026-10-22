@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { ProviderSettings } from '@shared/types'
 
 /**
  * The provider fields a settings patch may carry.
@@ -18,3 +19,14 @@ export const providerSettingsPatchSchema = z.object({
 
 /** Every provider in a patch is a full provider object, as the UI sends it. */
 export const providersPatchSchema = z.record(z.string(), providerSettingsPatchSchema)
+
+/**
+ * Compile-time guard: adding a field to ProviderSettings without adding it here
+ * is a type error, not a silently dropped setting.
+ */
+type MissingProviderFields = Exclude<
+  keyof ProviderSettings,
+  keyof z.infer<typeof providerSettingsPatchSchema>
+>
+const everyProviderFieldIsListed: MissingProviderFields extends never ? true : never = true
+void everyProviderFieldIsListed
