@@ -320,3 +320,68 @@ async fn opencode_reports_the_servers_own_reason_when_a_turn_fails() {
         "the reason was {failure:?}"
     );
 }
+
+/// A fake OpenCode server whose model thinks before it speaks: the session is
+/// read many times with nothing in it, and only then does the answer appear.
+async fn fake_opencode_slow(answer: &'static str, silent_reads: usize) -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+    let port = listener.local_addr().expect("addr").port();
+    let reads = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counter = Arc::clone(&reads);
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut stream, _)) = listener.accept().await else {
+                return;
+            };
+            let request = read_request(&mut stream).await;
+            let body = if request.contains("/message") {
+                let seen = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                if seen < silent_reads {
+                    // The prompt is queued; the model has not said anything
+                    // yet. There is no `idle` entry, because the turn is not
+                    // over.
+                    "{\"data\":[{\"id\":\"msg_0\",\"type\":\"user\",\"time\":{\"created\":1},\"content\":[{\"type\":\"text\",\"text\":\"q\"}]}]}".to_string()
+                } else {
+                    format!(
+                        "{{\"data\":[\
+                          {{\"id\":\"msg_idle\",\"type\":\"idle\",\"outcome\":\"succeeded\",\"time\":{{\"created\":3}}}},\
+                          {{\"id\":\"msg_1\",\"type\":\"assistant\",\"time\":{{\"created\":2}},\"content\":[{{\"type\":\"text\",\"text\":\"{answer}\"}}]}},\
+                          {{\"id\":\"msg_0\",\"type\":\"user\",\"time\":{{\"created\":1}},\"content\":[{{\"type\":\"text\",\"text\":\"q\"}}]}}\
+                         ]}}"
+                    )
+                }
+            } else {
+                "{\"data\":{\"id\":\"ses_1\"}}".to_string()
+            };
+            let response = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = stream.write_all(response.as_bytes()).await;
+            let _ = stream.flush().await;
+        }
+    });
+    port
+}
+
+#[tokio::test]
+async fn a_model_that_thinks_before_it_speaks_is_waited_for() {
+    // Twenty reads of silence, which is longer than the three seconds a short
+    // window would allow. The turn is not over until the server says so.
+    let port = fake_opencode_slow("a considered answer", 20).await;
+    let client = OpenCode::new(&format!("http://127.0.0.1:{port}"), None).with_poll_ms(2);
+    let mut stream = client
+        .ask("slow-model", "the question", &[])
+        .await
+        .expect("the ask should start");
+    use futures_util::StreamExt;
+    let mut answer = String::new();
+    while let Some(chunk) = stream.next().await {
+        match chunk.expect("a chunk") {
+            Chunk::Text(text) => answer.push_str(&text),
+            Chunk::Done => break,
+        }
+    }
+    assert_eq!(answer, "a considered answer");
+}

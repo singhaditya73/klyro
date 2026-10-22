@@ -15,8 +15,10 @@ use serde_json::Value;
 use super::{http_client, Chunk};
 use crate::protocol::ImageInput;
 
-/// How long the server may stay quiet before a turn is assumed over.
-const IDLE_POLLS: u32 = 10;
+/// How many quiet reads the server is allowed before a turn is assumed over:
+/// eighteen seconds. A model can think for a while before it says its first
+/// word, and a turn cut short is worse than a turn that waited.
+const QUIET_POLLS: u32 = 60;
 /// How long to wait between two reads of the session.
 const POLL_MS: u64 = 300;
 
@@ -25,6 +27,8 @@ pub struct OpenCode {
     client: reqwest::Client,
     base_url: String,
     password: Option<String>,
+    /// How long between two reads of the session. A test shortens it.
+    poll_ms: u64,
 }
 
 /// The shape of one message in a session.
@@ -134,7 +138,15 @@ impl OpenCode {
             client: http_client(),
             base_url: base_url.trim_end_matches('/').to_string(),
             password,
+            poll_ms: POLL_MS,
         }
+    }
+
+    /// The same client, reading the session as fast as the test needs.
+    #[cfg(test)]
+    pub fn with_poll_ms(mut self, poll_ms: u64) -> Self {
+        self.poll_ms = poll_ms;
+        self
     }
 
     fn request(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {
@@ -207,12 +219,13 @@ impl OpenCode {
             client: self.client.clone(),
             base_url: self.base_url.clone(),
             password: self.password.clone(),
+            poll_ms: self.poll_ms,
         };
         let stream = async_stream::stream! {
             let mut delivered = String::new();
             let mut quiet = 0;
-            while quiet < IDLE_POLLS {
-                tokio::time::sleep(std::time::Duration::from_millis(POLL_MS)).await;
+            while quiet < QUIET_POLLS {
+                tokio::time::sleep(std::time::Duration::from_millis(reader.poll_ms)).await;
                 let messages = match reader.read_messages(&session_id).await {
                     Ok(messages) => messages,
                     Err(error) => {
@@ -253,7 +266,7 @@ impl OpenCode {
                 if idle.is_some() {
                     break;
                 }
-                if quiet > IDLE_POLLS && !delivered.is_empty() {
+                if quiet > QUIET_POLLS && !delivered.is_empty() {
                     break;
                 }
             }

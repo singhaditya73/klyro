@@ -4,6 +4,28 @@ All notable changes to Klyro are recorded here. Versions follow [SemVer](https:/
 
 ## [Unreleased]
 
+## [0.9.14] — 2026-10-22
+
+A slow model is waited for.
+
+### Fixed
+- **OpenCode was given three seconds of quiet and then given up on.** The
+  daemon read a session ten times and, if nothing had appeared, reported that
+  the model had said nothing — a slow provider, or the first turn after the
+  server starts, looked like an empty answer. It now waits the way the app
+  does: sixty reads, eighteen seconds, and the turn ends when the server says
+  it has. The local model that takes ten seconds to clear its throat answers
+  again.
+- **`scripts/check-daemon.mjs` speaks the protocol the daemon speaks.** It was
+  still connecting to the Unix socket that 0.9.9 replaced with loopback TCP, so
+  the checker the docs point at could never pass. It now reads the state file,
+  authenticates with the token, starts the daemon when nothing is answering,
+  and picks the first model the provider serves when none is named.
+
+### Added
+- A test for the slow case: a fake OpenCode server that stays silent for twenty
+  reads before answering, which is longer than the window that used to exist.
+
 ## [0.9.13] — 2026-10-22
 
 Stealth is the default.
