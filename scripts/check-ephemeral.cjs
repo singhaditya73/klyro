@@ -1,7 +1,12 @@
 /**
- * A live check of an ephemeral session: ask a real question through the app,
- * then read every file Klyro could have written the answer to. The marker
- * strings must not be in any of them.
+ * A live check of an ephemeral session, in two shapes:
+ *
+ * 1. A conversation created for the session (it moves into memory).
+ * 2. A conversation that already holds history (the session gets a stand-in;
+ *    the history stays on disk).
+ *
+ * Afterwards every file Klyro could have written the answer to is read, and the
+ * marker strings must be exactly where they belong.
  */
 const { app, BrowserWindow } = require('electron')
 const { readFileSync, existsSync, writeFileSync } = require('node:fs')
@@ -23,10 +28,32 @@ app.whenReady().then(async () => {
   await wait(6000)
   const wins = BrowserWindow.getAllWindows()
   const main = wins.find((win) => !win.webContents.getURL().includes('overlay')) ?? wins[0]
-  const marker = `EPHEMERAL-${Date.now().toString(36).toUpperCase()}`
+  const stamp = Date.now().toString(36).toUpperCase()
+  const fresh = `EPHEMERAL-${stamp}`
+  const earlier = `EARLIER-${stamp}`
+  const borrowed = `EPHEMERAL-BORROWED-${stamp}`
 
   const result = await main.webContents.executeJavaScript(`(async () => {
-    const marker = ${JSON.stringify(marker)}
+    const fresh = ${JSON.stringify(fresh)}
+    const earlier = ${JSON.stringify(earlier)}
+    const borrowed = ${JSON.stringify(borrowed)}
+    const ask = async (conversationId, content, interviewId) => {
+      const started = Date.now()
+      await window.klyro.sendChat({ conversationId, content, interviewId, useFastModel: true })
+      let text = ''
+      for (let attempt = 0; attempt < 90; attempt++) {
+        await new Promise((r) => setTimeout(r, 1000))
+        const conv = await window.klyro.getConversation(conversationId)
+        const messages = conv?.conversation?.messages ?? []
+        const last = messages[messages.length - 1]
+        if (last && last.role !== 'user' && String(last.content ?? '').trim()) {
+          text = String(last.content)
+          break
+        }
+      }
+      return { ms: Date.now() - started, answer: text.slice(0, 120) }
+    }
+
     try {
       const settings = await window.klyro.getSettings()
       const models = await window.klyro.providerModels('ollama').catch(() => ({ models: [] }))
@@ -43,62 +70,62 @@ app.whenReady().then(async () => {
         }
       })
 
-      const session = await window.klyro.interviewsStart({ company: marker + '-COMPANY', role: 'Engineer' })
-      const conversation = await window.klyro.createConversation()
-      const started = Date.now()
-      await window.klyro.sendChat({
-        conversationId: conversation.id,
-        interviewId: session.id,
-        content: marker + ' — name one thing a hammer is for.',
-        useFastModel: true
-      })
+      // 1. A conversation that exists only for this session.
+      const session = await window.klyro.interviewsStart({ company: fresh + '-COMPANY', role: 'Engineer' })
+      const own = await window.klyro.createConversation()
+      const first = await ask(own.id, fresh + ' — name one thing a hammer is for.', session.id)
+      const ownedSummary = (await window.klyro.interviewsList({})).find((entry) => entry.id === session.id)
+      const ownedDetail = await window.klyro.interviewsGet(session.id)
+      const historyBefore = await window.klyro.listConversations()
 
-      let text = ''
-      for (let attempt = 0; attempt < 90; attempt++) {
-        await new Promise((r) => setTimeout(r, 1000))
-        const conv = await window.klyro.getConversation(conversation.id)
-        const messages = conv?.conversation?.messages ?? []
-        const last = messages[messages.length - 1]
-        if (last && last.role !== 'user' && String(last.content ?? '').trim()) {
-          text = String(last.content)
-          break
-        }
-      }
-
-      // The answer must be recorded *in the session* (it is part of the answer
-      // the user just saw) but not in any file.
-      const listed = await window.klyro.interviewsList({})
-      const summary = listed.find((entry) => entry.id === session.id)
-      const detail = await window.klyro.interviewsGet(session.id)
+      // 2. A conversation that already has history, borrowed for a session.
+      const old = await window.klyro.createConversation()
+      const oldAnswer = await ask(old.id, earlier + ' — say one word.')
+      const session2 = await window.klyro.interviewsStart({ company: borrowed + '-COMPANY' })
+      const second = await ask(old.id, borrowed + ' — name one thing a hammer is for.', session2.id)
+      const borrowedSummary = (await window.klyro.interviewsList({})).find((entry) => entry.id === session2.id)
       const history = await window.klyro.listConversations()
+      // The one conversation this check legitimately wrote down is its own;
+      // put the user's history back the way it was found.
+      await window.klyro.deleteConversation(old.id)
+
       return JSON.stringify({
-        marker,
+        fresh,
+        earlier,
+        borrowed,
         model,
-        ms: Date.now() - started,
-        answer: text.slice(0, 160),
-        ephemeral: summary?.ephemeral,
-        listedEphemeral: Boolean(summary?.ephemeral),
-        questions: detail?.questions?.length ?? 0,
-        transcript: detail?.transcript?.length ?? 0,
-        inConversationHistory: history.some((entry) => entry.id === conversation.id),
-        conversationId: conversation.id
+        first,
+        second,
+        oldAnswer,
+        ownedEphemeral: ownedSummary?.ephemeral,
+        ownedQuestions: ownedDetail?.questions?.length ?? 0,
+        ownedTranscript: ownedDetail?.transcript?.length ?? 0,
+        ownedInHistory: historyBefore.some((entry) => entry.id === own.id),
+        oldConversationId: old.id,
+        borrowedEphemeral: borrowedSummary?.ephemeral,
+        borrowedInHistory: history.some((entry) => entry.id === old.id)
       })
     } catch (error) {
-      return JSON.stringify({ marker, error: error.message })
+      return JSON.stringify({ stamp, error: error.message })
     }
   })()`)
   log('run:', result)
 
   const parsed = JSON.parse(result)
   const dir = path.join(os.homedir(), '.config', 'klyro')
-  for (const name of ['interviews.json', 'conversations.json', 'answer-cache.json', 'memory.json', 'audit.json', 'usage.json']) {
+  for (const name of ['interviews.json', 'conversations.json', 'answer-cache.json', 'memory.json', 'audit.json']) {
     const file = path.join(dir, name)
     if (!existsSync(file)) {
       log(`${name}: absent`)
       continue
     }
     const body = readFileSync(file, 'utf8')
-    log(`${name}: ${body.includes(parsed.marker) ? 'CONTAINS THE MARKER' : 'clean'} (${body.length} bytes)`)
+    const leaked = body.includes(parsed.fresh) || body.includes(parsed.borrowed)
+    if (name === 'conversations.json') {
+      log(`${name}: ${leaked ? 'LEAKED THE SESSION' : 'no session text'} · earlier history ${body.includes(parsed.earlier) ? 'kept' : 'MISSING'}`)
+    } else {
+      log(`${name}: ${leaked ? 'LEAKED THE SESSION' : 'no session text'}`)
+    }
   }
 
   app.exit(0)

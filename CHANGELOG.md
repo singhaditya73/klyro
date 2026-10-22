@@ -14,7 +14,10 @@ the IDE closed.
   company, the questions, the answers, the transcript and the conversation
   behind them live in memory and nowhere else. Not in `interviews.json`, not in
   `conversations.json`, not in the answer cache, not in the memory extractor.
-  It is gone when Klyro quits, and it never appears in history or in search.
+  It is gone when Klyro quits, and it never appears in history or in search. A
+  conversation the overlay was already using is not emptied to achieve this:
+  the session answers through a stand-in in memory and earlier messages stay
+  where they were.
   Turn it on for every new session under **Settings → History → Don't keep new
   interviews**. If you change your mind about one that turned out to matter,
   **Keep this one** writes it down deliberately; it then says so like any other

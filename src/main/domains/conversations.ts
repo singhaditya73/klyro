@@ -33,12 +33,29 @@ class ConversationsDomain {
    */
   private readonly live = new Map<string, Conversation>()
 
+  /**
+   * A live conversation that stands in for a stored one.
+   *
+   * The overlay keeps one conversation for as long as its window exists, and an
+   * interview can begin part-way through it. When that happens the earlier
+   * messages are not the session's to destroy: the session gets a stand-in in
+   * memory that answers to the same id from then on, and the stored
+   * conversation is left untouched.
+   */
+  private readonly standIns = new Map<string, string>()
+
+  /** Where an id really lives, once a stand-in has taken it over. */
+  private resolve(id: string): string {
+    return this.standIns.get(id) ?? id
+  }
+
   list(): ConversationSummary[] {
     return [...this.store.get().conversations].sort((a, b) => b.updatedAt - a.updatedAt).map(toSummary)
   }
 
   get(id: string): Conversation | null {
-    return this.live.get(id) ?? this.store.get().conversations.find((c) => c.id === id) ?? null
+    const real = this.resolve(id)
+    return this.live.get(real) ?? this.store.get().conversations.find((c) => c.id === real) ?? null
   }
 
   /** How many conversations are held in memory only. */
@@ -54,13 +71,39 @@ class ConversationsDomain {
    * it lives only here.
    */
   makeEphemeral(id: string): Conversation | null {
-    const stored = this.store.get().conversations.find((c) => c.id === id)
-    if (!stored) return this.live.get(id) ?? null
-    this.live.set(id, stored)
+    const real = this.resolve(id)
+    const stored = this.store.get().conversations.find((c) => c.id === real)
+    if (!stored) return this.live.get(real) ?? null
+    this.live.set(real, stored)
     this.store.update((draft) => {
-      draft.conversations = draft.conversations.filter((c) => c.id !== id)
+      draft.conversations = draft.conversations.filter((c) => c.id !== real)
     })
     return stored
+  }
+
+  /**
+   * The conversation an ephemeral session writes to.
+   *
+   * - Already in memory: that one.
+   * - On disk but empty: it moves into memory, keeping its id.
+   * - On disk with history: a stand-in takes over, and the history stays where
+   *   it is. Destroying earlier, unrelated messages is not what the user asked
+   *   for when they asked not to keep *this* session.
+   */
+  forEphemeral(id: string): Conversation {
+    const existingStandIn = this.standIns.get(id)
+    if (existingStandIn) return this.live.get(existingStandIn) as Conversation
+    const live = this.live.get(id)
+    if (live) return live
+    const stored = this.store.get().conversations.find((c) => c.id === id)
+    if (!stored) return this.create({ ephemeral: true })
+    if (stored.messages.length === 0) return this.makeEphemeral(id) ?? stored
+
+    const now = Date.now()
+    const standIn: Conversation = { id: randomUUID(), title: 'New chat', createdAt: now, updatedAt: now, messages: [] }
+    this.live.set(standIn.id, standIn)
+    this.standIns.set(id, standIn.id)
+    return standIn
   }
 
   /**
@@ -103,7 +146,8 @@ class ConversationsDomain {
   }
 
   addMessage(id: string, message: ChatMessage): Conversation | null {
-    const live = this.live.get(id)
+    const real = this.resolve(id)
+    const live = this.live.get(real)
     if (live) {
       live.messages.push(message)
       live.updatedAt = message.createdAt
@@ -115,7 +159,7 @@ class ConversationsDomain {
 
     let updated: Conversation | null = null
     this.store.update((draft) => {
-      const conversation = draft.conversations.find((c) => c.id === id)
+      const conversation = draft.conversations.find((c) => c.id === real)
       if (!conversation) return
       conversation.messages.push(message)
       conversation.updatedAt = message.createdAt
@@ -128,7 +172,8 @@ class ConversationsDomain {
   }
 
   updateMessage(id: string, messageId: string, patch: Partial<ChatMessage>): void {
-    const live = this.live.get(id)
+    const real = this.resolve(id)
+    const live = this.live.get(real)
     if (live) {
       const message = live.messages.find((m) => m.id === messageId)
       if (!message) return
@@ -137,7 +182,7 @@ class ConversationsDomain {
       return
     }
     this.store.update((draft) => {
-      const conversation = draft.conversations.find((c) => c.id === id)
+      const conversation = draft.conversations.find((c) => c.id === real)
       const message = conversation?.messages.find((m) => m.id === messageId)
       if (!conversation || !message) return
       Object.assign(message, patch)
@@ -146,26 +191,30 @@ class ConversationsDomain {
   }
 
   rename(id: string, title: string): void {
-    const live = this.live.get(id)
+    const real = this.resolve(id)
+    const live = this.live.get(real)
     if (live) {
       live.title = title.trim().slice(0, 120) || 'Untitled'
       return
     }
     this.store.update((draft) => {
-      const conversation = draft.conversations.find((c) => c.id === id)
+      const conversation = draft.conversations.find((c) => c.id === real)
       if (conversation) conversation.title = title.trim().slice(0, 120) || 'Untitled'
     })
   }
 
   remove(id: string): void {
-    this.live.delete(id)
+    const real = this.resolve(id)
+    this.standIns.delete(id)
+    this.live.delete(real)
     this.store.update((draft) => {
-      draft.conversations = draft.conversations.filter((c) => c.id !== id)
+      draft.conversations = draft.conversations.filter((c) => c.id !== real)
     })
   }
 
   clear(): void {
     this.live.clear()
+    this.standIns.clear()
     this.store.set({ conversations: [] })
   }
 

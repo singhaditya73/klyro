@@ -124,9 +124,13 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
 
   let conversation = conversations.get(request.conversationId)
   if (!conversation) conversation = conversations.create({ ephemeral })
-  // A conversation that existed before the session turned private does not
-  // get to keep what it already wrote down.
-  else if (ephemeral) conversations.makeEphemeral(conversation.id)
+  else if (ephemeral) {
+    // The overlay keeps one conversation across sessions, so this one may
+    // already hold history that is not part of this session. It is not the
+    // session's to delete: the session answers through a stand-in in memory and
+    // the stored conversation is left where it is.
+    conversation = conversations.forEphemeral(request.conversationId)
+  }
   const conversationId = conversation.id
 
   conversations.addMessage(conversationId, {

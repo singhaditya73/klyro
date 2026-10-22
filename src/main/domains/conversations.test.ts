@@ -83,6 +83,38 @@ describe('an ephemeral conversation', () => {
     expect(conversations.list().some((entry) => entry.id === conversation.id)).toBe(false)
   })
 
+  it('does not destroy the history of the conversation it borrows', () => {
+    const borrowed = conversations.create()
+    conversations.addMessage(borrowed.id, {
+      id: 'm1',
+      role: 'user',
+      content: 'an earlier question from before the interview',
+      createdAt: Date.now()
+    })
+    const before = text()
+
+    // The overlay keeps one conversation across sessions: the session gets a
+    // stand-in, and the earlier history stays on disk, untouched.
+    const standIn = conversations.forEphemeral(borrowed.id)
+    expect(standIn.id).not.toBe(borrowed.id)
+    expect(standIn.messages).toHaveLength(0)
+
+    conversations.addMessage(borrowed.id, {
+      id: 'm2',
+      role: 'user',
+      content: 'a question that must not be kept',
+      createdAt: Date.now()
+    })
+
+    const after = text()
+    expect(after).toContain('an earlier question from before the interview')
+    expect(after).not.toContain('a question that must not be kept')
+    expect(conversations.get(borrowed.id)?.messages).toHaveLength(1)
+    // The same stand-in answers every later turn of the session.
+    expect(conversations.forEphemeral(borrowed.id).id).toBe(standIn.id)
+    expect(before).toContain('an earlier question from before the interview')
+  })
+
   it('is forgotten when it falls outside the retention window', async () => {
     const settings = (await import('./settings')).settingsDomain
     vi.useFakeTimers()
