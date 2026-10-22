@@ -11,6 +11,8 @@ interface KlyroApi {
   getAppInfo(): Promise<any>
   getSettings(): Promise<any>
   updateSettings(patch: Partial<any>): Promise<any>
+  /** Called when the settings changed in another window. */
+  onSettingsChanged(listener: () => void): () => void
   listProviders(): Promise<any[]>
   setApiKey(provider: string, key: string): Promise<any[]>
   clearApiKey(provider: string): Promise<any[]>
@@ -34,6 +36,10 @@ interface KlyroApi {
 
   checkPermissions(): Promise<any>
   hideOverlay(): Promise<void>
+  /** Show the quick-ask overlay (the same window the hotkey opens). */
+  toggleOverlay(): Promise<void>
+  /** Tell the main process how tall the overlay's content is. */
+  resizeOverlay(height: number): Promise<number>
   privateModeStatus(): Promise<{ supported: boolean; enabled: boolean }>
   setRecordingSticky(sticky: boolean): Promise<void>
   securityStatus(): Promise<any>

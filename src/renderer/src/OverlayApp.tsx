@@ -1,5 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Eye, EyeOff, Headphones, Loader2, Mic, Monitor, Square, X } from 'lucide-react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import {
+  Copy,
+  Check,
+  Eye,
+  EyeOff,
+  Headphones,
+  Info,
+  Loader2,
+  Mic,
+  Monitor,
+  RefreshCcw,
+  ScanEye,
+  Square,
+  TriangleAlert
+} from 'lucide-react'
 import {
   createSilenceWatcher,
   createLevelWatcher,
@@ -18,6 +32,8 @@ import {
 } from './lib/listen'
 import type { Attachment } from '@shared/types'
 import { ModelPicker, type PickerGroup } from './components/ModelPicker'
+import { recentModels, rememberModel } from './lib/recent'
+import { StatusDot } from './components/ui'
 import KlyroMark from './assets/logo/klyro-mark.svg'
 
 type AssistMode = 'idle' | 'recording' | 'listening'
@@ -25,9 +41,15 @@ type AssistMode = 'idle' | 'recording' | 'listening'
 /** How small the recorded slices are: the finer, the sooner a question ends. */
 const SLICE_MS = 250
 
+/** The window is sized by its content, between these two heights. */
+const MIN_OVERLAY_HEIGHT = 150
+const MAX_OVERLAY_HEIGHT = 520
+
 export default function OverlayApp() {
   const [text, setText] = useState('')
   const [answer, setAnswer] = useState('')
+  /** The question as it was asked, so the answer has a subject. */
+  const [question, setQuestion] = useState('')
   const [busy, setBusy] = useState(false)
   const [conversationId, setConversationId] = useState<string | null>(null)
   /** The interview this overlay is recording into, when it is recording one. */
@@ -39,6 +61,8 @@ export default function OverlayApp() {
   const [transcript, setTranscript] = useState<string[]>([])
   const [autoAnswer, setAutoAnswer] = useState(true)
   const [assistNote, setAssistNote] = useState<string | null>(null)
+  /** A provider failure, shown as an error rather than as a hint. */
+  const [errorText, setErrorText] = useState<string | null>(null)
   const [assistSource, setAssistSource] = useState<'System audio' | 'Microphone' | null>(null)
   // A screen capture waiting to be sent with the next question.
   const [capture, setCapture] = useState<{ dataUrl: string; name: string } | null>(null)
@@ -50,6 +74,12 @@ export default function OverlayApp() {
   // The provider the overlay answers with, and the model it uses.
   const [overlayProvider, setOverlayProvider] = useState('')
   const [overlayModel, setOverlayModel] = useState('')
+  /** Something the user should know about the provider in use. */
+  const [providerNote, setProviderNote] = useState<string | null>(null)
+  /** Whether the model in use can read a picture. */
+  const [vision, setVision] = useState<'yes' | 'no' | 'unknown'>('unknown')
+  /** The models used recently, offered first in the picker. */
+  const [recent, setRecent] = useState<string[]>([])
   // Every connected provider's models, loaded when the picker opens.
   const [catalogue, setCatalogue] = useState<PickerGroup[]>([])
   const [catalogueNote, setCatalogueNote] = useState<string | null>(null)
@@ -58,11 +88,16 @@ export default function OverlayApp() {
   const [capturing, setCapturing] = useState(false)
   // How long the last answer took, and whether it was replayed instantly.
   const [timing, setTiming] = useState<{ ms: number; totalMs: number; model?: string; cached?: boolean } | null>(null)
+  const [copied, setCopied] = useState(false)
 
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const innerRef = useRef<HTMLDivElement | null>(null)
+  const responseRef = useRef<HTMLElement | null>(null)
+  const answerTextRef = useRef<HTMLDivElement | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
-  const inputRef = useRef<HTMLInputElement | null>(null)
+  const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const mimeRef = useRef('audio/webm')
   const gateRef = useRef<SilenceWatcher | null>(null)
   /** The room's level, while the listen mode is running. */
@@ -75,6 +110,7 @@ export default function OverlayApp() {
   const busyRef = useRef(false)
   const autoRef = useRef(true)
   const chainRef = useRef<Promise<void>>(Promise.resolve())
+  const lastQuestionRef = useRef('')
   const isWindows = /Win/i.test(navigator.platform)
   const isLinux = /Linux/i.test(navigator.platform) && !isWindows
 
@@ -93,12 +129,22 @@ export default function OverlayApp() {
       // An empty fast model means "the same model as the chat", so that is
       // what the picker shows.
       setOverlayModel(provider?.fastModel || provider?.model || '')
+      // A provider that is missing its key cannot answer, and the user should
+      // know before they ask.
+      const providers = await window.klyro.listProviders().catch(() => [])
+      const active = providers.find((entry) => entry.id === settings.activeProvider)
+      setProviderNote(
+        active && active.requiresKey && !active.hasKey
+          ? `${active.label} has no key yet — add one in Models & Agents.`
+          : null
+      )
+      setVision(active?.vision ?? 'unknown')
     } catch {
       // Keep the last known provider; it still answers.
     }
   }, [])
 
-  /** Ask every connected provider for its models — only when the menu opens. */
+  /** Ask every connected provider for its models — when the menu opens. */
   const loadCatalogue = useCallback(async (): Promise<void> => {
     setCatalogueLoading(true)
     try {
@@ -116,7 +162,28 @@ export default function OverlayApp() {
     }
   }, [])
 
+  /**
+   * Size the window to the content.
+   *
+   * The idle overlay is a small box; an answer makes it taller, and the
+   * answer scrolls inside once it reaches the limit. The window follows the
+   * content instead of the content following the window.
+   */
+  const resizeToContent = useCallback((): void => {
+    const inner = innerRef.current
+    if (!inner) return
+    // The wrapper is as tall as its content wants to be; the window follows it.
+    const wanted = inner.scrollHeight
+    const height = Math.max(MIN_OVERLAY_HEIGHT, Math.min(MAX_OVERLAY_HEIGHT, Math.round(wanted)))
+    void window.klyro.resizeOverlay(height)
+  }, [])
+
+  useLayoutEffect(() => {
+    resizeToContent()
+  }, [answer, question, transcript, capture, overlaySources, mode, talkState, timing, resizeToContent])
+
   useEffect(() => {
+    setRecent(recentModels())
     void window.klyro.privateModeStatus().then(setPrivateMode).catch(() => setPrivateMode(null))
     void syncProvider()
     // Load the names in the background so the chip shows "Claude Sonnet 4"
@@ -124,17 +191,28 @@ export default function OverlayApp() {
     void loadCatalogue()
     // The hotkey shows and focuses the overlay; both events mean "settings may
     // have changed while I was hidden".
-    const onFocus = (): void => void syncProvider()
+    const onFocus = (): void => {
+      void syncProvider()
+      // The window may have been shown with a stale height: measure again.
+      resizeToContent()
+    }
     const onVisible = (): void => {
       if (document.visibilityState === 'visible') void syncProvider()
     }
     window.addEventListener('focus', onFocus)
     document.addEventListener('visibilitychange', onVisible)
+    // The control panel can change the provider or the model at any time.
+    const offSettings = window.klyro.onSettingsChanged(() => {
+      void syncProvider()
+      void loadCatalogue()
+    })
     const offChat = window.klyro.onChatStream((event) => {
       if (event.type === 'start') {
         setAnswer('')
         talkRef.current.answering = true
-        setTalkState((current) => (current === 'listening' ? current : 'thinking'))
+        // The conversation mode has its own status line; a typed question does
+        // not need one.
+        if (talkRef.current.timer !== null) setTalkState('thinking')
       } else if (event.type === 'delta') {
         setAnswer((prev) => prev + event.text)
       } else if (event.type === 'done' || event.type === 'error') {
@@ -144,7 +222,7 @@ export default function OverlayApp() {
         if (event.type === 'done') {
           setTiming({ ms: event.ms ?? 0, totalMs: event.totalMs ?? 0, model: event.model, cached: event.cached })
         }
-        if (event.type === 'error') setAssistNote(event.message)
+        if (event.type === 'error') setErrorText(event.message)
         // Once the answer landed and nothing is still recording, the overlay
         // can go back to hiding on blur.
         if (modeRef.current === 'idle') void window.klyro.setRecordingSticky(false)
@@ -152,10 +230,11 @@ export default function OverlayApp() {
     })
     return () => {
       offChat()
+      offSettings()
       window.removeEventListener('focus', onFocus)
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [loadCatalogue, syncProvider])
+  }, [loadCatalogue, resizeToContent, syncProvider])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -406,6 +485,7 @@ export default function OverlayApp() {
   const askSpoken = useCallback(async (spoken: string): Promise<void> => {
     if (!spoken.trim()) return
     setAnswer('')
+    setQuestion(spoken)
     setTiming(null)
     setTalkState('thinking')
     try {
@@ -539,7 +619,6 @@ export default function OverlayApp() {
           talk.answering = false
           void window.klyro.abortChat()
         }
-        if (!talk.speaking && talk.answering === false) setTalkState((current) => (current === 'hearing' ? current : current))
       }, 100)
     } catch (error) {
       setAssistNote(`Microphone unavailable: ${(error as Error).message}`)
@@ -584,6 +663,7 @@ export default function OverlayApp() {
         return
       }
       setTranscript([`Q: ${question}`])
+      setQuestion(question)
       await askAssist(snippetPrompt(question))
     } catch (error) {
       setAssistNote((error as Error).message)
@@ -641,6 +721,7 @@ export default function OverlayApp() {
       const next = [...transcript.slice(-7), text]
       setTranscript(next)
       if (autoRef.current && !busyRef.current && looksLikeQuestion(text)) {
+        setQuestion(text)
         await askAssist(listenPrompt(next))
       }
     } catch (error) {
@@ -670,12 +751,93 @@ export default function OverlayApp() {
     void window.klyro.setRecordingSticky(false)
   }
 
+  /** Ask the question in the box. */
+  async function ask(): Promise<void> {
+    const content = text.trim()
+    if (!content || busyRef.current) return
+    lastQuestionRef.current = content
+    let id = conversationId
+    if (!id) {
+      const conversation = await window.klyro.createConversation()
+      id = conversation.id
+      setConversationId(id)
+    }
+    setQuestion(content)
+    setAnswer('')
+    setTiming(null)
+    setAssistNote(null)
+    setErrorText(null)
+    setBusy(true)
+    busyRef.current = true
+    setText('')
+    try {
+      await window.klyro.sendChat({
+        conversationId: id,
+        content,
+        attachments: captureAttachments(),
+        useFastModel: true,
+        interviewId: interviewRef.current ?? undefined,
+        source: 'text'
+      })
+      setCapture(null)
+    } catch (error) {
+      setAssistNote((error as Error).message)
+    } finally {
+      setBusy(false)
+      busyRef.current = false
+    }
+  }
+
+  /** Ask the last question again. */
+  async function retry(): Promise<void> {
+    const content = lastQuestionRef.current
+    if (!content || busyRef.current) return
+    setAnswer('')
+    setTiming(null)
+    setBusy(true)
+    busyRef.current = true
+    try {
+      let id = conversationId
+      if (!id) {
+        const conversation = await window.klyro.createConversation()
+        id = conversation.id
+        setConversationId(id)
+      }
+      await window.klyro.sendChat({
+        conversationId: id,
+        content,
+        useFastModel: true,
+        interviewId: interviewRef.current ?? undefined,
+        source: 'text'
+      })
+    } catch (error) {
+      setAssistNote((error as Error).message)
+    } finally {
+      setBusy(false)
+      busyRef.current = false
+    }
+  }
+
+  /** Copy the answer to the clipboard. */
+  async function copyAnswer(): Promise<void> {
+    if (!answer) return
+    try {
+      await navigator.clipboard.writeText(answer)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1500)
+    } catch {
+      setAssistNote('The clipboard is not available here.')
+    }
+  }
 
   const assistBusy = mode !== 'idle'
+  const recording = mode === 'recording' || mode === 'listening'
+  const hasAnswer = Boolean(answer) && !isNoAnswer(answer)
 
   return (
-    <div className={`overlay${privateMode?.enabled ? ' overlay--private' : ''}`}>
-      <div className="overlay__bar">
+    <div className={`overlay${privateMode?.enabled ? ' overlay--private' : ''}`} ref={rootRef}>
+      <div className="overlay__inner" ref={innerRef}>
+      <header className="overlay__head">
         <img src={KlyroMark} alt="" className="overlay__mark" aria-hidden="true" />
         <span className="overlay__brand">Klyro</span>
         {overlayProvider && (
@@ -686,6 +848,7 @@ export default function OverlayApp() {
             label={overlayModel || 'Pick a model'}
             loading={catalogueLoading}
             note={catalogueNote}
+            recent={recent}
             onOpen={() => {
               void syncProvider()
               void loadCatalogue()
@@ -697,6 +860,7 @@ export default function OverlayApp() {
               const target = providerId || overlayProvider
               setOverlayModel(next)
               setOverlayProvider(target)
+              setRecent(rememberModel(next))
               void (async () => {
                 try {
                   const settings = await window.klyro.getSettings()
@@ -714,6 +878,18 @@ export default function OverlayApp() {
             }}
           />
         )}
+        {vision === 'yes' && (
+          <span className="overlay__state" title="This model can read the screen you share with it.">
+            <ScanEye className="icon icon--xs" aria-hidden="true" />
+            <span className="overlay__state-label">Reads images</span>
+          </span>
+        )}
+        {providerNote && (
+          <span className="overlay__state" title={providerNote}>
+            <StatusDot state="warn" />
+            <span className="overlay__state-label">No key</span>
+          </span>
+        )}
         {privateMode && (
           <button
             className="btn btn--icon btn--icon-sm btn--ghost"
@@ -730,98 +906,54 @@ export default function OverlayApp() {
             {privateMode.enabled ? <EyeOff className="icon icon--sm" aria-hidden="true" /> : <Eye className="icon icon--sm" aria-hidden="true" />}
           </button>
         )}
-        <input
+      </header>
+
+      <div className="overlay__composer">
+        <textarea
           ref={inputRef}
-          autoFocus
+          className="overlay__input"
+          rows={1}
           value={text}
           placeholder={assistBusy ? 'Assist runs in this box…' : 'Ask anything…'}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === 'Enter') {
+            if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault()
-              void (async () => {
-                const content = text.trim()
-                if (!content || busy) return
-                let id = conversationId
-                if (!id) {
-                  const conversation = await window.klyro.createConversation()
-                  id = conversation.id
-                  setConversationId(id)
-                }
-                setAnswer('')
-                setBusy(true)
-                setText('')
-                await window.klyro.sendChat({
-        conversationId: id,
-        content,
-        attachments: captureAttachments(),
-        useFastModel: true,
-        interviewId: interviewRef.current ?? undefined,
-        source: 'text'
-      })
-                setCapture(null)
-              })()
+              void ask()
             }
           }}
         />
         {busy ? (
-          <button className="btn btn--stop" onClick={() => void window.klyro.abortChat()}>
-            Stop
+          <button className="btn btn--danger overlay__ask" onClick={() => void window.klyro.abortChat()}>
+            <Square className="icon icon--sm" aria-hidden="true" />
+            <span>Stop</span>
           </button>
         ) : (
-          <button className="btn btn--primary" onClick={() => void (async (): Promise<void> => {
-            const content = text.trim()
-            if (!content || busy) return
-            let id = conversationId
-            if (!id) {
-              const conversation = await window.klyro.createConversation()
-              id = conversation.id
-              setConversationId(id)
-            }
-            setAnswer('')
-            setBusy(true)
-            setText('')
-            await window.klyro.sendChat({
-        conversationId: id,
-        content,
-        attachments: captureAttachments(),
-        useFastModel: true,
-        interviewId: interviewRef.current ?? undefined,
-        source: 'text'
-      })
-            setCapture(null)
-          })()}
-          >
-            Ask
+          <button className="btn btn--primary overlay__ask" onClick={() => void ask()} disabled={!text.trim()}>
+            <span>Ask</span>
           </button>
         )}
       </div>
 
-      <div className="overlay__assist" role="group" aria-label="Meeting assist">
-        {assistSource && <span className="overlay__source">{assistSource}</span>}
+      <div className="overlay__toolbar" role="group" aria-label="Meeting assist">
         {mode === 'idle' && (
           <>
             <button
-              className={`btn btn--sm${capture ? ' btn--primary' : ''}`}
+              className={`overlay__tool${capture ? ' overlay__tool--on' : ''}`}
               onClick={() => void captureScreen()}
               disabled={busy || capturing}
               title="Capture what is on screen and ask about it"
               aria-label="Capture screen"
             >
               {capturing ? (
-                <>
-                  <Loader2 className="icon icon--sm overlay__spin" aria-hidden="true" />
-                  <span>Capturing…</span>
-                </>
+                <Loader2 className="icon icon--xs spin" aria-hidden="true" />
               ) : (
-                <>
-                  <Monitor className="icon icon--sm" aria-hidden="true" />
-                  <span>{capture ? 'Captured' : 'Capture screen'}</span>
-                </>
+                <Monitor className="icon icon--xs" aria-hidden="true" />
               )}
+              <span>{capture ? 'Captured' : 'Screen'}</span>
             </button>
             <button
-              className={`btn btn--sm${talkState !== 'idle' ? ' btn--primary' : ''}`}
+              className={`overlay__tool${talkState !== 'idle' ? ' overlay__tool--on' : ''}`}
               onClick={() => {
                 if (talkState === 'idle') void startTalking()
                 else stopTalking()
@@ -830,37 +962,57 @@ export default function OverlayApp() {
               title="Talk to Klyro — it answers when you stop speaking"
               aria-label="Talk to Klyro"
             >
-              <Mic className="icon icon--sm" aria-hidden="true" />
+              <Mic className="icon icon--xs" aria-hidden="true" />
               <span>{talkState === 'idle' ? 'Talk' : 'Stop talking'}</span>
             </button>
-            <button className="btn btn--sm" onClick={() => void startSnippet()} disabled={busy || talkState !== 'idle'}>
-              <Mic className="icon icon--sm" aria-hidden="true" />
-              <span>Record question</span>
+            <button
+              className="overlay__tool"
+              onClick={() => void startSnippet()}
+              disabled={busy || talkState !== 'idle'}
+              title="Record one question: press once when it starts, once when it ends"
+              aria-label="Record a question"
+            >
+              <Mic className="icon icon--xs" aria-hidden="true" />
+              <span>Record</span>
             </button>
-            <button className="btn btn--sm" onClick={() => void startListening()} disabled={busy || talkState !== 'idle'}>
-              <Headphones className="icon icon--sm" aria-hidden="true" />
-              <span>Listen to meeting</span>
+            <button
+              className="overlay__tool"
+              onClick={() => void startListening()}
+              disabled={busy || talkState !== 'idle'}
+              title="Listen to the meeting and answer the questions you hear"
+              aria-label="Listen to the meeting"
+            >
+              <Headphones className="icon icon--xs" aria-hidden="true" />
+              <span>Listen</span>
             </button>
           </>
         )}
 
         {mode === 'recording' && (
-          <button className="btn btn--danger" onClick={() => void endSnippet()}>
-            <Square className="icon icon--sm" aria-hidden="true" />
-            <span className="overlay__recdot" aria-hidden="true" />
+          <button className="overlay__tool overlay__tool--record" onClick={() => void endSnippet()}>
+            <Square className="icon icon--xs" aria-hidden="true" />
             <span>Stop &amp; answer</span>
           </button>
         )}
 
         {mode === 'listening' && (
-          <button className="btn btn--danger" onClick={() => void stopListening()}>
-            <Square className="icon icon--sm" aria-hidden="true" />
+          <button className="overlay__tool overlay__tool--record" onClick={() => void stopListening()}>
+            <Square className="icon icon--xs" aria-hidden="true" />
             <span>Stop listening</span>
           </button>
         )}
 
+        {recording && (
+          <span className="overlay__recording" role="status">
+            <span className="overlay__recdot" aria-hidden="true" />
+            {mode === 'recording' ? 'Recording' : 'Listening'}
+          </span>
+        )}
+
+        {assistSource && <span className="overlay__source">{assistSource}</span>}
+
         {mode === 'listening' && (
-          <label className="overlay__auto">
+          <label className="overlay__tool" style={{ cursor: 'pointer' }}>
             <input
               type="checkbox"
               checked={autoAnswer}
@@ -869,18 +1021,29 @@ export default function OverlayApp() {
                 setAutoAnswer(event.target.checked)
               }}
             />
-            <span>Auto-answer questions</span>
+            <span>Auto-answer</span>
           </label>
         )}
 
-        {(mode !== 'idle' || busy) && <Loader2 className="icon icon--sm overlay__spin" aria-hidden="true" />}
+        {assistNote && (
+          <span className="overlay__note" role="status">
+            <Info className="icon icon--xs" aria-hidden="true" />
+            <span>{assistNote}</span>
+          </span>
+        )}
+
+        <span className="overlay__toolbar-hint">Esc to close · Enter to ask</span>
       </div>
 
       {talkState !== 'idle' && (
         <div className="overlay__talk" aria-live="polite">
           <span className={`overlay__talk-dot overlay__talk-dot--${talkState}`} aria-hidden="true" />
           <span className="overlay__talk-label">
-            {talkState === 'listening' ? 'Listening — speak whenever you like' : talkState === 'hearing' ? 'Hearing you…' : 'Thinking…'}
+            {talkState === 'listening'
+              ? 'Listening — speak whenever you like'
+              : talkState === 'hearing'
+                ? 'Hearing you…'
+                : 'Thinking…'}
           </span>
           <span className="overlay__meter" aria-hidden="true">
             <span className="overlay__meter-fill" style={{ width: `${Math.round(Math.min(1, level) * 100)}%` }} />
@@ -890,7 +1053,7 @@ export default function OverlayApp() {
 
       {transcript.length > 0 && (
         <div className="overlay__transcript" aria-live="polite">
-          {transcript.slice(-4).map((line, index) => (
+          {transcript.slice(-3).map((line, index) => (
             <div key={`${index}-${line.slice(0, 24)}`} className="overlay__line">
               {line}
             </div>
@@ -907,7 +1070,7 @@ export default function OverlayApp() {
             </button>
           ))}
           <button className="btn btn--icon btn--icon-sm btn--ghost" onClick={() => setOverlaySources(null)} aria-label="Cancel">
-            <X className="icon icon--xs" aria-hidden="true" />
+            <span aria-hidden="true">×</span>
           </button>
         </div>
       )}
@@ -924,19 +1087,47 @@ export default function OverlayApp() {
             onClick={() => setCapture(null)}
             aria-label="Remove the screen capture"
           >
-            <X className="icon icon--xs" aria-hidden="true" />
+            <span aria-hidden="true">×</span>
           </button>
         </div>
       )}
 
-      <div className="overlay__answer">
-        {answer && !isNoAnswer(answer) ? (
-          <>
-            {answer}
+      {(question || hasAnswer || errorText || busy) && (
+        <section className="overlay__response" ref={responseRef} aria-live="polite">
+          {question && (
+            <div className="overlay__question">
+              <span className="overlay__question-label">Asked</span>
+              <span>{question}</span>
+            </div>
+          )}
+
+          <div className={`overlay__answer${assistNote && !hasAnswer ? ' overlay__answer--error' : ''}`}>
+            {hasAnswer ? (
+              <div className="overlay__answer-text" ref={answerTextRef}>
+                {answer}
+              </div>
+            ) : errorText ? (
+              <div className="row" style={{ alignItems: 'flex-start', gap: 6 }}>
+                <TriangleAlert className="icon icon--xs" style={{ marginTop: 3, flexShrink: 0 }} aria-hidden="true" />
+                <span>{errorText}</span>
+              </div>
+            ) : busy ? (
+              <span className="overlay__waiting">
+                <span className="overlay__waiting-dots" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+                <span>Thinking…</span>
+              </span>
+            ) : null}
+          </div>
+
+          <footer className="overlay__footer">
             {timing && (
-              <div className="overlay__timing">
+              <>
                 {timing.cached ? (
-                  <span className="overlay__timing-badge">instant replay</span>
+                  <span className="overlay__timing-badge overlay__timing-badge--cached">instant replay</span>
                 ) : (
                   <span className="overlay__timing-badge">{(timing.ms / 1000).toFixed(2)}s</span>
                 )}
@@ -946,16 +1137,33 @@ export default function OverlayApp() {
                 ) : timing.totalMs > 0 ? (
                   <span>complete in {(timing.totalMs / 1000).toFixed(1)}s</span>
                 ) : null}
-              </div>
+              </>
             )}
-          </>
-        ) : assistNote ? (
-          <span className="overlay__note">{assistNote}</span>
-        ) : busy ? (
-          <span className="muted">…</span>
-        ) : (
-          <span className="muted">Esc to close · Enter to ask</span>
-        )}
+            {!timing && !busy && !hasAnswer && !errorText && (
+              <span>Answers stay on this machine unless you use a hosted provider.</span>
+            )}
+            <div className="overlay__actions">
+              {hasAnswer && (
+                <>
+                  <button className="btn btn--quiet btn--xs" onClick={() => void copyAnswer()} title="Copy the answer">
+                    {copied ? <Check className="icon icon--xs" aria-hidden="true" /> : <Copy className="icon icon--xs" aria-hidden="true" />}
+                    <span>{copied ? 'Copied' : 'Copy'}</span>
+                  </button>
+                  <button
+                    className="btn btn--quiet btn--xs"
+                    onClick={() => void retry()}
+                    disabled={busy || !lastQuestionRef.current}
+                    title="Ask the same question again"
+                  >
+                    <RefreshCcw className="icon icon--xs" aria-hidden="true" />
+                    <span>Retry</span>
+                  </button>
+                </>
+              )}
+            </div>
+          </footer>
+        </section>
+      )}
       </div>
     </div>
   )

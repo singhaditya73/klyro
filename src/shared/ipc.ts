@@ -55,10 +55,14 @@ export const IPC = {
 
   windowHideOverlay: 'window:hideOverlay',
   windowToggleOverlay: 'window:toggleOverlay',
+  /** The overlay asks for the height its content needs. */
+  overlayResize: 'overlay:resize',
   windowPrivateModeStatus: 'window:privateModeStatus',
   overlaySetRecordingSticky: 'overlay:setRecordingSticky',
   /** Every usable provider's models, for the overlay's picker. */
   overlayCatalogue: 'overlay:catalogue',
+  /** The settings changed somewhere; every window re-reads them. */
+  settingsChanged: 'settings:changed',
 
   /* MCP connector */
 

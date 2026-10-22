@@ -51,6 +51,20 @@ const ORDER: ProviderId[] = [
   'openai-compatible'
 ]
 
+/**
+ * Does this provider keep the request on this machine?
+ *
+ * The agents and the local servers do; the hosted ones do not. The overlay
+ * shows this next to every provider, because it decides where the question
+ * travels.
+ */
+function isLocalProvider(id: ProviderId, settings: AppSettings): boolean {
+  if (id === 'claude-code' || id === 'codex' || id === 'antigravity') return true
+  if (id === 'ollama') return true
+  const baseUrl = settings.providers[id]?.baseUrl ?? ''
+  return isLocalUrl(baseUrl)
+}
+
 function isLocalUrl(baseUrl: string): boolean {
   try {
     const host = new URL(baseUrl).hostname
@@ -128,7 +142,8 @@ export async function overlayCatalogue(
         id,
         label: SHORT_LABEL[id],
         models: result.models,
-        note: result.models.length > 0 ? null : result.note
+        note: result.models.length > 0 ? null : result.note,
+        local: isLocalProvider(id, settings)
       }
     })
   )

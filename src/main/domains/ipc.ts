@@ -1,4 +1,4 @@
-import { app, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import { z } from 'zod'
 import { IPC } from '@shared/ipc'
@@ -18,7 +18,16 @@ import { listProviderModels } from './provider-models'
 import { interviews } from './interviews'
 import { summarizeInterview } from './interview-summary'
 import { transcribeAudio } from './audio'
-import { applyOverlayDisplay, applyOverlayOpacity, applyOverlayPrivateMode, listDisplays, overlayPrivateModeSupported, setOverlayStickyRecording } from './windows'
+import {
+  applyOverlayDisplay,
+  applyOverlayOpacity,
+  applyOverlayPrivateMode,
+  listDisplays,
+  overlayPrivateModeSupported,
+  resizeOverlay,
+  setOverlayStickyRecording,
+  toggleOverlay
+} from './windows'
 import { conversations } from './conversations'
 import { overlayCatalogue } from './overlay-models'
 import { providersPatchSchema } from './provider-settings'
@@ -148,6 +157,11 @@ export function registerIpcHandlers(): void {
       interviews.prune()
       conversations.prune()
       audit.prune()
+    }
+    // Tell every window: the theme, the model and the overlay's own settings
+    // must follow a change made in another one.
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send(IPC.settingsChanged)
     }
     return next
   })
@@ -287,6 +301,17 @@ export function registerIpcHandlers(): void {
 
   handle(IPC.overlaySetRecordingSticky, (_event, sticky: unknown) => {
     setOverlayStickyRecording(sticky === true)
+  })
+
+  // The overlay asks for the height its content needs; the window follows.
+  handle(IPC.overlayResize, (_event, height: unknown) => {
+    const parsed = z.number().finite().safeParse(height)
+    return parsed.success ? resizeOverlay(parsed.data) : 0
+  })
+
+  // The same window the hotkey opens, opened from the control panel.
+  handle(IPC.windowToggleOverlay, () => {
+    toggleOverlay()
   })
 
   /* ---------- Audit log ---------- */

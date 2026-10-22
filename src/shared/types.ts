@@ -119,6 +119,8 @@ export interface CatalogueGroup {
   models: CatalogueModel[]
   /** Why the group is empty, when it is. */
   note: string | null
+  /** True when this provider runs on this machine, so nothing leaves it. */
+  local: boolean
 }
 
 export interface ProviderStatus {
@@ -745,6 +747,8 @@ export interface KlyroApi {
   getAppInfo(): Promise<AppInfo>
   getSettings(): Promise<AppSettings>
   updateSettings(patch: Partial<AppSettings>): Promise<AppSettings>
+  /** Called when the settings changed in another window. */
+  onSettingsChanged(listener: () => void): () => void
   listProviders(): Promise<ProviderStatus[]>
   setApiKey(provider: ProviderId, key: string): Promise<ProviderStatus[]>
   clearApiKey(provider: ProviderId): Promise<ProviderStatus[]>
@@ -767,6 +771,10 @@ export interface KlyroApi {
 
   checkPermissions(): Promise<PermissionState>
   hideOverlay(): Promise<void>
+  /** Show the quick-ask overlay (the same window the hotkey opens). */
+  toggleOverlay(): Promise<void>
+  /** Tell the main process how tall the overlay's content is. */
+  resizeOverlay(height: number): Promise<number>
   /** Private-mode status for the overlay: capture exclusion support and current state. */
   privateModeStatus(): Promise<{ supported: boolean; enabled: boolean }>
   /** Keep the overlay visible across focus changes while meeting-assist records. */

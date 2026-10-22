@@ -175,22 +175,22 @@ export function Onboarding({ onOpenSettings }: Props) {
                   <span className="onboarding__point-icon"><Sparkles className="icon icon--sm" aria-hidden="true" /></span>
                   <div>
                     <strong>It works for you</strong>
-                    <span>Your own model key, or a fully local model. Nothing is stored off this machine.</span>
+                    <span>Your own model key, or a fully local model. Your questions go to the model you chose — nowhere else.</span>
                   </div>
                 </div>
               </div>
               {needsKey && (
-                <div className="notice notice--warning onboarding__notice">
-                  <div className="notice__body">
-                    <strong>One thing first: a model.</strong>
-                    <div style={{ fontSize: 12, marginTop: 2 }}>
+                <div className="group onboarding__notice">
+                  <div className="group__body">
+                    <div className="card__title">One thing first: a model.</div>
+                    <div className="card__subtitle">
                       Add a provider key (Groq has a free tier that is fast enough for the overlay), or use
                       something already running on this machine — OpenCode, Ollama or LM Studio — with no key at
                       all.
                     </div>
-                    <div className="notice__actions">
-                      <button className="btn btn--sm" onClick={onOpenSettings}>
-                        <span>Add a key</span>
+                    <div className="row" style={{ marginTop: 12 }}>
+                      <button className="btn btn--accent btn--sm" onClick={onOpenSettings}>
+                        <span>Connect a model</span>
                       </button>
                     </div>
                   </div>
@@ -206,8 +206,8 @@ export function Onboarding({ onOpenSettings }: Props) {
                   <button className="btn btn--ghost" onClick={() => setStep('try')}>
                     <span>Try anyway</span>
                   </button>
-                  <button className="btn btn--primary" onClick={onOpenSettings}>
-                    <span>Add a key</span>
+                  <button className="btn btn--accent" onClick={onOpenSettings}>
+                    <span>Connect a model</span>
                   </button>
                 </>
               ) : (

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { CheckCircle2, Circle, Cpu, Key, Loader2, Play, RefreshCcw, Server } from 'lucide-react'
+import { Circle, Cpu, Key, Loader2, Play, RefreshCcw, Server } from 'lucide-react'
+import { Badge, StatusDot } from './ui'
 
 /**
  * What is already running on this machine.
@@ -7,9 +8,13 @@ import { CheckCircle2, Circle, Cpu, Key, Loader2, Play, RefreshCcw, Server } fro
  * OpenCode, Ollama, LM Studio, LiteLLM, vLLM and local bridges to other IDEs'
  * subscriptions all speak something we can use. Klyro probes the usual ports
  * and offers one-click connect — no key, no signup, no copying credentials.
+ *
+ * The section is split into blocks so the Models page can place each one
+ * where it belongs: the detected servers with the local servers, Antigravity
+ * with the coding agents.
  */
 
-interface LocalAgent {
+export interface LocalAgent {
   id: string
   kind: 'opencode' | 'openai-compatible'
   name: string
@@ -21,21 +26,46 @@ interface LocalAgent {
   note: string
 }
 
+export interface CliAgent {
+  id: string
+  name: string
+  installed: boolean
+  providerId: string
+  note: string
+}
+
 interface Props {
   /** Point Klyro at a detected service. */
   onConnect: (agent: LocalAgent, model: string) => void | Promise<void>
   /** Open Settings to add a server password. */
   onOpenSettings?: () => void
+  /** Which blocks to show. Everything is shown by default. */
+  show?: {
+    detected?: boolean
+    opencode?: boolean
+    antigravity?: boolean
+    clis?: boolean
+  }
+  /** A heading for the block; null means no heading at all. */
+  title?: string | null
+  description?: string
 }
 
-export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
+export function LocalAgentsSection({
+  onConnect,
+  onOpenSettings,
+  show,
+  title = 'Local models & agents',
+  description = 'Use the AI services already running on this machine — no key, no signup'
+}: Props) {
+  const blocks = { detected: true, opencode: true, antigravity: true, clis: true, ...show }
   const [agents, setAgents] = useState<LocalAgent[] | null>(null)
   const [scanning, setScanning] = useState(false)
   const [connected, setConnected] = useState<string | null>(null)
   const [starting, setStarting] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [installed, setInstalled] = useState(false)
-  const [clis, setClis] = useState<Array<{ id: string; name: string; installed: boolean; providerId: string; note: string }>>([])
+  const [clis, setClis] = useState<CliAgent[]>([])
   const [startingAgent, setStartingAgent] = useState(false)
   const [agentNote, setAgentNote] = useState<string | null>(null)
   const [antigravity, setAntigravity] = useState<{
@@ -64,9 +94,18 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
 
   useEffect(() => {
     void scan()
-    void window.klyro.localAgentOpenCodeInstalled().then((result) => setInstalled(result.installed)).catch(() => setInstalled(false))
-    void window.klyro.localAgentClis().then(setClis).catch(() => setClis([]))
-    void window.klyro.antigravityStatus().then(setAntigravity).catch(() => setAntigravity(null))
+    void window.klyro
+      .localAgentOpenCodeInstalled()
+      .then((result) => setInstalled(result.installed))
+      .catch(() => setInstalled(false))
+    void window.klyro
+      .localAgentClis()
+      .then(setClis)
+      .catch(() => setClis([]))
+    void window.klyro
+      .antigravityStatus()
+      .then(setAntigravity)
+      .catch(() => setAntigravity(null))
   }, [scan])
 
   /**
@@ -106,7 +145,7 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
     } finally {
       setStarting(false)
     }
-  }, [scan])
+  }, [scan, onConnect])
 
   const refreshAntigravity = useCallback(async (): Promise<void> => {
     try {
@@ -208,52 +247,69 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
   const openCodeRunning = (agents ?? []).some((agent) => agent.kind === 'opencode' && agent.healthy)
 
   return (
-    <section style={{ marginTop: 32, paddingTop: 24, borderTop: '1px solid var(--border-subtle)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div className="icon-tile">
-            <Server className="icon icon--md" aria-hidden="true" />
-          </div>
+    <section>
+      {title && (
+        <div className="row" style={{ justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: 17, fontWeight: 600 }}>Local models & agents</h2>
-            <p className="muted" style={{ margin: '2px 0 0', fontSize: 12 }}>
-              Use the AI services already running on this machine — no key, no signup
-            </p>
+            <div className="group__title">{title}</div>
+            <div className="group__desc">{description}</div>
           </div>
+          <button className="btn btn--ghost btn--sm" onClick={() => void scan()} disabled={scanning}>
+            <RefreshCcw className={`icon icon--xs${scanning ? ' spin' : ''}`} aria-hidden="true" />
+            <span>{scanning ? 'Scanning…' : 'Scan again'}</span>
+          </button>
         </div>
-        <button className="btn btn--ghost btn--sm" onClick={() => void scan()} disabled={scanning}>
-          <RefreshCcw className={`icon icon--xs${scanning ? ' spin' : ''}`} aria-hidden="true" />
-          <span>{scanning ? 'Scanning…' : 'Scan again'}</span>
-        </button>
-      </div>
+      )}
 
-      {agents === null && <div className="muted" style={{ marginTop: 12, fontSize: 12 }}>Looking for local services…</div>}
+      {blocks.detected && agents === null && <Loading label="Looking for local services…" />}
 
-      {healthy.length > 0 && (
-        <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {blocks.detected && healthy.length > 0 && (
+        <div className="list" style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
           {healthy.map((agent) => (
-            <div key={agent.id} className="card">
-              <div className="card__row" style={{ flexWrap: 'wrap' }}>
-                <CheckCircle2 className="icon icon--sm" style={{ color: 'var(--success)' }} aria-hidden="true" />
-                <div style={{ flex: 1, minWidth: 160 }}>
-                  <div className="card__title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {agent.name}
-                    <span className="pill pill--ok">Running</span>
-                    {agent.needsAuth && <span className="pill pill--warn">Needs the server password</span>}
-                    {agent.version && <span className="muted" style={{ fontSize: 11, fontWeight: 400 }}>v{agent.version}</span>}
-                  </div>
-                  <div className="card__subtitle">
-                    {agent.baseUrl} · {agent.models.length} model{agent.models.length === 1 ? '' : 's'} · {agent.note}
-                  </div>
+            <div key={agent.id} className="list__row" style={{ alignItems: 'flex-start' }}>
+              <StatusDot state="ok" title="Running" />
+              <div className="list__main">
+                <div className="list__title">
+                  {agent.name}
+                  <Badge tone="ok">Running</Badge>
+                  {agent.needsAuth && <Badge tone="warn">Needs the server password</Badge>}
+                  {agent.version && <span className="muted" style={{ fontSize: 11 }}>v{agent.version}</span>}
                 </div>
+                <div className="list__meta">
+                  {agent.baseUrl} · {agent.models.length} model{agent.models.length === 1 ? '' : 's'} · {agent.note}
+                </div>
+                {agent.models.length > 0 && (
+                  <div className="row row--wrap" style={{ gap: 4, marginTop: 8 }}>
+                    {agent.models.slice(0, 6).map((model) => (
+                      <button
+                        key={model}
+                        className="btn btn--ghost btn--xs"
+                        onClick={() => {
+                          setConnected(agent.id)
+                          void onConnect(agent, model)
+                        }}
+                        title={`Use ${model}`}
+                      >
+                        <span className="mono">{model}</span>
+                      </button>
+                    ))}
+                    {agent.models.length > 6 && (
+                      <span className="hint" style={{ alignSelf: 'center' }}>
+                        +{agent.models.length - 6} more
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="list__actions">
                 {agent.needsAuth ? (
-                  <button className="btn btn--primary btn--sm" onClick={onOpenSettings}>
+                  <button className="btn btn--sm" onClick={onOpenSettings}>
                     <Key className="icon icon--xs" aria-hidden="true" />
                     <span>Add the password</span>
                   </button>
                 ) : (
                   <button
-                    className="btn btn--primary btn--sm"
+                    className="btn btn--sm"
                     onClick={() => {
                       setConnected(agent.id)
                       void onConnect(agent, agent.models[0] ?? '')
@@ -264,24 +320,6 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
                   </button>
                 )}
               </div>
-              {agent.models.length > 0 && (
-                <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {agent.models.slice(0, 8).map((model) => (
-                    <button
-                      key={model}
-                      className="btn btn--ghost btn--sm"
-                      onClick={() => {
-                        setConnected(agent.id)
-                        void onConnect(agent, model)
-                      }}
-                      title={`Use ${model}`}
-                    >
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{model}</span>
-                    </button>
-                  ))}
-                  {agent.models.length > 8 && <span className="muted" style={{ fontSize: 11, alignSelf: 'center' }}>+{agent.models.length - 8} more</span>}
-                </div>
-              )}
             </div>
           ))}
         </div>
@@ -293,8 +331,8 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
         </div>
       )}
 
-      {installed && !openCodeRunning && agents !== null && (
-        <div className="card" style={{ marginTop: 16 }}>
+      {blocks.opencode && installed && !openCodeRunning && agents !== null && (
+        <div className="card" style={{ marginTop: 12 }}>
           <div className="card__row" style={{ flexWrap: 'wrap' }}>
             <Server className="icon icon--sm" style={{ color: 'var(--text-secondary)' }} aria-hidden="true" />
             <div style={{ flex: 1, minWidth: 200 }}>
@@ -315,7 +353,7 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
         </div>
       )}
 
-      {antigravity && !antigravity.connected && antigravity.installed && (
+      {blocks.antigravity && antigravity && !antigravity.connected && antigravity.installed && (
         <div className="card" style={{ marginTop: 12 }}>
           <div className="card__row" style={{ flexWrap: 'wrap' }}>
             <span className="icon-tile">
@@ -345,7 +383,7 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
         </div>
       )}
 
-      {antigravity?.connected && (
+      {blocks.antigravity && antigravity?.connected && (
         <div className="card" style={{ marginTop: 12, borderColor: 'var(--border-default)' }}>
           <div className="card__row" style={{ flexWrap: 'wrap' }}>
             <span className="icon-tile">
@@ -354,9 +392,9 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
             <div style={{ flex: 1, minWidth: 200 }}>
               <div className="card__title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 Antigravity
-                <span className="pill pill--ok">Connected</span>
-                {antigravity.plan && <span className="pill pill--accent">{antigravity.plan} plan</span>}
-                <span className="pill pill--ok">IDE not needed</span>
+                <Badge tone="ok">Connected</Badge>
+                {antigravity.plan && <Badge tone="accent">{antigravity.plan} plan</Badge>}
+                <Badge tone="ok">IDE not needed</Badge>
               </div>
               <div className="card__subtitle">
                 {antigravity.running ? (
@@ -373,7 +411,7 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
                 )}
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div className="row" style={{ gap: 8, alignItems: 'center' }}>
               {antigravity.running ? (
                 <button
                   className="btn btn--primary btn--sm"
@@ -407,7 +445,7 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
             </div>
           </div>
           {antigravity.running && (
-            <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            <div className="row row--wrap" style={{ gap: 6, marginTop: 10 }}>
               {antigravity.models.slice(0, 10).map((model) => (
                 <button
                   key={model.id}
@@ -420,7 +458,7 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
                 </button>
               ))}
               {antigravity.models.length > 10 && (
-                <span className="muted" style={{ fontSize: 11, alignSelf: 'center' }}>
+                <span className="hint" style={{ alignSelf: 'center' }}>
                   +{antigravity.models.length - 10} more
                 </span>
               )}
@@ -434,66 +472,80 @@ export function LocalAgentsSection({ onConnect, onOpenSettings }: Props) {
         </div>
       )}
 
-      {clis.filter((cli) => cli.installed).length > 0 && (
-        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {blocks.clis && clis.filter((cli) => cli.installed).length > 0 && (
+        <div className="list" style={{ marginTop: 12, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
           {clis
             .filter((cli) => cli.installed)
             .map((cli) => (
-              <div key={cli.id} className="card__row" style={{ gap: 10, fontSize: 12 }}>
-                <span className="pill pill--ok">Installed</span>
-                <span style={{ fontWeight: 550 }}>{cli.name}</span>
-                <span className="muted" style={{ flex: 1, minWidth: 0 }}>{cli.note}</span>
-                <button
-                  className="btn btn--ghost btn--sm"
-                  onClick={() => {
-                    void (async () => {
-                      const settings = await window.klyro.getSettings()
-                      await window.klyro.updateSettings({
-                        activeProvider: cli.providerId,
-                        providers: {
-                          ...settings.providers,
-                          [cli.providerId]: { ...settings.providers[cli.providerId], baseUrl: '', model: '' }
-                        }
-                      })
-                      setNotice(`${cli.name} is now your provider. Ask something and it will answer.`)
-                    })()
-                  }}
-                >
-                  <Cpu className="icon icon--xs" aria-hidden="true" />
-                  <span>Use this</span>
-                </button>
+              <div key={cli.id} className="list__row">
+                <StatusDot state="ok" title="Installed" />
+                <div className="list__main">
+                  <div className="list__title">{cli.name}</div>
+                  <div className="list__meta">{cli.note}</div>
+                </div>
+                <div className="list__actions">
+                  <button
+                    className="btn btn--sm"
+                    onClick={() => {
+                      void (async () => {
+                        const settings = await window.klyro.getSettings()
+                        await window.klyro.updateSettings({
+                          activeProvider: cli.providerId,
+                          providers: {
+                            ...settings.providers,
+                            [cli.providerId]: { ...settings.providers[cli.providerId], baseUrl: '', model: '' }
+                          }
+                        })
+                        setNotice(`${cli.name} is now your provider. Ask something and it will answer.`)
+                      })()
+                    }}
+                  >
+                    <Cpu className="icon icon--xs" aria-hidden="true" />
+                    <span>Use this</span>
+                  </button>
+                </div>
               </div>
             ))}
         </div>
       )}
 
-      {healthy.length === 0 && agents !== null && !installed && (
-        <div className="card" style={{ marginTop: 16 }}>
-          <div className="muted" style={{ fontSize: 13 }}>
+      {blocks.detected && healthy.length === 0 && agents !== null && !installed && (
+        <div className="card" style={{ marginTop: 12 }}>
+          <div className="card__text muted">
             Nothing local found. Start <code>opencode serve</code> (free models, no key), or run Ollama, LM Studio,
             LiteLLM or vLLM, then scan again.
           </div>
         </div>
       )}
 
-      {others.length > 0 && healthy.length > 0 && (
+      {blocks.detected && others.length > 0 && healthy.length > 0 && (
         <details style={{ marginTop: 12 }}>
-          <summary className="muted" style={{ fontSize: 12, cursor: 'pointer' }}>
+          <summary className="hint" style={{ cursor: 'pointer' }}>
             {others.length} other service{others.length === 1 ? '' : 's'} not running
           </summary>
-          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div className="list" style={{ marginTop: 8, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
             {others.map((agent) => (
-              <div key={agent.id} className="data-row" style={{ fontSize: 12 }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Circle className="icon icon--xs" aria-hidden="true" />
-                  {agent.name}
-                </span>
-                <span className="muted">{agent.baseUrl}</span>
+              <div key={agent.id} className="list__row">
+                <Circle className="icon icon--xs" style={{ color: 'var(--text-disabled)' }} aria-hidden="true" />
+                <div className="list__main">
+                  <div className="list__title" style={{ fontWeight: 500 }}>{agent.name}</div>
+                  <div className="list__meta">{agent.baseUrl}</div>
+                </div>
               </div>
             ))}
           </div>
         </details>
       )}
     </section>
+  )
+}
+
+/** Small local helper so this file does not need the whole UI kit. */
+function Loading({ label }: { label: string }): React.ReactNode {
+  return (
+    <div className="loading-line" role="status">
+      <Loader2 className="icon icon--sm spin" aria-hidden="true" />
+      <span>{label}</span>
+    </div>
   )
 }

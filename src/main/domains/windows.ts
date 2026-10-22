@@ -8,12 +8,17 @@ import { settingsDomain } from './settings'
 
 const OVERLAY_WIDTH = 640
 const OVERLAY_HEIGHT = 208
+/** The overlay is sized by its content, between these two heights. */
+const OVERLAY_MIN_HEIGHT = 150
+const OVERLAY_MAX_HEIGHT = 520
 /** How long the show/hide animation runs, in milliseconds. */
 const OVERLAY_ANIMATION_MS = 150
 
 let mainWindow: BrowserWindow | null = null
 let overlayWindow: BrowserWindow | null = null
 let overlayStickyRecording = false
+/** The height the overlay's content asked for, so showing it is the right size. */
+let overlayContentHeight = 0
 
 function isDev(): boolean {
   return Boolean(process.env.ELECTRON_RENDERER_URL)
@@ -208,7 +213,7 @@ function positionOverlay(win: BrowserWindow): void {
     x: Math.round(workArea.x + (workArea.width - OVERLAY_WIDTH) / 2),
     y: Math.round(workArea.y + workArea.height * 0.16),
     width: OVERLAY_WIDTH,
-    height: OVERLAY_HEIGHT
+    height: overlayContentHeight || OVERLAY_HEIGHT
   })
 }
 
@@ -226,6 +231,32 @@ export function listDisplays(): Array<{ index: number; label: string; primary: b
 export function applyOverlayDisplay(): void {
   if (!overlayWindow || overlayWindow.isDestroyed()) return
   positionOverlay(overlayWindow)
+}
+
+/**
+ * Size the overlay to its content.
+ *
+ * The idle box is short; an answer makes it taller, up to a limit — after
+ * that the answer scrolls inside the window instead of the window growing
+ * forever. The top edge stays where the user put it, so the overlay grows
+ * downwards and never jumps.
+ */
+export function resizeOverlay(height: number): number {
+  const win = overlayWindow
+  const wanted = Math.round(Number(height))
+  if (!Number.isFinite(wanted) || wanted <= 0) return 0
+  const clamped = Math.min(OVERLAY_MAX_HEIGHT, Math.max(OVERLAY_MIN_HEIGHT, wanted))
+  overlayContentHeight = clamped
+  if (!win || win.isDestroyed() || !win.isVisible()) return clamped
+  const bounds = win.getBounds()
+  if (Math.abs(bounds.height - clamped) < 2) return bounds.height
+  try {
+    win.setBounds({ x: bounds.x, y: bounds.y, width: OVERLAY_WIDTH, height: clamped })
+  } catch (error) {
+    logger.warn('Could not resize the overlay', error)
+    return bounds.height
+  }
+  return clamped
 }
 
 export function toggleOverlay(): void {

@@ -4,6 +4,61 @@ All notable changes to Klyro are recorded here. Versions follow [SemVer](https:/
 
 ## [Unreleased]
 
+## [0.9.18] — 2026-10-22
+
+The interface, rebuilt: a compact overlay that fits its content, a control
+panel with a real map, and pages that say what is actually true.
+
+### Changed
+- **The overlay is sized by its content.** Idle, it is a small box with the
+  brand, the model, the question and the tools. Ask something and it grows to
+  hold the answer, up to a limit, after which the answer scrolls inside the
+  window. The window never grows without end.
+- **The overlay shows what was asked.** The question stays above the answer, the
+  time to first token sits under it with the model and the total, and a
+  replayed answer is labelled as a replay. Copy and retry are one click away,
+  and a provider failure is shown as an error rather than as silence.
+- **The tools are one row of icon buttons** — screen, talk, record, listen —
+  with the recording state, the audio source and the keyboard hint said
+  plainly, so nobody has to guess whether the microphone is hot.
+- **The control panel has a map.** A sidebar with Home, Models & Agents,
+  Knowledge, Interviews and, under Manage, Settings and Privacy & Data. The
+  route is in the URL, so a page can be linked to.
+- **Home is a dashboard, not a placeholder.** It opens the overlay, says which
+  model is in use and whether it answers, lists the providers that are
+  connected, counts what Klyro knows, and shows recent sessions only when
+  history is on.
+- **Models & Agents is one page for everything.** Hosted providers, local model
+  servers and coding agents, each with its real state, its models, a
+  connection test and the actions that apply to it. A key or an endpoint is one
+  click away instead of ten open forms.
+- **Knowledge and Interviews are pages.** Knowledge lists memories and
+  documents as rows, with search over both. Interviews is a split view: the
+  sessions on the left, the session on the right.
+- **Settings are grouped** — Assistant, Desktop, Screen & Audio, Knowledge &
+  Memory, History & Retention, Providers & Agents, Usage & Diagnostics — and
+  Privacy & Data is its own page with the measured capture check, what is
+  stored, and one click to clear each thing.
+- **The state of a provider is measured.** The local ones are asked directly,
+  so “running” means the server answered, not that a port looked open.
+- **A change anywhere shows up everywhere.** The theme, the model and the
+  overlay's own settings follow a change made in another window at once.
+
+### Added
+- **One accent colour**, used only for the current thing: the active
+  destination, the primary action.
+- **Recent models in the picker** — the model used a minute ago is offered
+  first.
+- **Local or hosted, in the picker.** Every provider says where the question
+  goes, and the overlay says whether the model in use can read a picture.
+
+### Fixed
+- **The sidebar drawer on a narrow window** slid only half way and stayed in
+  the way of the content. It is now a drawer that opens and closes, and the
+  menu button appears only when it is needed.
+- **The theme did not follow a change made elsewhere**: it now does, without a
+  restart.
+
 ## [0.9.17] — 2026-10-22
 
 Connecting OpenCode checks that its model actually answers, and a silent turn

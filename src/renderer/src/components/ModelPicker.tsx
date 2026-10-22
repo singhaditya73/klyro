@@ -27,6 +27,8 @@ export interface PickerGroup {
   label: string
   models: PickerModel[]
   note?: string | null
+  /** True when the provider runs on this machine, so nothing leaves it. */
+  local?: boolean
 }
 
 interface Props {
@@ -51,6 +53,8 @@ interface Props {
   note?: string | null
   /** Override the chip label (catalogue mode, before the list has loaded). */
   label?: string
+  /** Model ids the person used recently — shown first, in catalogue mode. */
+  recent?: string[]
 }
 
 interface Placement {
@@ -72,7 +76,8 @@ export function ModelPicker({
   onOpen,
   loading: externalLoading,
   note: externalNote,
-  label: labelOverride
+  label: labelOverride,
+  recent
 }: Props) {
   const [models, setModels] = useState<PickerModel[] | null>(null)
   const [note, setNote] = useState<string | null>(null)
@@ -198,9 +203,24 @@ export function ModelPicker({
     })
   }
 
+  /**
+   * The models used recently, in the order they were used.
+   *
+   * They are shown above the catalogue, because the model someone picked five
+   * minutes ago is usually the one they want again.
+   */
+  const recentGroup = useMemo((): PickerGroup | null => {
+    if (!catalogue || !recent || recent.length === 0) return null
+    const models = recent
+      .map((id) => allModels.find((entry) => entry.id === id))
+      .filter((entry): entry is PickerModel => Boolean(entry))
+    if (models.length === 0) return null
+    return { id: '__recent__', label: 'Recent', models }
+  }, [allModels, catalogue, recent])
+
   const menu = open ? (
     <ModelList
-      groups={filteredGroups}
+      groups={recentGroup ? [recentGroup, ...filteredGroups] : filteredGroups}
       showHeaders={catalogue}
       loading={isBusy}
       query={query}
@@ -371,7 +391,12 @@ function ModelList({
           <div key={group.id || 'models'} className="model-picker__group">
             {showHeaders && (
               <div className="model-picker__group-head">
-                <span>{group.label}</span>
+                <span className="row" style={{ gap: 6 }}>
+                  <span>{group.label}</span>
+                  {group.local !== undefined && (
+                    <span className={`pill ${group.local ? 'pill--ok' : ''}`}>{group.local ? 'Local' : 'Hosted'}</span>
+                  )}
+                </span>
                 <span className="model-picker__group-count">{group.models.length}</span>
               </div>
             )}
@@ -386,7 +411,7 @@ function ModelList({
                 title={entry.id}
               >
                 <span className="model-picker__option-name">{entry.name}</span>
-                {entry.provider && (
+                {entry.provider && !showHeaders && (
                   <span className="model-picker__option-provider">{entry.provider.replace(/^MODEL_PROVIDER_/, '')}</span>
                 )}
                 {entry.free && <span className="pill pill--ok">Free</span>}

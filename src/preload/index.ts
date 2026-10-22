@@ -15,6 +15,13 @@ const api: KlyroApi = {
   getAppInfo: () => ipcRenderer.invoke(IPC.appInfo),
   getSettings: () => ipcRenderer.invoke(IPC.settingsGet),
   updateSettings: (patch: Partial<AppSettings>) => ipcRenderer.invoke(IPC.settingsUpdate, patch),
+  onSettingsChanged: (listener: () => void) => {
+    const wrapped = (): void => listener()
+    ipcRenderer.on(IPC.settingsChanged, wrapped)
+    return () => {
+      ipcRenderer.off(IPC.settingsChanged, wrapped)
+    }
+  },
   listProviders: () => ipcRenderer.invoke(IPC.providerList),
   setApiKey: (provider: ProviderId, key: string) => ipcRenderer.invoke(IPC.providerSetKey, provider, key),
   clearApiKey: (provider: ProviderId) => ipcRenderer.invoke(IPC.providerClearKey, provider),
@@ -44,6 +51,8 @@ const api: KlyroApi = {
 
   checkPermissions: () => ipcRenderer.invoke(IPC.permissionsCheck),
   hideOverlay: () => ipcRenderer.invoke(IPC.windowHideOverlay),
+  toggleOverlay: () => ipcRenderer.invoke(IPC.windowToggleOverlay),
+  resizeOverlay: (height: number) => ipcRenderer.invoke(IPC.overlayResize, height),
   privateModeStatus: () => ipcRenderer.invoke(IPC.windowPrivateModeStatus),
   setRecordingSticky: (sticky: boolean) => ipcRenderer.invoke(IPC.overlaySetRecordingSticky, sticky),
 
