@@ -19,6 +19,9 @@
 //   'tool'                    → a tool call first, the answer after it
 //   'silent'                  → the turn ends without a word
 //   'broken'                  → the turn fails, with a reason
+//
+// A chosen model whose id contains 'silent', 'broken' or 'stalled' has the
+// same effect, which is how the connect-time model probe is tested.
 import { createServer } from 'node:http'
 
 const port = Number(process.env.PORT || 41877)
@@ -93,8 +96,14 @@ async function handle(request, response) {
   const modelMatch = path.match(/^\/api\/session\/([^/]+)\/model$/)
   if (modelMatch && request.method === 'POST') {
     const sessionId = modelMatch[1]
+    const body = await readBody(request)
     const session = sessions.get(sessionId)
-    if (session) session.model = { id: 'test-model', providerID: 'openrouter' }
+    if (session) {
+      session.model = {
+        id: body.model?.id ?? 'test-model',
+        providerID: body.model?.providerID ?? 'openrouter'
+      }
+    }
     json(response, 200, { data: session ?? {} })
     return
   }
@@ -109,7 +118,29 @@ async function handle(request, response) {
     list.push({ id: 'msg_user', type: 'user', time: { created: Date.now() }, text: prompt, files })
     messages.set(sessionId, list)
 
-    if (prompt.includes('multi')) {
+    const chosen = sessions.get(sessionId)?.model?.id ?? ''
+    if (chosen.includes('stalled')) {
+      // The model never starts a turn: no assistant message, no idle. This is
+      // what a signed-out provider looks like from the outside.
+    } else if (chosen.includes('silent')) {
+      setTimeout(() => {
+        const current = messages.get(sessionId) || []
+        current.push({ id: 'msg_idle', type: 'idle', outcome: 'succeeded', time: { created: Date.now() } })
+        messages.set(sessionId, current)
+      }, 300)
+    } else if (chosen.includes('broken')) {
+      setTimeout(() => {
+        const current = messages.get(sessionId) || []
+        current.push({
+          id: 'msg_idle',
+          type: 'idle',
+          outcome: 'failed',
+          error: { type: 'ProviderError', message: 'the model is not available' },
+          time: { created: Date.now() }
+        })
+        messages.set(sessionId, current)
+      }, 300)
+    } else if (prompt.includes('multi')) {
       // A progress line, then the real answer, in a second message.
       setTimeout(() => {
         const current = messages.get(sessionId) || []
@@ -191,6 +222,14 @@ async function handle(request, response) {
     }
 
     json(response, 200, { data: { id: 'msg_user', sessionID: sessionId, type: 'user' } })
+    return
+  }
+
+  const sessionMatch = path.match(/^\/api\/session\/([^/]+)$/)
+  if (sessionMatch && request.method === 'DELETE') {
+    sessions.delete(sessionMatch[1])
+    messages.delete(sessionMatch[1])
+    json(response, 200, { data: { id: sessionMatch[1] } })
     return
   }
 

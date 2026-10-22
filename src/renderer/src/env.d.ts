@@ -116,7 +116,15 @@ interface KlyroApi {
     model: string
     models: number
     free: number
+    verified?: boolean
     error?: string
+  }>
+  /** The OpenCode model that answered a check question, if any. */
+  openCodePickModel(baseUrl?: string): Promise<{
+    model: string
+    name: string
+    verified: boolean
+    tried: Array<{ id: string; answered: boolean; reason: string | null }>
   }>
   localAgentOpenCodeInstalled(): Promise<{ installed: boolean }>
   localAgentClis(): Promise<Array<{ id: string; name: string; installed: boolean; providerId: string; note: string }>>

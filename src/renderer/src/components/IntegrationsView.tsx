@@ -24,8 +24,25 @@ export function IntegrationsView({ onOpenSettings }: Props) {
     model: string
   ): Promise<void> {
     try {
-      const settings = await window.klyro.getSettings()
       const providerId = agent.kind === 'opencode' ? 'opencode' : 'openai-compatible'
+      let chosen = model || agent.models[0] || ''
+      // A catalogue entry is not a promise: an OpenCode provider can be signed
+      // out or out of credit, and then its turns never start. Ask one that
+      // answers before saving it, so a fresh connection is not a dead one.
+      let check: { verified: boolean; name: string; tried: number } | null = null
+      if (agent.kind === 'opencode') {
+        setNotice(`Checking which ${agent.name} model answers…`)
+        try {
+          const picked = await window.klyro.openCodePickModel(agent.baseUrl)
+          if (picked.model) {
+            chosen = picked.model
+            check = { verified: picked.verified, name: picked.name, tried: picked.tried.length }
+          }
+        } catch {
+          // Keep the catalogue's first model; the chip can change it.
+        }
+      }
+      const settings = await window.klyro.getSettings()
       await window.klyro.updateSettings({
         ...settings,
         activeProvider: providerId,
@@ -34,11 +51,23 @@ export function IntegrationsView({ onOpenSettings }: Props) {
           [providerId]: {
             ...settings.providers[providerId],
             baseUrl: agent.baseUrl,
-            model: model || agent.models[0] || ''
+            model: chosen
           }
         }
       })
-      setNotice(`${agent.name} is now your provider${model ? ` (${model})` : ''}. No key needed.`)
+      if (check?.verified) {
+        setNotice(`${agent.name} is now your provider (${check.name}), checked and answering.`)
+      } else if (check && check.tried > 0) {
+        setNotice(
+          `${agent.name} is connected, but no free model answered a check question. Pick one with the model chip in the overlay.`
+        )
+      } else if (check) {
+        setNotice(
+          `${agent.name} is connected. Pick the model you want with the model chip in the overlay.`
+        )
+      } else {
+        setNotice(`${agent.name} is now your provider${chosen ? ` (${chosen})` : ''}. No key needed.`)
+      }
     } catch (error) {
       setNotice((error as Error).message)
     }

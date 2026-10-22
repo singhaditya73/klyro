@@ -1,6 +1,6 @@
 {
   "name": "klyro",
-  "version": "0.9.16",
+  "version": "0.9.17",
   "description": "Klyro — Your AI. Your entire computer. Understand. Remember. Act.",
   "homepage": "https://github.com/singhaditya73/klyro#readme",
   "repository": {
@@ -26,6 +26,7 @@
     "test:watch": "vitest",
     "icons": "node scripts/make-icons.mjs",
     "smoke": "npm run build && electron scripts/smoke.cjs",
+    "version": "node scripts/sync-version.mjs && git add crates/klyro-core/Cargo.toml",
     "pack": "npm run build && electron-builder --dir",
     "pack:linux": "npm run build && electron-builder --linux --dir",
     "pack:win": "npm run build && electron-builder --win --dir",

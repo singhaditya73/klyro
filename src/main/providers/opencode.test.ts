@@ -1,7 +1,13 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { listOpenCodeModels, openCodeProvider, probeOpenCode } from './opencode'
+import {
+  freeModelCandidates,
+  listOpenCodeModels,
+  openCodeProvider,
+  probeOpenCode,
+  probeOpenCodeModel
+} from './opencode'
 
 const fixture = fileURLToPath(new URL('./__fixtures__/opencode-fake-server.mjs', import.meta.url))
 const PORT = 41877
@@ -36,6 +42,50 @@ describe('OpenCode local provider', () => {
     const models = await listOpenCodeModels(BASE_URL, PASSWORD)
     expect(models.map((model) => model.id)).toContain('minimax/minimax-m3.1-flash:free')
     expect(models.find((model) => model.free)?.id).toBe('minimax/minimax-m3.1-flash:free')
+  })
+
+  it('checks that a model answers before it is recommended', async () => {
+    const result = await probeOpenCodeModel(
+      BASE_URL,
+      PASSWORD,
+      'minimax/minimax-m3.1-flash:free',
+      'openrouter',
+      5000
+    )
+    expect(result).toEqual({ answered: true, reason: null })
+  }, 20000)
+
+  it('reports why a model does not answer', async () => {
+    const silent = await probeOpenCodeModel(BASE_URL, PASSWORD, 'silent-model', 'openrouter', 5000)
+    expect(silent.answered).toBe(false)
+    expect(silent.reason).toBe('the turn ended without text')
+
+    const broken = await probeOpenCodeModel(BASE_URL, PASSWORD, 'broken-model', 'openrouter', 5000)
+    expect(broken.answered).toBe(false)
+    expect(broken.reason).toBe('the model is not available')
+
+    const stalled = await probeOpenCodeModel(BASE_URL, PASSWORD, 'stalled-model', 'openrouter', 1200)
+    expect(stalled.answered).toBe(false)
+    expect(stalled.reason).toMatch(/no answer in \d+ s/)
+  }, 20000)
+
+  it('offers at most one free model per provider', () => {
+    const models = [
+      { id: 'a/one:free', name: 'One', providerID: 'a', free: true },
+      { id: 'a/two:free', name: 'Two', providerID: 'a', free: true },
+      { id: 'paid/model', name: 'Paid', providerID: 'a', free: false },
+      { id: 'b/one:free', name: 'B one', providerID: 'b', free: true },
+      { id: 'c/one:free', name: 'C one', providerID: 'c', free: true }
+    ]
+    expect(freeModelCandidates(models).map((model) => model.id)).toEqual([
+      'a/one:free',
+      'b/one:free',
+      'c/one:free'
+    ])
+    expect(freeModelCandidates(models, 2).map((model) => model.id)).toEqual([
+      'a/one:free',
+      'b/one:free'
+    ])
   })
 
   it('reports honestly when no server is running', async () => {
@@ -130,6 +180,18 @@ describe('OpenCode local provider', () => {
         }
       })()
     ).rejects.toThrow(/without an answer/i)
+    await expect(
+      (async () => {
+        for await (const _ of openCodeProvider.chat({
+          model: 'minimax/minimax-m3.1-flash:free',
+          baseUrl: BASE_URL,
+          apiKey: PASSWORD,
+          turns: [{ role: 'user', text: 'silent' }]
+        })) {
+          // Nothing should arrive.
+        }
+      })()
+    ).rejects.toThrow(/model: minimax\/minimax-m3\.1-flash:free/)
   }, 30000)
 
   it('reports why a turn failed', async () => {

@@ -116,9 +116,13 @@ async fn opencode_lists_its_models() {
 
 /// A fake Claude Code CLI: it answers with the JSON lines the real one writes.
 fn fake_claude_code(answer: &str) -> std::path::PathBuf {
-    let path = std::env::temp_dir().join(format!("klyro-fake-claude-{}", std::process::id()));
+    let path = fake_cli_path("claude");
+    // Write beside the final name and rename it into place. A script that is
+    // still open for writing cannot be executed: another test's `spawn` may
+    // hold that descriptor across its fork, and then `exec` fails with ETXTBSY.
+    let staging = path.with_extension("staging");
     std::fs::write(
-        &path,
+        &staging,
         format!(
             "#!/bin/sh\n\
              cat > /dev/null 2>&1 || true\n\
@@ -130,7 +134,8 @@ fn fake_claude_code(answer: &str) -> std::path::PathBuf {
     )
     .expect("write the fake CLI");
     use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    std::fs::set_permissions(&staging, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    std::fs::rename(&staging, &path).expect("publish the fake CLI");
     path
 }
 
@@ -153,11 +158,24 @@ async fn claude_code_runs_the_cli_and_reads_its_answer() {
 
 /// A fake Codex CLI: it writes the final message on stdout.
 fn fake_codex(answer: &str) -> std::path::PathBuf {
-    let path = std::env::temp_dir().join(format!("klyro-fake-codex-{}", std::process::id()));
-    std::fs::write(&path, format!("#!/bin/sh\nprintf '%s\\n' '{answer}'\n")).expect("write");
+    let path = fake_cli_path("codex");
+    let staging = path.with_extension("staging");
+    std::fs::write(&staging, format!("#!/bin/sh\nprintf '%s\\n' '{answer}'\n")).expect("write");
     use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    std::fs::set_permissions(&staging, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    std::fs::rename(&staging, &path).expect("publish the fake CLI");
     path
+}
+
+/// A fresh path for a fake CLI, so concurrent tests never share one.
+fn fake_cli_path(name: &str) -> std::path::PathBuf {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    std::env::temp_dir().join(format!(
+        "klyro-fake-{name}-{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ))
 }
 
 #[tokio::test]

@@ -36,6 +36,8 @@ pub struct OpenCode {
 struct Message {
     kind: String,
     text: String,
+    /// The kinds of parts the message contains (`text`, `reasoning`, a tool…).
+    parts: Vec<String>,
     created: Option<i64>,
     outcome: Option<String>,
     error: Option<String>,
@@ -67,6 +69,15 @@ impl Message {
                     .join("")
             })
             .unwrap_or_default();
+        let kinds = parts
+            .map(|parts| {
+                parts
+                    .iter()
+                    .filter_map(|part| part.get("type").and_then(|kind| kind.as_str()))
+                    .map(|kind| kind.to_string())
+                    .collect::<Vec<String>>()
+            })
+            .unwrap_or_default();
         let created = value
             .get("time")
             .and_then(|time| time.get("created"))
@@ -88,6 +99,7 @@ impl Message {
         Message {
             kind,
             text,
+            parts: kinds,
             created,
             outcome,
             error,
@@ -130,6 +142,42 @@ fn turn_text(messages: &[Message]) -> String {
         .filter(|text| !text.is_empty())
         .collect::<Vec<String>>()
         .join("\n")
+}
+
+/// A turn that ended without words: name the model and what it produced.
+fn no_answer_error(model: &str, messages: &[Message]) -> String {
+    let assistant = chronological(messages)
+        .into_iter()
+        .filter(|message| message.is_assistant())
+        .next_back();
+    let detail = match assistant {
+        Some(message) if !message.parts.is_empty() => {
+            format!(" The model produced {} but no answer text.", message.parts.join(", "))
+        }
+        Some(_) => " The model produced a message with no parts.".to_string(),
+        None => " The server produced no answer message at all.".to_string(),
+    };
+    let which = if model.is_empty() {
+        String::new()
+    } else {
+        format!(" (model: {model})")
+    };
+    format!(
+        "OpenCode finished the turn without an answer{which}.{detail} The provider may need a sign-in, or the model may not be available on your plan — pick another model with the chip in the overlay."
+    )
+}
+
+/// The turn never started: the model is unreachable, not merely quiet.
+fn stalled_error(model: &str) -> String {
+    let which = if model.is_empty() {
+        String::new()
+    } else {
+        format!(" (model: {model})")
+    };
+    let seconds = (QUIET_POLLS as u64 * POLL_MS) / 1000;
+    format!(
+        "OpenCode did not answer within {seconds} seconds{which}. The model may be unavailable on your OpenCode plan — pick another model with the chip in the overlay."
+    )
 }
 
 impl OpenCode {
@@ -221,9 +269,14 @@ impl OpenCode {
             password: self.password.clone(),
             poll_ms: self.poll_ms,
         };
+        // The stream outlives this call and uses the id in its error, so it
+        // needs its own copy.
+        let model = model.to_string();
         let stream = async_stream::stream! {
             let mut delivered = String::new();
             let mut quiet = 0;
+            let mut saw_idle = false;
+            let mut last: Vec<Message> = Vec::new();
             while quiet < QUIET_POLLS {
                 tokio::time::sleep(std::time::Duration::from_millis(reader.poll_ms)).await;
                 let messages = match reader.read_messages(&session_id).await {
@@ -236,8 +289,10 @@ impl OpenCode {
                 let idle = messages
                     .iter()
                     .rev()
-                    .find(|message| message.kind == "idle");
-                if let Some(idle) = idle {
+                    .find(|message| message.kind == "idle")
+                    .cloned();
+                if let Some(idle) = &idle {
+                    saw_idle = true;
                     if idle.outcome.as_deref() == Some("failed") {
                         let reason = idle.error.clone().unwrap_or_default();
                         yield Err(format!(
@@ -260,9 +315,11 @@ impl OpenCode {
                     if idle.is_some() {
                         break;
                     }
+                    last = messages;
                     continue;
                 }
                 quiet += 1;
+                last = messages;
                 if idle.is_some() {
                     break;
                 }
@@ -271,7 +328,14 @@ impl OpenCode {
                 }
             }
             if delivered.is_empty() {
-                yield Err("OpenCode finished the turn without an answer. The model said nothing — try again, or pick another model in Settings.".to_string());
+                // An `idle` with no text means the turn finished silently. No
+                // `idle` at all means the server never started the turn: the
+                // model is unreachable, not quiet.
+                yield Err(if saw_idle {
+                    no_answer_error(&model, &last)
+                } else {
+                    stalled_error(&model)
+                });
             } else {
                 yield Ok(Chunk::Done);
             }
@@ -318,11 +382,14 @@ impl OpenCode {
         let Ok(models) = self.models().await else {
             return "opencode".to_string();
         };
-        models
-            .iter()
-            .find(|entry| entry.id == model)
-            .map(|entry| entry.provider.clone())
-            .unwrap_or_else(|| "opencode".to_string())
+        if let Some(entry) = models.iter().find(|entry| entry.id == model) {
+            return entry.provider.clone();
+        }
+        // Ids like "recursive/flint-v1.0:free" carry their provider in the name.
+        if let Some((prefix, _)) = model.split_once('/') {
+            return prefix.to_string();
+        }
+        "opencode".to_string()
     }
 
     async fn send_prompt(
@@ -421,6 +488,7 @@ mod tests {
             Message {
                 kind: "user".into(),
                 text: "an earlier question".into(),
+                parts: Vec::new(),
                 created: Some(1),
                 outcome: None,
                 error: None,
@@ -428,6 +496,7 @@ mod tests {
             Message {
                 kind: "assistant".into(),
                 text: "an earlier answer".into(),
+                parts: Vec::new(),
                 created: Some(2),
                 outcome: None,
                 error: None,
@@ -435,6 +504,7 @@ mod tests {
             Message {
                 kind: "user".into(),
                 text: "the current question".into(),
+                parts: Vec::new(),
                 created: Some(3),
                 outcome: None,
                 error: None,
@@ -442,6 +512,7 @@ mod tests {
             Message {
                 kind: "assistant".into(),
                 text: "the current answer".into(),
+                parts: Vec::new(),
                 created: Some(4),
                 outcome: None,
                 error: None,
@@ -456,6 +527,7 @@ mod tests {
             Message {
                 kind: "user".into(),
                 text: "q".into(),
+                parts: Vec::new(),
                 created: Some(1),
                 outcome: None,
                 error: None,
@@ -463,6 +535,7 @@ mod tests {
             Message {
                 kind: "assistant".into(),
                 text: "part one ".into(),
+                parts: Vec::new(),
                 created: Some(2),
                 outcome: None,
                 error: None,
@@ -470,6 +543,7 @@ mod tests {
             Message {
                 kind: "assistant".into(),
                 text: "part two".into(),
+                parts: Vec::new(),
                 created: Some(3),
                 outcome: None,
                 error: None,
@@ -484,6 +558,7 @@ mod tests {
             Message {
                 kind: "assistant".into(),
                 text: "second".into(),
+                parts: Vec::new(),
                 created: None,
                 outcome: None,
                 error: None,
@@ -491,6 +566,7 @@ mod tests {
             Message {
                 kind: "user".into(),
                 text: "first".into(),
+                parts: Vec::new(),
                 created: None,
                 outcome: None,
                 error: None,
@@ -499,6 +575,40 @@ mod tests {
         // The server lists newest first, so without timestamps the list is
         // reversed to read oldest first.
         assert_eq!(turn_text(&messages), "second");
+    }
+
+    #[test]
+    fn a_silent_turn_names_the_model_and_what_it_produced() {
+        let messages = vec![
+            Message {
+                kind: "assistant".into(),
+                text: String::new(),
+                parts: vec!["reasoning".into()],
+                created: Some(1),
+                outcome: None,
+                error: None,
+            },
+            Message {
+                kind: "idle".into(),
+                text: String::new(),
+                parts: Vec::new(),
+                created: Some(2),
+                outcome: Some("succeeded".into()),
+                error: None,
+            },
+        ];
+        let message = no_answer_error("flint-40b-free", &messages);
+        assert!(message.contains("flint-40b-free"), "{message}");
+        assert!(message.contains("reasoning"), "{message}");
+        assert!(message.contains("without an answer"), "{message}");
+    }
+
+    #[test]
+    fn a_turn_that_never_started_says_the_model_may_be_unavailable() {
+        let message = stalled_error("flint-40b-free");
+        assert!(message.contains("did not answer within"), "{message}");
+        assert!(message.contains("flint-40b-free"), "{message}");
+        assert!(message.contains("unavailable"), "{message}");
     }
 
     #[test]

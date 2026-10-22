@@ -9,7 +9,7 @@ log). Nothing here is marked done by intent — only by running the commands.
 | Command | Passes on this machine | Asserts |
 | --- | --- | --- |
 | `npm run typecheck` | ✅ | Main (`tsc -p tsconfig.node.json`) and renderer (`tsconfig.web.json`) both clean |
-| `npm test` | ✅ | 319 unit/integration tests in 50 files, 8 skipped (`vitest run`) |
+| `npm test` | ✅ | 322 unit/integration tests in 50 files, 8 skipped (`vitest run`) |
 | `npm run build` | ✅ | `out/main`, `out/preload`, `out/renderer` produced by electron-vite |
 | `npx electron scripts/smoke.cjs` (needs a display; CI: `xvfb-run -a …`) | ✅ | Boots the **real built app**; both windows render, the `window.klyro` bridge is present, no renderer errors and no CSP violations |
 | `DISPLAY=:0 npm run smoke` | ✅ | Same, invoked via the package script |
@@ -27,6 +27,8 @@ These drive the built app, so they are not part of CI:
 | `npx electron scripts/check-antigravity-capture.cjs` (IDE open) | The one-time capture: the account, plan and 15 chat models come from the running IDE. |
 | `npx electron scripts/check-antigravity-headless.cjs` (no Antigravity process) | Klyro starts Antigravity's own service from the saved session and answers through the app and through the Rust daemon. Verified 2026-10-22. |
 | `npx electron scripts/check-overlay-catalogue.cjs` (app closed) | The overlay's model chip opens a menu grouped by every connected provider. Verified 2026-10-22 with Ollama, Claude Code and Antigravity in one list (2 + 6 + 15 models), and a pick from Claude Code moved `activeProvider` and saved its `fastModel`. |
+| `npx vitest run src/main/domains/local-agent-launcher.real.test.ts` (OpenCode installed) | Starts the real OpenCode server, reads its password, and runs the connect-time model check: it skipped `flint-40b-free` (no answer in 6 s) and selected `recursive/flint-v1.0:free`, which answered. Verified 2026-10-22. |
+| `npx electron --user-data-dir=/tmp/klyro-refresh scripts/check-daemon-refresh.cjs` (app built) | A daemon left over from another build is replaced on launch: the fake daemon reporting `0.1.0` is stopped, the binary on disk (`0.9.17`) takes over, writes its version and answers. Verified 2026-10-22. |
 
 ### Extra runtime checks used during this program
 
@@ -73,7 +75,7 @@ them the deb (FPM) metadata step fails with "Please specify project homepage".
 
 1. Confirm the §1 gate is green on `main`.
 2. Update `CHANGELOG.md` and the version in `package.json`
-   (`npm version <x.y.z>` does both the bump and the commit).
+   (`npm version <x.y.z>` bumps `package.json`, syncs `crates/klyro-core/Cargo.toml` (the daemon reports that version), and commits).
 3. `git tag vX.Y.Z && git push origin vX.Y.Z` — `.github/workflows/release.yml`
    builds Linux artifacts and attaches them to the GitHub release.
    Windows installers must be built on a Windows machine (`npm run dist:win`).

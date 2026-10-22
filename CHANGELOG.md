@@ -4,6 +4,32 @@ All notable changes to Klyro are recorded here. Versions follow [SemVer](https:/
 
 ## [Unreleased]
 
+## [0.9.17] — 2026-10-22
+
+Connecting OpenCode checks that its model actually answers, and a silent turn
+now says which model failed instead of leaving the reason a mystery.
+
+### Fixed
+- **OpenCode no longer saves a model that never answers.** Its catalogue lists
+  models the server *knows about*, not models it can reach: a provider can be
+  signed out or out of credit, and then the turn never starts — the server just
+  stays quiet. Klyro used to save the first model marked free, so questions
+  stalled with "the model said nothing". Connecting now asks one free model per
+  provider a one-word question and saves the first that answers (verified live:
+  it skipped a dead model and picked one that replied in about two seconds).
+- **A stalled turn names the model and what happened.** If no answer message
+  ever arrives, the error says OpenCode did not answer within about 18 seconds
+  and names the model; if the turn ends with no text, it reports whether the
+  model produced reasoning or tool parts, or nothing at all. The app and the
+  Rust daemon share the wording.
+- **A daemon left over from another build is replaced on launch.** `klyro-core`
+  outlived app updates, so a Rust fix could wait forever for the old process to
+  exit. The daemon now reports the app's version (kept in sync by the `npm
+  version` hook) and a mismatch replaces it.
+- **The Rust tests no longer fail intermittently with "Text file busy".** The
+  fake agent CLIs are published by rename, so a parallel spawn cannot inherit a
+  still-open write descriptor.
+
 ## [0.9.16] — 2026-10-22
 
 The overlay's model chip lists every provider you have connected, including one

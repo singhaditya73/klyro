@@ -5,7 +5,13 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { logger } from '../logger'
 import { secrets } from '../security/secrets'
-import { listOpenCodeModels, probeOpenCode, type OpenCodeModelInfo } from '../providers/opencode'
+import {
+  freeModelCandidates,
+  listOpenCodeModels,
+  probeOpenCode,
+  probeOpenCodeModel,
+  type OpenCodeModelInfo
+} from '../providers/opencode'
 import { settingsDomain } from './settings'
 
 /**
@@ -237,9 +243,47 @@ class LocalAgentLauncher {
   }
 
   /**
+   * The model to answer with on this OpenCode server.
+   *
+   * The catalogue lists models this server *knows about*, not models it can
+   * reach: a provider can be signed out, out of credit or unreachable, and its
+   * turn then never starts. Klyro used to save the first model marked free and
+   * leave the person with questions that stalled forever. So it asks the
+   * server a one-word question first, one candidate per provider, and saves a
+   * model that has answered. Nothing is written to their conversation history:
+   * the checks are their own throwaway sessions.
+   */
+  async pickOpenCodeModel(baseUrl?: string, limit = 3): Promise<{
+    model: string
+    name: string
+    verified: boolean
+    tried: Array<{ id: string; answered: boolean; reason: string | null }>
+  }> {
+    const url =
+      baseUrl || settingsDomain.get().providers.opencode.baseUrl || `http://127.0.0.1:${DEFAULT_PORT}`
+    const password = secrets.get(SECRET_ID) ?? null
+    const models = await listOpenCodeModels(url, password).catch(() => [] as OpenCodeModelInfo[])
+    if (models.length === 0) return { model: '', name: '', verified: false, tried: [] }
+
+    const candidates = freeModelCandidates(models, limit)
+    const tried: Array<{ id: string; answered: boolean; reason: string | null }> = []
+    for (const candidate of candidates) {
+      const result = await probeOpenCodeModel(url, password, candidate.id, candidate.providerID)
+      tried.push({ id: candidate.id, answered: result.answered, reason: result.reason })
+      if (result.answered) {
+        return { model: candidate.id, name: candidate.name, verified: true, tried }
+      }
+    }
+    // Nothing free answered. The server's first free model is still the least
+    // surprising choice; the person can pick another one from the overlay.
+    const fallback = candidates[0] ?? models[0]
+    return { model: fallback.id, name: fallback.name, verified: false, tried }
+  }
+
+  /**
    * The whole promise in one action: find OpenCode, start it if needed, and
-   * wire it up as the active provider with a sensible model — so the user
-   * opens Klyro, clicks once, and it just works.
+   * wire it up as the active provider with a model that has answered — so the
+   * user opens Klyro, clicks once, and it just works.
    */
   async connectOpenCode(): Promise<{
     connected: boolean
@@ -247,6 +291,8 @@ class LocalAgentLauncher {
     model: string
     models: number
     free: number
+    /** True when the chosen model answered a check question. */
+    verified?: boolean
     error?: string
   }> {
     const launched = await this.startOpenCode()
@@ -265,8 +311,8 @@ class LocalAgentLauncher {
         error: 'OpenCode is running, but it offered no models. Sign in to OpenCode and try again.'
       }
     }
-    // Prefer a free model: the whole point is using what the user already has.
-    const preferred = models.find((model) => model.free) ?? models[0]
+    const picked = await this.pickOpenCodeModel(launched.baseUrl)
+    const chosen = picked.model || (models.find((model) => model.free) ?? models[0]).id
 
     const settings = settingsDomain.get()
     await settingsDomain.update({
@@ -276,7 +322,7 @@ class LocalAgentLauncher {
         opencode: {
           ...settings.providers.opencode,
           baseUrl: launched.baseUrl,
-          model: preferred.id
+          model: chosen
         }
       }
     })
@@ -284,9 +330,10 @@ class LocalAgentLauncher {
     return {
       connected: true,
       baseUrl: launched.baseUrl,
-      model: preferred.id,
+      model: chosen,
       models: models.length,
-      free: models.filter((model) => model.free).length
+      free: models.filter((model) => model.free).length,
+      verified: picked.verified
     }
   }
 

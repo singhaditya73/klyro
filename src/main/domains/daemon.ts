@@ -1,8 +1,9 @@
-import { spawn, type ChildProcess } from 'node:child_process'
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { Socket } from 'node:net'
+import { logger } from '../logger'
 
 /**
  * The Klyro daemon.
@@ -79,6 +80,20 @@ function readDaemonState(): DaemonState | null {
   }
 }
 
+/** What the binary on disk says its version is, or null when it cannot run. */
+function binaryVersion(binary: string): string | null {
+  try {
+    const version = execFileSync(binary, ['--version'], {
+      encoding: 'utf8',
+      timeout: 2000,
+      stdio: ['ignore', 'pipe', 'ignore']
+    }).trim()
+    return version || null
+  } catch {
+    return null
+  }
+}
+
 /** Where the built daemon may live. */
 function daemonBinary(): string | null {
   const roots = [
@@ -105,6 +120,60 @@ class DaemonClient {
   /** Is the daemon there? */
   async available(): Promise<boolean> {
     return this.connect()
+  }
+
+  /**
+   * The version the running daemon reports, or null when it does not answer.
+   *
+   * A daemon outlives an app update: the process started by yesterday's Klyro
+   * keeps holding the hot path, so a fix in the Rust provider would never be
+   * used. The app compares this with the binary on disk and replaces the daemon
+   * when they differ.
+   */
+  async version(): Promise<string | null> {
+    const state = readDaemonState()
+    if (!state) return null
+    return new Promise((resolve) => {
+      const socket = new Socket()
+      let buffer = ''
+      const finish = (version: string | null): void => {
+        clearTimeout(timer)
+        socket.destroy()
+        resolve(version)
+      }
+      const timer = setTimeout(() => finish(null), CONNECT_TIMEOUT_MS)
+      socket.once('connect', () => {
+        socket.write(`${JSON.stringify({ kind: 'auth', token: state.token })}\n`)
+      })
+      socket.on('data', (chunk) => {
+        buffer += chunk.toString('utf8')
+        let index = buffer.indexOf('\n')
+        while (index !== -1) {
+          const line = buffer.slice(0, index).trim()
+          buffer = buffer.slice(index + 1)
+          if (line) {
+            try {
+              const event = JSON.parse(line) as DaemonEvent
+              if (event.kind === 'hello') {
+                finish(event.version)
+                return
+              }
+            } catch {
+              // Ignore a line we cannot read.
+            }
+          }
+          index = buffer.indexOf('\n')
+        }
+      })
+      socket.on('error', () => finish(null))
+      socket.connect(state.port, '127.0.0.1')
+    })
+  }
+
+  /** Close our connection (used before replacing a stale daemon). */
+  disconnect(): void {
+    this.socket?.destroy()
+    this.socket = null
   }
 
   private connect(): Promise<boolean> {
@@ -269,12 +338,24 @@ class DaemonDomain {
   private child: ChildProcess | null = null
   private started = false
 
-  /** Start the daemon, if it is built and not already running. */
+  /**
+   * Start the daemon, if it is built and not already running.
+   *
+   * A daemon that runs is compared with the binary on disk: if their versions
+   * differ, the running one is from another build (an update, or a leftover
+   * process) and is replaced. Otherwise a Rust fix would never reach the app
+   * that ships it, because the old process outlives the update.
+   */
   async start(): Promise<boolean> {
     if (this.started) return true
     this.started = true
-    if (await this.client.available()) return true
     const binary = daemonBinary()
+    if (await this.client.available()) {
+      const running = await this.client.version()
+      const expected = binary ? binaryVersion(binary) : null
+      if (!expected || !running || running === expected) return true
+      await this.replaceStale()
+    }
     if (!binary) return false
     try {
       this.child = spawn(binary, [], {
@@ -293,6 +374,26 @@ class DaemonDomain {
       if (await this.client.available()) return true
     }
     return false
+  }
+
+  /** Stop a daemon from another build and wait for its socket to close. */
+  private async replaceStale(): Promise<void> {
+    const state = readDaemonState()
+    logger.info('Replacing a daemon from another build', { pid: state?.pid ?? null })
+    if (state?.pid) {
+      try {
+        process.kill(state.pid, 'SIGTERM')
+      } catch {
+        // Already gone, or not ours to signal.
+      }
+    }
+    this.client.disconnect()
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      if (!(await this.client.available())) return
+      this.client.disconnect()
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    logger.warn('The old daemon is still answering after a stop request')
   }
 
   /** Stop the daemon we started. */

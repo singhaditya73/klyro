@@ -105,6 +105,8 @@ export const IPC = {
   localAgentsDetect: 'local-agents:detect',
   localAgentStartOpenCode: 'local-agents:startOpenCode',
   localAgentConnectOpenCode: 'local-agents:connectOpenCode',
+  /** Check which OpenCode model actually answers, and recommend it. */
+  localAgentOpenCodePickModel: 'local-agents:openCodePickModel',
   localAgentOpenCodeInstalled: 'local-agents:openCodeInstalled',
   localAgentClis: 'local-agents:clis',
   providerDetectModels: 'provider:detectModels',

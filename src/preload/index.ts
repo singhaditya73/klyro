@@ -98,6 +98,7 @@ const api: KlyroApi = {
   interviewsSummarize: (id: string) => ipcRenderer.invoke(IPC.interviewsSummarize, id),
   localAgentStartOpenCode: () => ipcRenderer.invoke(IPC.localAgentStartOpenCode),
   localAgentConnectOpenCode: () => ipcRenderer.invoke(IPC.localAgentConnectOpenCode),
+  openCodePickModel: (baseUrl?: string) => ipcRenderer.invoke(IPC.localAgentOpenCodePickModel, baseUrl),
   localAgentOpenCodeInstalled: () => ipcRenderer.invoke(IPC.localAgentOpenCodeInstalled),
   localAgentClis: () => ipcRenderer.invoke(IPC.localAgentClis),
   providerDetectModels: (input: { baseUrl: string; kind: 'opencode' | 'openai-compatible' }) =>

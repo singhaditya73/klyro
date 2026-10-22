@@ -306,6 +306,10 @@ export function registerIpcHandlers(): void {
   })
   handle(IPC.localAgentStartOpenCode, () => localAgentLauncher.startOpenCode())
   handle(IPC.localAgentConnectOpenCode, () => localAgentLauncher.connectOpenCode())
+  handle(IPC.localAgentOpenCodePickModel, (_event, baseUrl: unknown) => {
+    const parsed = z.string().max(500).optional().safeParse(baseUrl)
+    return localAgentLauncher.pickOpenCodeModel(parsed.success ? parsed.data : undefined)
+  })
   handle(IPC.localAgentOpenCodeInstalled, () => ({ installed: Boolean(findOpenCodeBinary()) }))
   handle(IPC.localAgentClis, () => localAgents.agentClis())
   /* ---------- Interview history ---------- */

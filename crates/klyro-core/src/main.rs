@@ -15,6 +15,13 @@ use tokio::net::TcpListener;
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    // The app asks the binary on disk which build it is, so a daemon left over
+    // from another build can be replaced without guessing from the app version.
+    if std::env::args().skip(1).any(|arg| arg == "--version" || arg == "-V") {
+        println!("{}", env!("CARGO_PKG_VERSION"));
+        return ExitCode::SUCCESS;
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()

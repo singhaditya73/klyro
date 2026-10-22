@@ -201,6 +201,113 @@ export async function listOpenCodeModels(baseUrl: string, apiKey: string | null)
   return models
 }
 
+/**
+ * Free models worth checking on connect — at most one per provider.
+ *
+ * The catalogue is ordered with OpenCode's own (Zen) models first, and a whole
+ * provider can be signed out or out of credit. Taking one candidate per
+ * provider means one dead provider does not hide every working one.
+ */
+export function freeModelCandidates(models: OpenCodeModelInfo[], limit = 3): OpenCodeModelInfo[] {
+  const providers = new Set<string>()
+  const picked: OpenCodeModelInfo[] = []
+  for (const model of models) {
+    if (!model.free || providers.has(model.providerID)) continue
+    providers.add(model.providerID)
+    picked.push(model)
+    if (picked.length >= limit) break
+  }
+  return picked
+}
+
+/**
+ * Does a model actually answer?
+ *
+ * A catalogue entry is not a promise: an OpenCode provider can be signed out,
+ * out of credit, or unreachable, and then its turn never starts — the server
+ * simply stays quiet. Klyro checks this once, when the user connects OpenCode,
+ * so the model it saves is one that has answered a question. The check runs in
+ * its own session and deletes it afterwards, so it leaves nothing behind in the
+ * user's OpenCode history either.
+ */
+export async function probeOpenCodeModel(
+  baseUrl: string,
+  apiKey: string | null,
+  model: string,
+  providerID: string,
+  timeoutMs = 6000
+): Promise<{ answered: boolean; reason: string | null }> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  const signal = controller.signal
+  const seconds = Math.round(timeoutMs / 1000)
+  let sessionId: string | undefined
+  try {
+    const created = await request<{ data?: { id?: string } }>(baseUrl, apiKey, '/api/session', {
+      method: 'POST',
+      body: JSON.stringify({ title: 'Klyro check' }),
+      signal
+    })
+    sessionId = created?.data?.id
+    if (!sessionId) return { answered: false, reason: 'the server did not create a session' }
+
+    await request<unknown>(baseUrl, apiKey, `/api/session/${sessionId}/model`, {
+      method: 'POST',
+      body: JSON.stringify({ model: { id: model, providerID } }),
+      signal
+    }).catch(() => undefined)
+    await request<unknown>(baseUrl, apiKey, `/api/session/${sessionId}/prompt`, {
+      method: 'POST',
+      body: JSON.stringify({ text: 'Reply with the single word: ok' }),
+      signal
+    })
+
+    while (!signal.aborted) {
+      await new Promise((resolve) => setTimeout(resolve, POLL_MS))
+      if (signal.aborted) break
+      const listed = await request<{ data?: OpenCodeMessage[] }>(
+        baseUrl,
+        apiKey,
+        `/api/session/${sessionId}/message`,
+        { signal }
+      )
+      const list = listed?.data ?? []
+      if (turnText(list).trim().length > 0) return { answered: true, reason: null }
+      const idle = idleEntry(list)
+      if (idle) {
+        const reason = idle.error?.message?.trim()
+        if (reason) return { answered: false, reason }
+        return {
+          answered: false,
+          reason:
+            idle.outcome && idle.outcome !== 'succeeded'
+              ? `the turn ended: ${idle.outcome}`
+              : 'the turn ended without text'
+        }
+      }
+    }
+    return { answered: false, reason: `no answer in ${seconds} s` }
+  } catch (error) {
+    if (error instanceof Error && (error.name === 'AbortError' || isProviderError(error))) {
+      return { answered: false, reason: `no answer in ${seconds} s` }
+    }
+    return { answered: false, reason: (error as Error).message }
+  } finally {
+    clearTimeout(timer)
+    if (sessionId) {
+      // Deliberately not the aborted signal: the cleanup should still run when
+      // the check timed out, but it must not hold the caller for long either.
+      const cleanup = new AbortController()
+      const cleanupTimer = setTimeout(() => cleanup.abort(), 2000)
+      await request<unknown>(baseUrl, apiKey, `/api/session/${sessionId}`, {
+        method: 'DELETE',
+        signal: cleanup.signal
+      }).catch(() => undefined)
+      clearTimeout(cleanupTimer)
+    }
+  }
+}
+
 /** Turn our chat turns into the text OpenCode should see. */
 function turnsToText(turns: ChatTurn[]): string {
   return turns
@@ -310,12 +417,34 @@ function idleEntry(messages: OpenCodeMessage[]): OpenCodeMessage | null {
  *
  * Klyro used to store an empty assistant message in that case, so the chat
  * showed a blank bubble and nothing else — the user could not tell a silent
- * model from a broken one.
+ * model from a broken one. The error now names the model and what the server
+ * did produce, because "said nothing" is not enough to act on: a model that is
+ * not on the person's plan stalls, and only another model will answer.
  */
-function noAnswerError(): ProviderError {
+function noAnswerError(messages: OpenCodeMessage[], model?: string): ProviderError {
+  const assistant = chronological(messages)
+    .filter(isAssistant)
+    .at(-1)
+  const parts = (assistant?.content ?? assistant?.parts ?? [])
+    .map((part) => part.type)
+    .filter((part): part is string => Boolean(part))
+  const which = model ? ` (model: ${model})` : ''
+  const detail =
+    parts.length > 0
+      ? ` The model produced ${parts.join(', ')} but no answer text.`
+      : ' The server produced no answer message at all.'
   return new ProviderError(
-    'OpenCode finished the turn without an answer. The model said nothing — try again, or pick another model in Settings.',
+    `OpenCode finished the turn without an answer${which}.${detail} The provider may need a sign-in, or the model may not be available on your plan — pick another model with the chip in the overlay.`,
     { kind: 'unknown', provider: PROVIDER }
+  )
+}
+
+/** The turn never started: the model is unavailable, not merely quiet. */
+function stalledError(model: string | undefined, seconds: number): ProviderError {
+  const which = model ? ` (model: ${model})` : ''
+  return new ProviderError(
+    `OpenCode did not answer within ${seconds} seconds${which}. The model may be unavailable on your OpenCode plan — pick another model with the chip in the overlay.`,
+    { kind: 'timeout', provider: PROVIDER }
   )
 }
 
@@ -424,10 +553,12 @@ async function* chatV1(
 
   let delivered = ''
   let quiet = 0
+  let last: OpenCodeMessage[] = []
   while (quiet < MAX_QUIET_POLLS) {
     await new Promise((resolve) => setTimeout(resolve, POLL_MS))
     const messages = await request<OpenCodeMessage[]>(baseUrl, apiKey, `/session/${sessionId}/message?limit=20`)
     const list = messages ?? []
+    last = list
     const text = turnText(list)
     if (text.length > delivered.length) {
       const delta = text.slice(delivered.length)
@@ -442,7 +573,7 @@ async function* chatV1(
     if (quiet > IDLE_POLLS && delivered.length > 0) break
   }
 
-  if (delivered.length === 0) throw noAnswerError()
+  if (delivered.length === 0) throw noAnswerError(last, model)
 }
 
 /** v2: the API lives under /api, and answers are read back from the session. */
@@ -478,11 +609,15 @@ async function* chatV2(
 
   let delivered = ''
   let quiet = 0
+  let idleSeen = false
+  let last: OpenCodeMessage[] = []
   while (quiet < MAX_QUIET_POLLS) {
     await new Promise((resolve) => setTimeout(resolve, POLL_MS))
     const messages = await request<{ data?: OpenCodeMessage[] }>(baseUrl, apiKey, `/api/session/${sessionId}/message`)
     const list = messages.data ?? []
+    last = list
     const idle = idleEntry(list)
+    if (idle) idleSeen = true
 
     // A turn that failed is reported with the server's own reason: that is
     // the answer to "why did my chat come back empty?".
@@ -516,7 +651,7 @@ async function* chatV2(
     if (idle) {
       // The turn is over: either it said nothing at all, or what it said is
       // already delivered.
-      if (delivered.length === 0) throw noAnswerError()
+      if (delivered.length === 0) throw noAnswerError(last, model)
       break
     }
     // Fallback for a server that never says "idle": a turn that stays quiet
@@ -524,5 +659,10 @@ async function* chatV2(
     if (quiet > IDLE_POLLS && delivered.length > 0) break
   }
 
-  if (delivered.length === 0) throw noAnswerError()
+  if (delivered.length === 0) {
+    // No `idle` means the server never started the turn — the model is not
+    // reachable (signed out, out of credit, or not on this plan).
+    if (!idleSeen) throw stalledError(model, Math.round((MAX_QUIET_POLLS * POLL_MS) / 1000))
+    throw noAnswerError(last, model)
+  }
 }
