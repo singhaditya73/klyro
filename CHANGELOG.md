@@ -2,7 +2,16 @@
 
 All notable changes to Klyro are recorded here. Versions follow [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [0.9.20] — 2026-10-22
+
+Fix the control panel content column on wide and full-screen windows.
+
+### Fixed
+- **Content was hidden in full-screen mode.** The root layout grid auto-placed
+  the main view column under the fixed sidebar in column 1 instead of column 2,
+  leaving wide windows blank even when navigation buttons were clicked. The main
+  column is now explicitly placed in the second grid track on wide windows and
+  the single track on narrow windows.
 
 ## [0.9.19] — 2026-10-22
 
