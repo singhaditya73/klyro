@@ -70,6 +70,17 @@ export const IPC = {
   settingsChanged: 'settings:changed',
 
   /* MCP connector */
+  mcpServers: 'mcp:servers',
+  mcpAddServer: 'mcp:addServer',
+  mcpRemoveServer: 'mcp:removeServer',
+  mcpToggleServer: 'mcp:toggleServer',
+  mcpTestServer: 'mcp:testServer',
+
+  /* Direct integrations (Slack, CRM, etc.) */
+  integrationsGet: 'integrations:get',
+  integrationsUpdate: 'integrations:update',
+  integrationsSendSlack: 'integrations:sendSlack',
+  integrationsSendCrm: 'integrations:sendCrm',
 
   /* Post-meeting action agent + output ledger */
 
@@ -107,6 +118,8 @@ export const IPC = {
   interviewsClear: 'interviews:clear',
   interviewsFacets: 'interviews:facets',
   interviewsSummarize: 'interviews:summarize',
+  interviewsGenerateCrmNotes: 'interviews:generateCrmNotes',
+  interviewsExportMarkdown: 'interviews:exportMarkdown',
 
   /* Import MCP servers from tools the user already runs */
 

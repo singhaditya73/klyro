@@ -8,9 +8,19 @@ files:
   - out/**
   - package.json
   - '!**/*.map'
-  # Keep only what runs: no type declarations, sources, tests, or docs.
+  # Keep only what runs: no type declarations, tests, examples or benchmarks.
+  #
+  # Do NOT exclude `src`, `doc` or `docs` here. They look like source and
+  # documentation, but some packages ship runtime code in them and point
+  # `main` at it:
+  #   - yaml keeps runtime modules in `dist/doc/` (compose/composer.js requires
+  #     ../doc/directives.js) — excluding `doc` made the 0.9.23 Windows build
+  #     crash on launch with "Cannot find module '../doc/directives.js'";
+  #   - debug, keyv, cacheable-request, clone-response, responselike,
+  #     real-require and sprintf-js have `main: src/index.js`.
+  # The few megabytes are not worth an app that will not start.
   - '!node_modules/**/*.{d.ts,d.cts,d.mts}'
-  - '!node_modules/**/{src,test,tests,__tests__,docs,doc,example,examples,benchmark,benchmarks}/**'
+  - '!node_modules/**/{test,tests,__tests__,example,examples,benchmark,benchmarks}/**'
   - '!node_modules/**/{.eslintrc*,.prettierrc*,tsconfig*.json,readme*,README*,changelog*,CHANGELOG*}'
   # The MCP SDK ships an ESM copy and a server half with its own HTTP stack
   # that Klyro never loads: Klyro is a protocol *client* on CommonJS. The
@@ -25,7 +35,18 @@ files:
   - '!node_modules/onnxruntime-node/bin/napi-v6/**/libonnxruntime_providers_tensorrt.so'
   - '!node_modules/onnxruntime-node/bin/napi-v6/**/onnxruntime_providers_cuda.dll'
   - '!node_modules/onnxruntime-node/bin/napi-v6/**/onnxruntime_providers_tensorrt.dll'
+  - '!node_modules/**/*.map'
+  - '!node_modules/@techstark/opencv-js/src/**'
 asar: true
+# Native code cannot be loaded from inside an asar archive. electron-builder
+# unpacks the `.node` files it detects, but sharp's image library (libvips)
+# ships as a plain .so/.dylib/.dll in a sibling package (@img/sharp-libvips-*),
+# which it does not detect. Without this, RapidOCR fails to initialise with
+# "Could not load the sharp module ... libvips-cpp.so: cannot open shared
+# object file" — caught at runtime, so OCR silently stayed off.
+asarUnpack:
+  - '**/*.node'
+  - 'node_modules/@img/**'
 # The daemon: one small Rust binary next to the app. It owns the hot path, so
 # the overlay opens in milliseconds instead of waiting on a browser runtime.
 extraResources:
@@ -42,7 +63,7 @@ extraResources:
     filter:
       - '*.onnx'
       - '*.txt'
-compression: normal
+compression: maximum
 artifactName: ${productName}-${version}-${arch}.${ext}
 
 linux:

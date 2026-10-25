@@ -19,7 +19,7 @@
   --surface-elevated: #1a1d22;
   --surface-input: #121417;
   --surface-overlay: rgba(9, 10, 12, 0.72);
-  --surface-glass: rgba(24, 27, 32, 0.72);
+  --surface-glass: #181b20;
   --overlay-bg: rgba(6, 7, 9, 0.68);
 
   --border-subtle: rgba(255, 255, 255, 0.06);
@@ -146,7 +146,7 @@
   --surface-elevated: #ffffff;
   --surface-input: #ffffff;
   --surface-overlay: rgba(20, 21, 23, 0.45);
-  --surface-glass: rgba(255, 255, 255, 0.78);
+  --surface-glass: #ffffff;
   --overlay-bg: rgba(30, 31, 34, 0.32);
 
   --border-subtle: rgba(16, 17, 20, 0.07);
@@ -1240,8 +1240,7 @@ button.pill:hover { background: var(--surface-hover); color: var(--text-primary)
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--surface-glass);
-  backdrop-filter: blur(28px) saturate(1.5);
+  background: var(--surface-raised);
   border: 1px solid var(--border-default);
   border-radius: var(--overlay-radius);
   box-shadow: var(--shadow-xl), inset 0 1px 0 rgba(255, 255, 255, 0.06);
@@ -2048,26 +2047,47 @@ button.pill:hover { background: var(--surface-hover); color: var(--text-primary)
   align-items: center;
   gap: var(--space-3);
   width: 100%;
-  padding: var(--space-3);
-  border: 0;
-  background: transparent;
+  padding: 11px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
   color: var(--text-primary);
   text-align: left;
   cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
 }
-.interviews__row:hover { background: var(--surface-hover); }
+.interviews__row:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-default);
+}
+.interviews__row--active {
+  background: var(--surface-active);
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 1px var(--accent-line), var(--shadow-sm);
+}
+.interviews__row--active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--accent);
+}
 .interviews__title { display: flex; align-items: center; gap: 6px; font-size: var(--text-sm); font-weight: 600; }
-.interviews__meta { display: flex; align-items: center; gap: 6px; margin-top: 2px; font-size: var(--text-xs); color: var(--text-muted); }
+.interviews__meta { display: flex; align-items: center; gap: 6px; margin-top: 3px; font-size: var(--text-xs); color: var(--text-muted); flex-wrap: wrap; }
 .interviews__preview {
-  margin-top: 4px;
+  margin-top: 5px;
   font-size: var(--text-xs);
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.interviews__progress { width: 72px; height: 4px; flex: 0 0 auto; border-radius: 999px; background: var(--surface-active); overflow: hidden; }
-.interviews__progress-bar { height: 100%; background: var(--action-primary-bg); border-radius: 999px; opacity: 0.7; }
+.interviews__progress { width: 64px; height: 4px; flex: 0 0 auto; border-radius: 999px; background: var(--surface-active); overflow: hidden; }
+.interviews__progress-bar { height: 100%; background: var(--status-ok); border-radius: 999px; opacity: 0.8; }
 .interviews__chevron--open { transform: rotate(180deg); }
 .interviews__detail { margin-top: var(--space-5); padding-top: var(--space-4); border-top: 1px solid var(--border-subtle); }
 .interviews__context { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: var(--text-xs); color: var(--text-secondary); }
@@ -2089,3 +2109,548 @@ button.pill:hover { background: var(--surface-hover); color: var(--text-primary)
   flex-direction: column;
   gap: 2px;
 }
+
+/* ---------- Modern CRM Intelligence & Meeting Hub ---------- */
+.crm-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.crm-stat-card {
+  padding: 12px 14px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.crm-stat-card:hover {
+  border-color: var(--border-default);
+  background: var(--surface-hover);
+}
+.crm-stat-value {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.crm-stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.crm-type-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+}
+.crm-type-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  height: 28px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  cursor: pointer;
+  line-height: 1;
+  transition: all var(--transition-fast);
+}
+.crm-type-pill:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  border-color: var(--border-default);
+}
+.crm-type-pill--active {
+  background: var(--accent-soft);
+  color: var(--text-primary);
+  border-color: var(--accent-line);
+}
+
+.crm-card {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: var(--shadow-xs);
+  transition: border-color var(--transition-fast);
+}
+.crm-card:hover {
+  border-color: var(--border-default);
+}
+.crm-card--hero {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-default);
+  border-left: 3px solid var(--accent);
+  position: relative;
+}
+.crm-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.crm-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1;
+}
+
+.crm-actions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.crm-action-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-input);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.crm-action-row:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-default);
+}
+.crm-action-row--done {
+  opacity: 0.6;
+  background: transparent;
+}
+.crm-action-row--done .crm-action-text {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+.crm-action-checkbox {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 4px;
+  border: 1.5px solid var(--border-strong);
+  color: transparent;
+  transition: all var(--transition-fast);
+}
+.crm-action-checkbox--checked {
+  background: var(--status-ok);
+  border-color: var(--status-ok);
+  color: #fff;
+}
+.crm-action-text {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  line-height: 1.45;
+  text-align: left;
+}
+
+.crm-add-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.crm-add-action input {
+  flex: 1;
+  height: 32px;
+  font-size: var(--text-xs);
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-input);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+}
+.crm-add-action input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.crm-insights-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+.crm-insight-card {
+  padding: 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface-input);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all var(--transition-fast);
+}
+.crm-insight-card:hover {
+  border-color: var(--border-default);
+}
+.crm-insight-card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1;
+}
+
+.crm-email-box {
+  background: var(--surface-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  font-family: inherit;
+  user-select: text;
+  text-align: left;
+}
+
+/* Live Waveform in Overlay */
+.overlay__waveform {
+  display: inline-flex;
+  align-items: center;
+  gap: 2.5px;
+  height: 16px;
+  padding: 0 4px;
+}
+.overlay__waveform-bar {
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  animation: waveformPulse 0.8s ease-in-out infinite alternate;
+}
+.overlay__waveform-bar:nth-child(1) { height: 6px; animation-delay: 0.1s; }
+.overlay__waveform-bar:nth-child(2) { height: 14px; animation-delay: 0.3s; }
+.overlay__waveform-bar:nth-child(3) { height: 10px; animation-delay: 0.2s; }
+.overlay__waveform-bar:nth-child(4) { height: 16px; animation-delay: 0.4s; }
+.overlay__waveform-bar:nth-child(5) { height: 8px; animation-delay: 0.15s; }
+
+@keyframes waveformPulse {
+  0% { transform: scaleY(0.4); opacity: 0.6; }
+  100% { transform: scaleY(1.2); opacity: 1; }
+}
+
+/* Post-Meeting Banner in Overlay */
+.overlay__meeting-end-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  margin: 6px 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  border: 1px solid var(--accent-line);
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+}
+
+/* In-Call Live Co-Pilot Bar & Scratchpad */
+.overlay__copilot-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 10px;
+  flex-wrap: wrap;
+}
+.overlay__copilot-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.overlay__copilot-chip:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  border-color: var(--border-default);
+}
+.overlay__copilot-chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.overlay__copilot-chip--active {
+  background: var(--accent-soft);
+  color: var(--text-primary);
+  border-color: var(--accent-line);
+}
+.overlay__copilot-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--status-ok);
+  flex-shrink: 0;
+}
+.overlay__pacing-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-subtle);
+  line-height: 1;
+}
+.overlay__scratchpad {
+  padding: 0 12px 8px;
+}
+.overlay__scratchpad textarea {
+  width: 100%;
+  resize: vertical;
+  background: var(--surface-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  padding: 8px 10px;
+  line-height: 1.45;
+  font-family: inherit;
+  text-align: left;
+}
+.overlay__scratchpad textarea:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+/* MEDDPIC Deal Qualification Grid */
+.crm-meddpic-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.crm-meddpic-card {
+  padding: 14px;
+  background: var(--surface-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all var(--transition-fast);
+}
+.crm-meddpic-card:hover {
+  border-color: var(--border-default);
+}
+.crm-meddpic-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1;
+}
+.crm-meddpic-val {
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+/* ---------- Talk-Time Dynamics & Audio Cadence Graph ---------- */
+.crm-talk-meter-container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-xs);
+}
+.crm-talk-meter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.crm-talk-meter-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.crm-talk-meter-icon-pill {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.28);
+  color: #818cf8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.crm-talk-meter-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+.crm-talk-meter-sub {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: 1.2;
+}
+.crm-talk-meter-bar {
+  height: 24px;
+  border-radius: var(--radius-pill);
+  background: #0e1015;
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+.crm-talk-meter-user {
+  background: linear-gradient(90deg, #4f46e5 0%, #6366f1 100%);
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  letter-spacing: 0.02em;
+  transition: width 0.4s var(--ease-out);
+}
+.crm-talk-meter-divider {
+  width: 2px;
+  height: 100%;
+  background: #0e1015;
+  flex-shrink: 0;
+}
+.crm-talk-meter-others {
+  background: linear-gradient(90deg, #059669 0%, #10b981 100%);
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  letter-spacing: 0.02em;
+  transition: width 0.4s var(--ease-out);
+}
+.crm-talk-chips-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+}
+.crm-talk-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-input);
+  border: 1px solid var(--border-subtle);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.crm-talk-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.crm-talk-dot--user {
+  background: #6366f1;
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.7);
+}
+.crm-talk-dot--others {
+  background: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.7);
+}
+.crm-talk-chip-strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+.crm-talk-chip-hint {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+/* Global Action Items Hub */
+.crm-action-hub-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.crm-action-hub-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  transition: all var(--transition-fast);
+}
+.crm-action-hub-row:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-default);
+}
+.crm-action-hub-row--done {
+  opacity: 0.6;
+}
+.crm-action-hub-row--done .crm-action-text {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+

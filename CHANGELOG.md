@@ -2,6 +2,51 @@
 
 All notable changes to Klyro are recorded here. Versions follow [SemVer](https://semver.org/).
 
+## [0.9.24] — 2026-10-26
+
+The 0.9.23 installers could not start on Windows, and the bundled OCR engine could not load in any packaged build. Both were packaging bugs rather than code bugs; this release fixes them and adds a check that fails the build instead of the app.
+
+### Fixed
+- **Windows startup crash.** The 0.9.23 installer stopped on launch with
+  `Cannot find module '../doc/directives.js'`. The packaging rules removed every
+  directory named `doc`, `docs` or `src` inside `node_modules` to save space.
+  `yaml` — a runtime dependency of the bundled OCR engine — keeps real code in
+  `dist/doc/`, and packages such as `debug` ship `main: src/index.js`. Those
+  directories are kept now, so the app starts and the OCR module loads.
+- **Bundled OCR could not start in packaged builds.** sharp's libvips library
+  ships as a plain `.so`/`.dylib`/`.dll` in `@img/sharp-libvips-*`, and it was
+  left inside `app.asar`, where native code cannot be loaded. RapidOCR failed to
+  initialise, the error was only logged, and OCR stayed off — so text-only
+  models silently lost screen reading. The `@img` native packages are unpacked
+  next to the archive now, and the packaged engine is verified end to end.
+- **Local speech on Windows.** The daemon located its state file under `HOME`,
+  which Windows does not normally set, so it fell back to an unwritable
+  `\tmp\.config\klyro`, failed to start, and the app never found its port —
+  local Whisper transcription was silently unavailable. It now falls back to
+  `USERPROFILE`, matching the app's `os.homedir()`.
+
+### Added
+- **Automated Meeting & CRM Notes Engine.** Dedicated structured post-meeting AI synthesis with selectable templates (`Client / Sales Call`, `Team / Engineering Sync`, `Interview`, `1-on-1 Check-in`, and `General Meeting`). Extracts Executive Summary, Action Items with owners and deadlines, Key Decisions, Customer / Commercial Insights (Pain points, budget, timeline, objections, next steps), and ready-to-send follow-up email drafts.
+- **Interactive Action Items Checklist.** Tasks can be checked off directly in the session view with visual completion status and assigned owner badges.
+- **Multi-Format Exporting.** One-click Slack recap formatting, full Markdown file export, and instant follow-up email copying.
+- **Upgraded Meetings & Interviews Control Panel.** Redesigned sessions view with dual-tab support for automated notes and raw transcripts/Q&A.
+- **Integrations page.** Slack and CRM webhook delivery with a real test send, plus saved Model Context Protocol (MCP) server definitions and presets. Webhook URLs and API tokens are kept in the OS-encrypted store (Keychain / DPAPI / libsecret), never in `integrations.json`. **The MCP client itself is not implemented yet** — the page stores definitions and checks that a command exists; it does not start or call a server, and the UI says so.
+- `scripts/check-package.cjs` (`npm run check:package`): after a package is
+  built, it walks `app.asar` and fails if a declared entry point or a relative
+  `require` points at a file the packaging rules removed. The release workflow
+  runs it for Linux and Windows before uploading, so a broken archive fails CI
+  instead of the installed app.
+
+### Changed
+- **Smaller, faster local speech.** The bundled Whisper model is now
+  `ggml-tiny.en-q5_1.bin` (31 MB instead of 57 MB). It is still fully offline
+  and the daemon keeps it in memory; the older `base.en` file is no longer
+  shipped. The installer shrinks by roughly 26 MB.
+- **Smaller installers.** Packages are compressed with maximum compression, and
+  each platform now ships only its own onnxruntime binaries instead of both
+  Windows and Linux copies. Source maps and the opencv-js TypeScript sources are
+  left out of the archive.
+
 ## [0.9.23] — 2026-10-25
 
 Bundled offline RapidOCR (PP-OCRv6) vision engine, smart screen-to-text fallback for non-vision models, running quietly stealth controls, and packaging size optimizations.

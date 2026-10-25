@@ -17,7 +17,11 @@ import {
   Square,
   Trash2,
   TriangleAlert,
-  X
+  X,
+  Sparkles,
+  FileText,
+  ShieldAlert,
+  Zap
 } from 'lucide-react'
 import {
   createSilenceWatcher,
@@ -102,6 +106,12 @@ export default function OverlayApp() {
   const [interviewId, setInterviewId] = useState<string | null>(null)
   const interviewRef = useRef<string | null>(null)
   interviewRef.current = interviewId
+  const [lastFinishedInterviewId, setLastFinishedInterviewId] = useState<string | null>(null)
+  const [showScratchpad, setShowScratchpad] = useState(false)
+  const [scratchpadText, setScratchpadText] = useState('')
+  const [talkRatioPct, setTalkRatioPct] = useState(0)
+  const talkTicksRef = useRef(0)
+  const totalTicksRef = useRef(0)
   const [privateMode, setPrivateMode] = useState<{ supported: boolean; enabled: boolean } | null>(null)
   const [mode, setMode] = useState<AssistMode>('idle')
   const [transcript, setTranscript] = useState<string[]>([])
@@ -852,6 +862,11 @@ export default function OverlayApp() {
       setMode('listening')
       setTranscript([])
       setAnswer('')
+      talkTicksRef.current = 0
+      totalTicksRef.current = 0
+      setTalkRatioPct(0)
+      setScratchpadText('')
+      setShowScratchpad(false)
       const recorder = recorderRef.current
       if (!recorder) return
       // The room is watched, and the audio is recorded in small slices, so a
@@ -870,6 +885,11 @@ export default function OverlayApp() {
       listenTimerRef.current = window.setInterval(() => {
         if (watcher?.isVoiced?.()) {
           void window.klyro.prewarmTranscribe?.()
+          talkTicksRef.current++
+        }
+        totalTicksRef.current++
+        if (totalTicksRef.current % 10 === 0 && totalTicksRef.current > 0) {
+          setTalkRatioPct(Math.round((talkTicksRef.current / totalTicksRef.current) * 100))
         }
         const utterance = assembler.takeEndedUtterance(watcher)
         if (!utterance) return
@@ -909,6 +929,13 @@ export default function OverlayApp() {
   }
 
   async function stopListening(): Promise<void> {
+    const finishedId = interviewRef.current
+    if (finishedId) {
+      setLastFinishedInterviewId(finishedId)
+      if (scratchpadText.trim()) {
+        void window.klyro.interviewsUpdate({ id: finishedId, notes: scratchpadText.trim() })
+      }
+    }
     modeRef.current = 'idle'
     setMode('idle')
     await stopRecorder()
@@ -1218,6 +1245,15 @@ export default function OverlayApp() {
           <span className="overlay__recording" role="status">
             <span className="overlay__recdot" aria-hidden="true" />
             {mode === 'recording' ? 'Recording' : 'Listening'}
+            {mode === 'listening' && (
+              <span className="overlay__waveform" title="Live audio activity" aria-hidden="true">
+                <span className="overlay__waveform-bar" />
+                <span className="overlay__waveform-bar" />
+                <span className="overlay__waveform-bar" />
+                <span className="overlay__waveform-bar" />
+                <span className="overlay__waveform-bar" />
+              </span>
+            )}
           </span>
         )}
 
@@ -1253,6 +1289,115 @@ export default function OverlayApp() {
 
         <span className="overlay__toolbar-hint">Esc to close · Enter to ask</span>
       </div>
+
+      {mode === 'listening' && (
+        <div className="overlay__copilot-bar">
+          <button
+            type="button"
+            className="overlay__copilot-chip"
+            disabled={busy || transcript.length === 0}
+            onClick={async () => {
+              const summaryContext = transcript.slice(-12).join('\n')
+              if (!summaryContext) return
+              archiveCurrentTurnIfAny()
+              currentTurnRef.current = { question: 'Catch me up on what was just said', answer: '', timing: null }
+              setQuestion('Catch me up on what was just said')
+              setAnswer('')
+              await askAssist(`In 3 concise, high-impact bullet points, summarize what was just discussed in this meeting:\n\n${summaryContext}`)
+            }}
+            title="3-bullet summary of the recent discussion so you never miss a beat"
+          >
+            <Zap className="icon icon--xs" style={{ color: 'var(--accent)' }} aria-hidden="true" />
+            <span>Catch Me Up</span>
+          </button>
+
+          <button
+            type="button"
+            className="overlay__copilot-chip"
+            disabled={busy || transcript.length === 0}
+            onClick={async () => {
+              const recent = transcript.slice(-4).join('\n')
+              if (!recent) return
+              archiveCurrentTurnIfAny()
+              currentTurnRef.current = { question: 'Suggest response to objection', answer: '', timing: null }
+              setQuestion('Suggest response to objection')
+              setAnswer('')
+              await askAssist(`The meeting attendee voiced this objection or point:\n"${recent}"\n\nProvide 2 tactful, persuasive, and professional ways to overcome this objection:`)
+            }}
+            title="Instant diplomatic responses to customer objections or skepticism"
+          >
+            <ShieldAlert className="icon icon--xs" style={{ color: 'var(--warning)' }} aria-hidden="true" />
+            <span>Objection Helper</span>
+          </button>
+
+          <button
+            type="button"
+            className={`overlay__copilot-chip ${showScratchpad ? 'overlay__copilot-chip--active' : ''}`}
+            onClick={() => setShowScratchpad(!showScratchpad)}
+            title="Jot private notes live that automatically merge into the CRM recap"
+          >
+            <FileText className="icon icon--xs" aria-hidden="true" />
+            <span>{showScratchpad ? 'Hide Notes' : 'Live Notes'}</span>
+            {scratchpadText.trim() && <span className="overlay__copilot-dot" aria-hidden="true" />}
+          </button>
+
+          {talkRatioPct > 0 && (
+            <span className="overlay__pacing-badge" title="Live audio active speaking percentage">
+              <Mic className="icon icon--xs" aria-hidden="true" />
+              <span>Audio: {talkRatioPct}%</span>
+            </span>
+          )}
+        </div>
+      )}
+
+      {mode === 'listening' && showScratchpad && (
+        <div className="overlay__scratchpad">
+          <textarea
+            rows={2}
+            placeholder="Jot private notes live (will be blended into the final CRM notes)…"
+            value={scratchpadText}
+            onChange={(e) => {
+              const val = e.target.value
+              setScratchpadText(val)
+              if (interviewRef.current) {
+                void window.klyro.interviewsUpdate({ id: interviewRef.current, notes: val })
+              }
+            }}
+          />
+        </div>
+      )}
+
+      {lastFinishedInterviewId && (
+        <div className="overlay__meeting-end-banner" role="status">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Sparkles className="icon icon--xs" style={{ color: 'var(--accent)' }} aria-hidden="true" />
+            <span>Meeting captured · CRM Notes ready to build</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button
+              type="button"
+              className="btn btn--primary btn--xs"
+              onClick={async () => {
+                if (lastFinishedInterviewId) {
+                  const targetId = lastFinishedInterviewId
+                  setLastFinishedInterviewId(null)
+                  await window.klyro.interviewsGenerateCrmNotes({ id: targetId })
+                }
+              }}
+            >
+              <span>Generate Notes</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn--quiet btn--xs"
+              onClick={() => setLastFinishedInterviewId(null)}
+              aria-label="Dismiss"
+            >
+              <X className="icon icon--xs" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {talkState !== 'idle' && (
         <div className="overlay__talk" aria-live="polite">

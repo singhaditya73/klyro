@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
-import { Brain, Clock, Cpu, House, Keyboard, PanelLeft, Settings, ShieldCheck, Zap } from 'lucide-react'
+import { Blocks, Brain, Clock, Cpu, House, Keyboard, PanelLeft, Settings, ShieldCheck, Zap } from 'lucide-react'
 import { useHashRoute, type Route } from './hooks/useHashRoute'
 import KlyroMark from './assets/logo/klyro-mark.svg'
 
@@ -19,6 +19,7 @@ const HomeView = lazy(() => import('./components/HomeView').then((module) => ({ 
 const ModelsView = lazy(() => import('./components/ModelsView').then((module) => ({ default: module.ModelsView })))
 const KnowledgeView = lazy(() => import('./components/KnowledgeView').then((module) => ({ default: module.KnowledgeView })))
 const InterviewsView = lazy(() => import('./components/InterviewsView').then((module) => ({ default: module.InterviewsView })))
+const IntegrationsView = lazy(() => import('./components/IntegrationsView').then((module) => ({ default: module.IntegrationsView })))
 const SettingsView = lazy(() => import('./components/SettingsView').then((module) => ({ default: module.SettingsView })))
 const PrivacyView = lazy(() => import('./components/PrivacyView').then((module) => ({ default: module.PrivacyView })))
 const Onboarding = lazy(() => import('./components/Onboarding').then((module) => ({ default: module.Onboarding })))
@@ -33,7 +34,8 @@ const WORKSPACE: NavItem[] = [
   { route: 'home', label: 'Home', icon: House },
   { route: 'models', label: 'Models & Agents', icon: Cpu },
   { route: 'knowledge', label: 'Knowledge', icon: Brain },
-  { route: 'interviews', label: 'Interviews', icon: Clock }
+  { route: 'interviews', label: 'Meetings & Interviews', icon: Clock },
+  { route: 'integrations', label: 'Integrations & MCP', icon: Blocks }
 ]
 
 const MANAGE: NavItem[] = [
@@ -197,6 +199,7 @@ export default function App() {
               {route === 'models' && <ModelsView onNavigate={go} />}
               {route === 'knowledge' && <KnowledgeView />}
               {route === 'interviews' && <InterviewsView />}
+              {route === 'integrations' && <IntegrationsView />}
               {route === 'settings' && <SettingsView onNavigate={go} />}
               {route === 'privacy' && <PrivacyView />}
             </Suspense>

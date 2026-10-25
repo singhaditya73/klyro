@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from 'react'
  * the app mounts.
  */
 
-export const ROUTES = ['home', 'models', 'knowledge', 'interviews', 'settings', 'privacy'] as const
+export const ROUTES = ['home', 'models', 'knowledge', 'interviews', 'integrations', 'settings', 'privacy'] as const
 
 export type Route = (typeof ROUTES)[number]
 

@@ -21,11 +21,19 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Where the daemon's state file lives: the port it listens on and the token
 /// a client has to present.
+///
+/// This has to agree with `daemonStatePath()` in `src/main/domains/daemon.ts`,
+/// which uses `os.homedir()`. On Windows `HOME` is normally unset, so without
+/// the `USERPROFILE` fallback the daemon would look in `\tmp\.config\klyro`
+/// (usually not writable) and exit, and the app would never find its port —
+/// local speech and the warm overlay path would silently be off.
 pub fn state_path() -> PathBuf {
     let base = std::env::var("KLYRO_STATE_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| {
-            let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+            let home = std::env::var("HOME")
+                .or_else(|_| std::env::var("USERPROFILE"))
+                .unwrap_or_else(|_| "/tmp".to_string());
             PathBuf::from(home).join(".config").join("klyro")
         });
     base.join("klyro-core.json")

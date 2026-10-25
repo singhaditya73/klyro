@@ -32,6 +32,8 @@ jobs:
       - run: cargo build --release --manifest-path crates/klyro-core/Cargo.toml
       - run: npm ci
       - run: npm run dist:linux
+      - name: Verify the packaged app can load its own code
+        run: node scripts/check-package.cjs release/linux-unpacked/resources/app.asar
       - name: List built artifacts
         run: ls -la release
       - uses: actions/upload-artifact@v7
@@ -58,6 +60,8 @@ jobs:
       - run: cargo build --release --manifest-path crates/klyro-core/Cargo.toml
       - run: npm ci
       - run: npm run dist:win
+      - name: Verify the packaged app can load its own code
+        run: node scripts/check-package.cjs release/win-unpacked/resources/app.asar
       - name: List built artifacts
         run: dir release
       - uses: actions/upload-artifact@v7

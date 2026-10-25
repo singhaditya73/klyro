@@ -118,6 +118,9 @@ const api: KlyroApi = {
   interviewsClear: () => ipcRenderer.invoke(IPC.interviewsClear),
   interviewsFacets: () => ipcRenderer.invoke(IPC.interviewsFacets),
   interviewsSummarize: (id: string) => ipcRenderer.invoke(IPC.interviewsSummarize, id),
+  interviewsGenerateCrmNotes: (input: { id: string; meetingType?: string }) =>
+    ipcRenderer.invoke(IPC.interviewsGenerateCrmNotes, input),
+  interviewsExportMarkdown: (id: string) => ipcRenderer.invoke(IPC.interviewsExportMarkdown, id),
   localAgentStartOpenCode: () => ipcRenderer.invoke(IPC.localAgentStartOpenCode),
   localAgentConnectOpenCode: () => ipcRenderer.invoke(IPC.localAgentConnectOpenCode),
   openCodePickModel: (baseUrl?: string) => ipcRenderer.invoke(IPC.localAgentOpenCodePickModel, baseUrl),
@@ -146,7 +149,20 @@ const api: KlyroApi = {
   documentDelete: (id: string) => ipcRenderer.invoke(IPC.documentDelete, id),
   documentClear: () => ipcRenderer.invoke(IPC.documentClear),
 
-  knowledgeSearch: (query: string) => ipcRenderer.invoke(IPC.knowledgeSearch, query)
+  knowledgeSearch: (query: string) => ipcRenderer.invoke(IPC.knowledgeSearch, query),
+
+  integrationsGet: () => ipcRenderer.invoke(IPC.integrationsGet),
+  integrationsUpdate: (patch: any) => ipcRenderer.invoke(IPC.integrationsUpdate, patch),
+  integrationsSendSlack: (input: { message: string; webhookUrl?: string }) =>
+    ipcRenderer.invoke(IPC.integrationsSendSlack, input),
+  integrationsSendCrm: (input: { payload: Record<string, unknown>; webhookUrl?: string }) =>
+    ipcRenderer.invoke(IPC.integrationsSendCrm, input),
+
+  mcpServers: () => ipcRenderer.invoke(IPC.mcpServers),
+  mcpAddServer: (input: any) => ipcRenderer.invoke(IPC.mcpAddServer, input),
+  mcpRemoveServer: (id: string) => ipcRenderer.invoke(IPC.mcpRemoveServer, id),
+  mcpToggleServer: (id: string, enabled: boolean) => ipcRenderer.invoke(IPC.mcpToggleServer, { id, enabled }),
+  mcpTestServer: (id: string) => ipcRenderer.invoke(IPC.mcpTestServer, id)
 }
 
 contextBridge.exposeInMainWorld('klyro', api)

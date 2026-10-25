@@ -321,6 +321,53 @@ export interface InterviewContextNote {
   at: number
 }
 
+export type MeetingType = 'client_call' | 'internal_sync' | 'interview' | 'one_on_one' | 'general' | 'meddpic'
+
+export interface MeetingActionItem {
+  task: string
+  owner?: string
+  deadline?: string
+  done?: boolean
+}
+
+export interface MeetingCrmInsights {
+  clientNeeds?: string[]
+  budgetTimeline?: string
+  objectionsOrRisks?: string[]
+  nextSteps?: string
+}
+
+export interface MeddpicInsights {
+  metrics?: string
+  economicBuyer?: string
+  decisionCriteria?: string
+  decisionProcess?: string
+  painPoints?: string
+  champion?: string
+  competition?: string
+}
+
+export interface MeetingTalkRatio {
+  userPct: number
+  othersPct: number
+  pacingNote?: string
+}
+
+export interface MeetingCrmNotes {
+  title: string
+  type: MeetingType
+  executiveSummary: string
+  keyDecisions: string[]
+  discussionTopics: string[]
+  actionItems: MeetingActionItem[]
+  crmInsights?: MeetingCrmInsights
+  meddpic?: MeddpicInsights
+  talkRatio?: MeetingTalkRatio
+  followUpEmail?: string
+  model: string
+  generatedAt: number
+}
+
 /** One interview, kept locally. */
 export interface InterviewSession {
   id: string
@@ -343,6 +390,8 @@ export interface InterviewSession {
   summary: string
   /** Which model wrote the summary. */
   summaryModel?: string
+  /** Structured Automated Meeting & CRM Notes. */
+  crmNotes?: MeetingCrmNotes
   /** Decisions and terms, kept for the rest of the session. */
   context: InterviewContextNote[]
   /** Free tags, for filtering. */
@@ -368,6 +417,7 @@ export interface InterviewSummary {
   bookmarked: boolean
   stage?: QuestionKind
   hasSummary: boolean
+  hasCrmNotes?: boolean
   preview: string
   /** Held in memory only: never written to disk. */
   ephemeral: boolean
@@ -535,6 +585,17 @@ export interface MeetingOutput {
   ok: boolean
 }
 
+/* ---------- Direct integrations (Slack, CRM, Gmail, Notion) ---------- */
+
+export interface DirectIntegrations {
+  slackWebhookUrl?: string
+  crmWebhookUrl?: string
+  crmType?: 'hubspot' | 'salesforce' | 'generic'
+  gmailRecipient?: string
+  notionToken?: string
+  linearApiKey?: string
+}
+
 /* ---------- MCP connector (bring-your-own tool servers) ---------- */
 
 export interface MCPServerConfig {
@@ -543,6 +604,8 @@ export interface MCPServerConfig {
   command: string
   args: string[]
   env?: Record<string, string>
+  enabled?: boolean
+  description?: string
 }
 
 export interface MCPTool {
@@ -553,7 +616,8 @@ export interface MCPTool {
 
 export interface MCPServerState {
   config: MCPServerConfig
-  running: boolean
+  /** Saved and switched on. The MCP client itself is not implemented yet. */
+  enabled: boolean
   tools: MCPTool[]
   /** Resources the server exposes (files, notes, rows — whatever it offers). */
   resources: MCPResource[]
@@ -869,6 +933,7 @@ export interface KlyroApi {
     role?: string
     notes?: string
     summary?: string
+    crmNotes?: MeetingCrmNotes
     tags?: string[]
     stage?: QuestionKind
   }): Promise<InterviewSession | null>
@@ -887,6 +952,8 @@ export interface KlyroApi {
   interviewsClear(): Promise<boolean>
   interviewsFacets(): Promise<{ companies: string[]; roles: string[]; kinds: QuestionKind[] }>
   interviewsSummarize(id: string): Promise<{ summary: string; model: string } | null>
+  interviewsGenerateCrmNotes(input: { id: string; meetingType?: string }): Promise<MeetingCrmNotes | null>
+  interviewsExportMarkdown(id: string): Promise<string>
 
   /** The models a provider can serve — so the user can pick one. */
   providerModels(providerId: ProviderId): Promise<{
@@ -961,4 +1028,14 @@ export interface KlyroApi {
 
   knowledgeSearch(query: string): Promise<KnowledgeHit[]>
 
+  integrationsGet(): Promise<DirectIntegrations>
+  integrationsUpdate(patch: Partial<DirectIntegrations>): Promise<DirectIntegrations>
+  integrationsSendSlack(input: { message: string; webhookUrl?: string }): Promise<{ ok: boolean; error?: string }>
+  integrationsSendCrm(input: { payload: Record<string, unknown>; webhookUrl?: string }): Promise<{ ok: boolean; error?: string }>
+
+  mcpServers(): Promise<MCPServerState[]>
+  mcpAddServer(input: { name: string; command: string; args?: string[]; env?: Record<string, string>; description?: string }): Promise<MCPServerState>
+  mcpRemoveServer(id: string): Promise<boolean>
+  mcpToggleServer(id: string, enabled: boolean): Promise<MCPServerState | null>
+  mcpTestServer(id: string): Promise<{ ok: boolean; toolsCount: number; error?: string }>
 }

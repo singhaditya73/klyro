@@ -346,6 +346,15 @@ class InterviewsDomain {
       session.notes.toLowerCase().includes(needle) ||
       session.summary.toLowerCase().includes(needle) ||
       session.tags.some((tag) => tag.toLowerCase().includes(needle)) ||
+      (session.crmNotes?.title.toLowerCase().includes(needle) ?? false) ||
+      (session.crmNotes?.executiveSummary.toLowerCase().includes(needle) ?? false) ||
+      (session.crmNotes?.actionItems.some(
+        (a) => a.task.toLowerCase().includes(needle) || (a.owner && a.owner.toLowerCase().includes(needle))
+      ) ?? false) ||
+      (session.crmNotes?.keyDecisions.some((d) => d.toLowerCase().includes(needle)) ?? false) ||
+      (session.crmNotes?.crmInsights?.nextSteps?.toLowerCase().includes(needle) ?? false) ||
+      (session.crmNotes?.meddpic?.painPoints?.toLowerCase().includes(needle) ?? false) ||
+      (session.crmNotes?.meddpic?.metrics?.toLowerCase().includes(needle) ?? false) ||
       session.questions.some(
         (question) =>
           question.text.toLowerCase().includes(needle) || question.answer.toLowerCase().includes(needle)

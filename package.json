@@ -1,6 +1,6 @@
 {
   "name": "klyro",
-  "version": "0.9.23",
+  "version": "0.9.24",
   "description": "Klyro — Your AI. Your entire computer. Understand. Remember. Act.",
   "homepage": "https://github.com/singhaditya73/klyro#readme",
   "repository": {
@@ -27,6 +27,7 @@
     "test:watch": "vitest",
     "icons": "node scripts/make-icons.mjs",
     "smoke": "npm run build && electron scripts/smoke.cjs",
+    "check:package": "node scripts/check-package.cjs",
     "version": "node scripts/sync-version.mjs && git add crates/klyro-core/Cargo.toml",
     "pack": "npm run build && electron-builder --dir",
     "pack:linux": "npm run build && electron-builder --linux --dir",
@@ -40,6 +41,7 @@
     "@fontsource-variable/inter": "^5.3.0",
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@modelcontextprotocol/sdk": "^1.32.1",
+    "framer-motion": "^14.6.0",
     "lucide-react": "^1.59.0",
     "rapidocr-node": "^0.3.4",
     "react-markdown": "^10.1.0",
@@ -47,6 +49,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@electron/asar": "^3.4.1",
     "@resvg/resvg-js": "^2.6.2",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.8",

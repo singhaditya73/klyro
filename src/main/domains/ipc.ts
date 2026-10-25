@@ -17,6 +17,8 @@ import { privacy } from './privacy'
 import { listProviderModels } from './provider-models'
 import { interviews } from './interviews'
 import { summarizeInterview } from './interview-summary'
+import { exportMeetingNotesMarkdown, generateMeetingCrmNotes } from './meeting-notes'
+import { integrationsDomain } from './integrations'
 import { prewarmTranscribe, transcribeAudio } from './audio'
 import { ocrExtractText } from './ocr'
 import {
@@ -471,6 +473,73 @@ export function registerIpcHandlers(): void {
     if (!written) return null
     interviews.update(sessionId, { summary: written.summary, summaryModel: written.model })
     return written
+  })
+  handle(IPC.interviewsGenerateCrmNotes, async (_event, input: unknown) => {
+    const parsed = z
+      .object({
+        id: z.string().min(1).max(80),
+        meetingType: z.enum(['client_call', 'internal_sync', 'interview', 'one_on_one', 'general', 'meddpic']).optional()
+      })
+      .parse(input)
+    const session = interviews.get(parsed.id)
+    if (!session) return null
+    const crmNotes = await generateMeetingCrmNotes(session, parsed.meetingType)
+    if (!crmNotes) return null
+    interviews.update(parsed.id, { crmNotes })
+    return crmNotes
+  })
+  handle(IPC.interviewsExportMarkdown, (_event, id: unknown) => {
+    const sessionId = z.string().min(1).max(80).parse(id)
+    const session = interviews.get(sessionId)
+    if (!session) return ''
+    return exportMeetingNotesMarkdown(session)
+  })
+
+  /* Direct integrations & MCP */
+  handle(IPC.integrationsGet, () => integrationsDomain.getIntegrations())
+  handle(IPC.integrationsUpdate, (_event, patch: unknown) => {
+    const parsed = z
+      .object({
+        slackWebhookUrl: z.string().max(2048).optional(),
+        crmWebhookUrl: z.string().max(2048).optional(),
+        crmType: z.enum(['hubspot', 'salesforce', 'generic']).optional(),
+        gmailRecipient: z.string().max(320).optional(),
+        notionToken: z.string().max(2048).optional(),
+        linearApiKey: z.string().max(2048).optional()
+      })
+      .strict()
+      .parse(patch ?? {})
+    return integrationsDomain.updateIntegrations(parsed)
+  })
+  handle(IPC.integrationsSendSlack, (_event, input: unknown) => {
+    const parsed = z.object({ message: z.string().min(1), webhookUrl: z.string().optional() }).parse(input)
+    return integrationsDomain.sendSlack(parsed.message, parsed.webhookUrl)
+  })
+  handle(IPC.integrationsSendCrm, (_event, input: unknown) => {
+    const parsed = z.object({ payload: z.record(z.string(), z.unknown()), webhookUrl: z.string().optional() }).parse(input)
+    return integrationsDomain.sendCrm(parsed.payload, parsed.webhookUrl)
+  })
+
+  handle(IPC.mcpServers, () => integrationsDomain.listServers())
+  handle(IPC.mcpAddServer, (_event, input: unknown) => {
+    const parsed = z.object({
+      name: z.string().min(1).max(80),
+      command: z.string().min(1).max(200),
+      args: z.array(z.string()).optional(),
+      env: z.record(z.string(), z.string()).optional(),
+      description: z.string().max(300).optional()
+    }).parse(input)
+    return integrationsDomain.addServer(parsed)
+  })
+  handle(IPC.mcpRemoveServer, (_event, id: unknown) => {
+    return integrationsDomain.removeServer(z.string().min(1).parse(id))
+  })
+  handle(IPC.mcpToggleServer, (_event, input: unknown) => {
+    const parsed = z.object({ id: z.string().min(1), enabled: z.boolean() }).parse(input)
+    return integrationsDomain.toggleServer(parsed.id, parsed.enabled)
+  })
+  handle(IPC.mcpTestServer, (_event, id: unknown) => {
+    return integrationsDomain.testServer(z.string().min(1).parse(id))
   })
 
   handle(IPC.overlayCatalogue, () => overlayCatalogue())

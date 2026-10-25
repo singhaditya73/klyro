@@ -67,6 +67,11 @@ export function daemonStatePath(): string {
 /** Where the bundled Whisper model file lives. */
 export function bundledWhisperModelPath(): string | null {
   const candidates = [
+    // Preferred: compact & ultra-fast quantized tiny.en model (~31 MB)
+    join(process.resourcesPath ?? '', 'models', 'whisper', 'ggml-tiny.en-q5_1.bin'),
+    join(__dirname, '..', '..', 'resources', 'models', 'whisper', 'ggml-tiny.en-q5_1.bin'),
+    join(process.cwd(), 'resources', 'models', 'whisper', 'ggml-tiny.en-q5_1.bin'),
+    // Fallback: base.en model (~57 MB) if already present on machine
     join(process.resourcesPath ?? '', 'models', 'whisper', 'ggml-base.en-q5_1.bin'),
     join(__dirname, '..', '..', 'resources', 'models', 'whisper', 'ggml-base.en-q5_1.bin'),
     join(process.cwd(), 'resources', 'models', 'whisper', 'ggml-base.en-q5_1.bin')

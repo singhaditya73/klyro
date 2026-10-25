@@ -101,10 +101,15 @@ interface KlyroApi {
   meetingTranscriptDiscard(): Promise<void>
 
   mcpServers(): Promise<any[]>
-  mcpAddServer(input: { name: string; command: string; args?: string[] }): Promise<any>
-  mcpRemoveServer(id: string): Promise<void>
-  mcpRefreshTools(id: string): Promise<any[]>
-  mcpCallTool(input: { serverId: string; name: string; args?: Record<string, unknown> }): Promise<any>
+  mcpAddServer(input: { name: string; command: string; args?: string[]; env?: Record<string, string>; description?: string }): Promise<any>
+  mcpRemoveServer(id: string): Promise<boolean>
+  mcpToggleServer(id: string, enabled: boolean): Promise<any>
+  mcpTestServer(id: string): Promise<{ ok: boolean; toolsCount: number; error?: string }>
+
+  integrationsGet(): Promise<any>
+  integrationsUpdate(patch: any): Promise<any>
+  integrationsSendSlack(input: { message: string; webhookUrl?: string }): Promise<{ ok: boolean; error?: string }>
+  integrationsSendCrm(input: { payload: Record<string, unknown>; webhookUrl?: string }): Promise<{ ok: boolean; error?: string }>
 
   meetingProposeActions(meetingId: string): Promise<{ meetingTitle: string; proposals: any[] }>
   meetingExecuteActions(input: { meetingId: string; proposals: any[] }): Promise<any[]>
@@ -162,8 +167,7 @@ interface KlyroApi {
   interviewsGet(id: string): Promise<any>
   interviewsStart(input?: { company?: string; role?: string; ephemeral?: boolean }): Promise<any>
   interviewsAddQuestion(input: { id: string; text: string; source: 'voice' | 'text'; answer?: string; answerMs?: number }): Promise<any>
-  interviewsAddTranscript(input: { id: string; line: string }): Promise<boolean>
-  interviewsUpdate(input: { id: string; company?: string; role?: string; notes?: string; summary?: string; tags?: string[]; stage?: string }): Promise<any>
+  interviewsUpdate(input: { id: string; company?: string; role?: string; notes?: string; summary?: string; crmNotes?: any; tags?: string[]; stage?: string }): Promise<any>
   interviewsUpdateQuestion(input: { id: string; questionId: string; note?: string; progress?: string; answer?: string; bookmarked?: boolean }): Promise<boolean>
   interviewsToggleBookmark(input: { id: string; questionId?: string }): Promise<boolean>
   interviewsKeep(id: string): Promise<any>
@@ -171,6 +175,8 @@ interface KlyroApi {
   interviewsClear(): Promise<boolean>
   interviewsFacets(): Promise<{ companies: string[]; roles: string[]; kinds: string[] }>
   interviewsSummarize(id: string): Promise<{ summary: string; model: string } | null>
+  interviewsGenerateCrmNotes(input: { id: string; meetingType?: string }): Promise<any>
+  interviewsExportMarkdown(id: string): Promise<string>
   overlayCatalogue(): Promise<Array<{
     id: string
     label: string

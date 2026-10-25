@@ -12,9 +12,9 @@ import https from 'node:https'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = resolve(__dirname, '..')
 const targetDir = resolve(root, 'resources', 'models', 'whisper')
-const targetFile = resolve(targetDir, 'ggml-base.en-q5_1.bin')
+const targetFile = resolve(targetDir, 'ggml-tiny.en-q5_1.bin')
 
-const MODEL_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en-q5_1.bin'
+const MODEL_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en-q5_1.bin'
 
 async function download(url, dest) {
   return new Promise((resolvePromise, reject) => {
