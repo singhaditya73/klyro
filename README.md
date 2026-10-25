@@ -14,25 +14,14 @@ subscription of ours, no key to paste.
 This is an **independent implementation**. No proprietary third-party source code
 or assets are used.
 
-The product, and what was deliberately kept and removed, is written down in
-[`docs/PRODUCT-SCOPE.md`](docs/PRODUCT-SCOPE.md).
-
 ## Status
 
-The engineering completion program (Phases A–J) is implemented and tracked in
-`docs/ENGINEERING_CHECKLIST.md`: autonomous-agent reliability, IPC/security
-hardening, retrieval evaluation and citations, a durable workflow engine, safe
-reviewable file edits, meeting/transcription reliability, a common integration
-contract, provider error taxonomy with safe retries, storage hardening and
-pagination, release verification, and an opt-in crash-report capture. Items that
-are blocked by external setup (OAuth credentials for more integrations, Wayland
-portal permissions) or deferred after measurement (embedding/hybrid retrieval)
-are marked as such there — nothing is claimed done that was not run.
+Klyro is production-hardened: autonomous-agent reliability, IPC/security
+hardening, local OCR vision fallback, bundled offline Whisper speech recognition,
+encrypted secret storage, and verified multi-provider streaming.
 
-Release preparation steps, the packaging matrix and honest signing/updates
-notes live in `docs/RELEASE_VERIFICATION.md`. See `docs/FEATURE_MATRIX.md` for
-the feature-by-feature status and known limitations, and `CHANGELOG.md` for
-release notes.
+See [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) for feature-by-feature
+status and supported platforms, and [`CHANGELOG.md`](CHANGELOG.md) for release notes.
 
 ## Architecture
 

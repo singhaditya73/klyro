@@ -6,9 +6,6 @@ Status legend: **✅ done** · **🟡 partial** · **⬜ planned**
 > top of whatever you are doing; you ask a question about the screen or the
 > conversation, and the answer comes back in place — invisible to the people
 > you are talking to. It uses the models and agents **you already have**.
->
-> The product, and what was deliberately kept and removed, is written down in
-> [`docs/PRODUCT-SCOPE.md`](docs/PRODUCT-SCOPE.md).
 
 ## Part 1 — The overlay (the product)
 
