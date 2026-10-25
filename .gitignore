@@ -33,3 +33,5 @@ usage.json
 
 # Downloaded model files (fetched automatically by prebuild)
 resources/models/**/*.bin
+resources/models/**/*.onnx
+resources/models/**/*.txt

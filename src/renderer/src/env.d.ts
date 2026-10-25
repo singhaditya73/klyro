@@ -9,6 +9,7 @@ declare module '*.svg' {
 
 interface KlyroApi {
   getAppInfo(): Promise<any>
+  quitApp(): Promise<void>
   getSettings(): Promise<any>
   updateSettings(patch: Partial<any>): Promise<any>
   /** Called when the settings changed in another window. */
@@ -32,16 +33,21 @@ interface KlyroApi {
 
   listCaptureSources(): Promise<any[]>
   grabScreen(sourceId?: string): Promise<any>
-  transcribe(audio: ArrayBuffer, mimeType: string, pcmBase64?: string): Promise<any>
+  transcribe(audio: ArrayBuffer, mimeType: string, pcm?: string | ArrayBuffer): Promise<any>
+  prewarmTranscribe(): Promise<void>
+  ocrExtract(image: string): Promise<string>
 
   checkPermissions(): Promise<any>
   hideOverlay(): Promise<void>
+  minimizeOverlay(): Promise<void>
   /** Show the quick-ask overlay (the same window the hotkey opens). */
   toggleOverlay(): Promise<void>
-  /** Tell the main process how tall the overlay's content is. */
-  resizeOverlay(height: number): Promise<number>
+  /** Tell the main process how tall/wide the overlay's content is. */
+  resizeOverlay(height: number, width?: number): Promise<number>
   privateModeStatus(): Promise<{ supported: boolean; enabled: boolean }>
   setRecordingSticky(sticky: boolean): Promise<void>
+  /** Which shortcuts this app actually holds; a taken one is reported, not hidden. */
+  shortcutStatus(): Promise<Array<{ kind: 'toggle' | 'hide'; accelerator: string; registered: boolean }>>
   securityStatus(): Promise<any>
   dataSummary(): Promise<any>
   dataClear(scope: string): Promise<any>

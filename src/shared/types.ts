@@ -41,6 +41,23 @@ export interface AppSettings {
   theme: ThemeMode
   launchAtLogin: boolean
   toggleShortcut: string
+  /**
+   * Show the tray icon. Off means no visible indicator that Klyro is running:
+   * the quick-ask shortcut opens the overlay, and launching Klyro again brings
+   * the control panel back. The process itself is unaffected.
+   */
+  showTray: boolean
+  /**
+   * Keep the control panel out of the taskbar (Windows/Linux) and the Dock
+   * (macOS). This changes what the desktop shows, not whether the process is
+   * visible to the operating system.
+   */
+  hideFromTaskbar: boolean
+  /**
+   * Hides the overlay and the control panel at once. Empty = off. This is a
+   * fast hide, not a way to leave the process list.
+   */
+  panicShortcut: string
   memoryEnabled: boolean
   memoryAutoExtract: boolean
   memoryRecallCount: number
@@ -743,8 +760,17 @@ export type WorkflowEvent =
   | { type: 'error'; runId: string; message: string }
 
 /** The API exposed on `window.klyro` by the preload bridge. */
+/** A global shortcut, and whether the operating system let this app have it. */
+export interface ShortcutStatus {
+  kind: 'toggle' | 'hide'
+  accelerator: string
+  registered: boolean
+}
+
 export interface KlyroApi {
   getAppInfo(): Promise<AppInfo>
+  /** Stop Klyro. Needed when the tray icon is turned off. */
+  quitApp(): Promise<void>
   getSettings(): Promise<AppSettings>
   updateSettings(patch: Partial<AppSettings>): Promise<AppSettings>
   /** Called when the settings changed in another window. */
@@ -767,18 +793,23 @@ export interface KlyroApi {
 
   listCaptureSources(): Promise<CaptureSource[]>
   grabScreen(sourceId?: string): Promise<CaptureResult>
-  transcribe(audio: ArrayBuffer, mimeType: string, pcmBase64?: string): Promise<TranscribeResult>
+  transcribe(audio: ArrayBuffer, mimeType: string, pcm?: string | ArrayBuffer): Promise<TranscribeResult>
+  prewarmTranscribe(): Promise<void>
+  ocrExtract(image: string): Promise<string>
 
   checkPermissions(): Promise<PermissionState>
   hideOverlay(): Promise<void>
+  minimizeOverlay(): Promise<void>
   /** Show the quick-ask overlay (the same window the hotkey opens). */
   toggleOverlay(): Promise<void>
-  /** Tell the main process how tall the overlay's content is. */
-  resizeOverlay(height: number): Promise<number>
+  /** Tell the main process how tall/wide the overlay's content is. */
+  resizeOverlay(height: number, width?: number): Promise<number>
   /** Private-mode status for the overlay: capture exclusion support and current state. */
   privateModeStatus(): Promise<{ supported: boolean; enabled: boolean }>
   /** Keep the overlay visible across focus changes while meeting-assist records. */
   setRecordingSticky(sticky: boolean): Promise<void>
+  /** Which shortcuts this app actually holds; a taken one is reported, not hidden. */
+  shortcutStatus(): Promise<ShortcutStatus[]>
 
   /* Audit log */
   auditList(limit?: number): Promise<AuditEntry[]>

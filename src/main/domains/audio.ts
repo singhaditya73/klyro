@@ -77,3 +77,11 @@ export async function transcribeAudio(audio: ArrayBuffer, mimeType: string, pcmB
     throw error
   }
 }
+
+/** Prewarm the local Whisper model in memory speculatively. */
+export async function prewarmTranscribe(): Promise<void> {
+  const modelPath = bundledWhisperModelPath()
+  if (modelPath) {
+    void daemon.prewarm(modelPath).catch(() => undefined)
+  }
+}

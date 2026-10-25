@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
-  ChevronDown,
-  ChevronUp,
   Copy,
   Check,
   Eye,
@@ -12,12 +10,14 @@ import {
   Info,
   Loader2,
   Mic,
+  Minus,
   Monitor,
   RefreshCcw,
   ScanEye,
   Square,
   Trash2,
-  TriangleAlert
+  TriangleAlert,
+  X
 } from 'lucide-react'
 import {
   createSilenceWatcher,
@@ -33,7 +33,7 @@ import {
   snippetPrompt,
   utteranceEnded,
   utteranceWorthAsking,
-  decodeAudioToPcm16kBase64,
+  decodeAudioToPcm16kBuffer,
   HARDWARE_AUDIO_CONSTRAINTS,
   type SilenceWatcher
 } from './lib/listen'
@@ -66,7 +66,6 @@ export default function OverlayApp() {
   /** The question as it was asked, so the answer has a subject. */
   const [question, setQuestion] = useState('')
   const [history, setHistory] = useState<SessionTurn[]>([])
-  const [showHistory, setShowHistory] = useState(true)
   const [copiedHistoryId, setCopiedHistoryId] = useState<string | null>(null)
   const currentTurnRef = useRef<{
     question: string
@@ -116,6 +115,7 @@ export default function OverlayApp() {
   // Conversation mode: continuous listening, speech-triggered answers.
   const [talkState, setTalkState] = useState<'idle' | 'listening' | 'hearing' | 'thinking'>('idle')
   const [level, setLevel] = useState(0)
+  const [partialText, setPartialText] = useState('')
   // Screens and windows to choose from (instant capture turned off).
   const [overlaySources, setOverlaySources] = useState<Array<{ id: string; name: string; thumbnail: string }> | null>(null)
   // The provider the overlay answers with, and the model it uses.
@@ -240,7 +240,13 @@ export default function OverlayApp() {
 
   useLayoutEffect(() => {
     resizeToContent()
-  }, [answer, question, history, showHistory, transcript, capture, overlaySources, mode, talkState, timing, resizeToContent])
+  }, [answer, question, history, transcript, capture, overlaySources, mode, talkState, timing, resizeToContent])
+
+  useEffect(() => {
+    if (responseRef.current) {
+      responseRef.current.scrollTop = responseRef.current.scrollHeight
+    }
+  }, [history, answer, question, busy])
 
   /**
    * Make room for the model menu.
@@ -258,6 +264,34 @@ export default function OverlayApp() {
     resizeToContent()
   }, [resizeToContent])
 
+  const startResize = useCallback(
+    (axis: 'x' | 'y' | 'both') => (e: React.PointerEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      const startX = e.screenX
+      const startY = e.screenY
+      const startWidth = window.innerWidth
+      const startHeight = window.innerHeight
+
+      const onPointerMove = (moveEv: PointerEvent) => {
+        const deltaX = moveEv.screenX - startX
+        const deltaY = moveEv.screenY - startY
+        const newWidth = axis === 'y' ? undefined : Math.max(420, Math.min(1400, Math.round(startWidth + deltaX)))
+        const newHeight = axis === 'x' ? window.innerHeight : Math.max(MIN_OVERLAY_HEIGHT, Math.min(MAX_OVERLAY_HEIGHT, Math.round(startHeight + deltaY)))
+        void window.klyro.resizeOverlay?.(newHeight, newWidth)
+      }
+
+      const onPointerUp = () => {
+        window.removeEventListener('pointermove', onPointerMove)
+        window.removeEventListener('pointerup', onPointerUp)
+      }
+
+      window.addEventListener('pointermove', onPointerMove)
+      window.addEventListener('pointerup', onPointerUp)
+    },
+    []
+  )
+
   useEffect(() => {
     setRecent(recentModels())
     setKnownNames(knownModelNames())
@@ -274,7 +308,14 @@ export default function OverlayApp() {
       resizeToContent()
     }
     const onVisible = (): void => {
-      if (document.visibilityState === 'visible') void syncProvider()
+      if (document.visibilityState === 'visible') {
+        void syncProvider()
+        return
+      }
+      // A hidden overlay must not keep the microphone open: there is no UI
+      // left to stop it. This is what makes "hide everything" a pause rather
+      // than a silent recording session.
+      if (modeRef.current !== 'idle') void stopListening()
     }
     window.addEventListener('focus', onFocus)
     document.addEventListener('visibilitychange', onVisible)
@@ -547,6 +588,8 @@ export default function OverlayApp() {
     startedAt: number
     timer: number | null
     answering: boolean
+    lastPartialAt: number
+    partialBusy: boolean
   }>({
     stream: null,
     recorder: null,
@@ -559,7 +602,9 @@ export default function OverlayApp() {
     lastVoiceAt: 0,
     startedAt: 0,
     timer: null,
-    answering: false
+    answering: false,
+    lastPartialAt: 0,
+    partialBusy: false
   })
 
   /** Answer a spoken question, with the screen attached when possible. */
@@ -607,6 +652,7 @@ export default function OverlayApp() {
     talk.chunks.length = 0
     talk.mark = 0
     talk.speaking = false
+    setPartialText('')
     if (!utteranceWorthAsking(duration) || pieces.length === 0) {
       setTalkState('listening')
       return
@@ -614,8 +660,8 @@ export default function OverlayApp() {
     const blob = new Blob(pieces, { type: talk.recorder?.mimeType || 'audio/webm' })
     try {
       const buffer = await blob.arrayBuffer()
-      const pcmBase64 = await decodeAudioToPcm16kBase64(blob).catch(() => '')
-      const result = await window.klyro.transcribe(buffer, blob.type, pcmBase64 || undefined)
+      const pcmBuffer = await decodeAudioToPcm16kBuffer(blob).catch(() => null)
+      const result = await window.klyro.transcribe(buffer, blob.type, pcmBuffer || undefined)
       const spoken = result.text.trim()
       if (!spoken) {
         setTalkState('listening')
@@ -642,6 +688,9 @@ export default function OverlayApp() {
     talk.analyser = null
     talk.chunks = []
     talk.speaking = false
+    talk.lastPartialAt = 0
+    talk.partialBusy = false
+    setPartialText('')
     setTalkState('idle')
     setLevel(0)
   }, [])
@@ -670,7 +719,13 @@ export default function OverlayApp() {
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
       talk.recorder = recorder
       recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) talk.chunks.push(event.data)
+        if (event.data.size > 0) {
+          talk.chunks.push(event.data)
+          // In-memory rolling circular buffer: keep max 16 idle slices (~4s) before speech starts
+          if (!talk.speaking && talk.chunks.length > 16) {
+            talk.chunks.shift()
+          }
+        }
       }
       recorder.start(250)
 
@@ -683,13 +738,38 @@ export default function OverlayApp() {
         const now = Date.now()
         if (isSpeech(rms)) {
           if (!talk.speaking) {
-            // An utterance starts: remember where the audio begins.
+            // An utterance starts: remember where the audio begins with preroll.
             talk.speaking = true
             talk.startedAt = now
-            talk.mark = talk.chunks.length
+            talk.mark = Math.max(0, talk.chunks.length - 2)
+            talk.lastPartialAt = now
             setTalkState('hearing')
+            // Smart speculative pre-warming: wake model on voice detection
+            void window.klyro.prewarmTranscribe?.()
           }
           talk.lastVoiceAt = now
+
+          // Partial Streaming Whisper: interim transcription while speaker is talking
+          if (!talk.partialBusy && now - talk.lastPartialAt > 750) {
+            const livePieces = talk.chunks.slice(talk.mark)
+            if (livePieces.length >= 2) {
+              talk.partialBusy = true
+              talk.lastPartialAt = now
+              const liveBlob = new Blob(livePieces, { type: talk.recorder?.mimeType || 'audio/webm' })
+              decodeAudioToPcm16kBuffer(liveBlob)
+                .then(async (pcm) => {
+                  const arr = await liveBlob.arrayBuffer()
+                  const res = await window.klyro.transcribe(arr, liveBlob.type, pcm)
+                  if (res?.text && talk.speaking) {
+                    setPartialText(res.text.trim())
+                  }
+                })
+                .catch(() => undefined)
+                .finally(() => {
+                  talk.partialBusy = false
+                })
+            }
+          }
           return
         }
         if (talk.speaking) {
@@ -712,8 +792,8 @@ export default function OverlayApp() {
 
   async function transcribeBlob(blob: Blob): Promise<string> {
     const buffer = await blob.arrayBuffer()
-    const pcmBase64 = await decodeAudioToPcm16kBase64(blob).catch(() => '')
-    return (await window.klyro.transcribe(buffer, mimeRef.current, pcmBase64 || undefined)).text.trim()
+    const pcm = await decodeAudioToPcm16kBuffer(blob).catch(() => null)
+    return (await window.klyro.transcribe(buffer, mimeRef.current, pcm || undefined)).text.trim()
   }
 
   // ---------------------------------------------------------------------
@@ -788,6 +868,9 @@ export default function OverlayApp() {
       recorder.start(SLICE_MS)
       // Every 100 ms: has the question just ended?
       listenTimerRef.current = window.setInterval(() => {
+        if (watcher?.isVoiced?.()) {
+          void window.klyro.prewarmTranscribe?.()
+        }
         const utterance = assembler.takeEndedUtterance(watcher)
         if (!utterance) return
         void handleQuestion(utterance)
@@ -1015,6 +1098,26 @@ export default function OverlayApp() {
             {privateMode.enabled ? <EyeOff className="icon icon--sm" aria-hidden="true" /> : <Eye className="icon icon--sm" aria-hidden="true" />}
           </button>
         )}
+        <div className="overlay__controls">
+          <button
+            type="button"
+            className="overlay__control-btn overlay__control-btn--minimize"
+            onClick={() => void window.klyro.minimizeOverlay?.()}
+            title="Minimize overlay"
+            aria-label="Minimize"
+          >
+            <Minus className="icon icon--xs" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="overlay__control-btn overlay__control-btn--close"
+            onClick={() => void window.klyro.hideOverlay()}
+            title="Close overlay"
+            aria-label="Close"
+          >
+            <X className="icon icon--xs" aria-hidden="true" />
+          </button>
+        </div>
       </header>
 
       <div className="overlay__composer">
@@ -1141,6 +1244,13 @@ export default function OverlayApp() {
           </span>
         )}
 
+        {history.length > 0 && mode === 'idle' && (
+          <span className="overlay__session-badge" title="Questions asked in this session">
+            <History className="icon icon--xs" aria-hidden="true" />
+            <span>{history.length + (question ? 1 : 0)} in thread</span>
+          </span>
+        )}
+
         <span className="overlay__toolbar-hint">Esc to close · Enter to ask</span>
       </div>
 
@@ -1151,7 +1261,7 @@ export default function OverlayApp() {
             {talkState === 'listening'
               ? 'Listening — speak whenever you like'
               : talkState === 'hearing'
-                ? 'Hearing you…'
+                ? partialText ? `“${partialText}…”` : 'Hearing you…'
                 : 'Thinking…'}
           </span>
           <span className="overlay__meter" aria-hidden="true">
@@ -1201,133 +1311,164 @@ export default function OverlayApp() {
         </div>
       )}
 
-      {(question || hasAnswer || errorText || busy || history.length > 0) && (
+      {(history.length > 0 || question || hasAnswer || errorText || busy) && (
         <section className="overlay__response" ref={responseRef} aria-live="polite">
           {history.length > 0 && (
-            <div className="overlay__history">
-              <div className="overlay__history-head">
-                <button
-                  type="button"
-                  className="overlay__history-toggle"
-                  onClick={() => setShowHistory((prev) => !prev)}
-                  title="Toggle session Q&A history"
-                >
-                  <History className="icon icon--xs" aria-hidden="true" />
-                  <span>Session History ({history.length})</span>
-                  {showHistory ? <ChevronUp className="icon icon--xs" /> : <ChevronDown className="icon icon--xs" />}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--quiet btn--xs"
-                  onClick={() => setHistory([])}
-                  title="Clear session history"
-                >
-                  <Trash2 className="icon icon--xs" aria-hidden="true" />
-                  <span>Clear</span>
-                </button>
+            <div className="overlay__session-header">
+              <span className="overlay__session-title">
+                <History className="icon icon--xs" aria-hidden="true" />
+                <span>Session Thread ({history.length + (question ? 1 : 0)})</span>
+              </span>
+              <button
+                type="button"
+                className="btn btn--quiet btn--xs"
+                onClick={() => {
+                  setHistory([])
+                  currentTurnRef.current = { question: '', answer: '', timing: null }
+                }}
+                title="Clear session history"
+              >
+                <Trash2 className="icon icon--xs" aria-hidden="true" />
+                <span>Clear</span>
+              </button>
+            </div>
+          )}
+
+          {/* Previous turns from this session */}
+          {history.map((turn) => (
+            <div key={turn.id} className="overlay__turn">
+              <div className="overlay__turn-user">
+                <div className="overlay__user-bubble">{turn.question}</div>
               </div>
-              {showHistory && (
-                <div className="column" style={{ gap: 6, marginTop: 4 }}>
-                  {history.map((turn) => (
-                    <div key={turn.id} className="overlay__history-item">
-                      <div className="overlay__history-q">
-                        <span>Q: {turn.question}</span>
-                        <button
-                          type="button"
-                          className="btn btn--quiet btn--xs"
-                          onClick={async () => {
-                            await navigator.clipboard.writeText(turn.answer)
-                            setCopiedHistoryId(turn.id)
-                            window.setTimeout(() => setCopiedHistoryId(null), 1500)
-                          }}
-                          title="Copy answer"
-                        >
-                          {copiedHistoryId === turn.id ? (
-                            <Check className="icon icon--xs" aria-hidden="true" />
-                          ) : (
-                            <Copy className="icon icon--xs" aria-hidden="true" />
-                          )}
-                        </button>
-                      </div>
-                      <div className="overlay__history-a">{turn.answer}</div>
-                    </div>
-                  ))}
+              <div className="overlay__turn-assistant">
+                <div className="overlay__answer">
+                  <div className="overlay__answer-text">{turn.answer}</div>
+                </div>
+                <div className="overlay__turn-footer">
+                  {turn.timing && (
+                    <>
+                      <span className="overlay__timing-badge">
+                        {turn.timing.cached ? 'instant' : `${(turn.timing.ms / 1000).toFixed(2)}s`}
+                      </span>
+                      {turn.timing.model && <span className="overlay__model-tag">{turn.timing.model}</span>}
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn--quiet btn--xs"
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(turn.answer)
+                      setCopiedHistoryId(turn.id)
+                      window.setTimeout(() => setCopiedHistoryId(null), 1500)
+                    }}
+                    title="Copy answer"
+                  >
+                    {copiedHistoryId === turn.id ? (
+                      <Check className="icon icon--xs" aria-hidden="true" />
+                    ) : (
+                      <Copy className="icon icon--xs" aria-hidden="true" />
+                    )}
+                    <span>{copiedHistoryId === turn.id ? 'Copied' : 'Copy'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {/* Active / latest turn */}
+          {(question || hasAnswer || errorText || busy) && (
+            <div className="overlay__turn overlay__turn--current">
+              {question && (
+                <div className="overlay__turn-user">
+                  <div className="overlay__user-bubble">{question}</div>
                 </div>
               )}
+
+              <div className="overlay__turn-assistant">
+                <div className={`overlay__answer${assistNote && !hasAnswer ? ' overlay__answer--error' : ''}`}>
+                  {hasAnswer ? (
+                    <div className="overlay__answer-text" ref={answerTextRef}>
+                      {answer}
+                    </div>
+                  ) : errorText ? (
+                    <div className="row" style={{ alignItems: 'flex-start', gap: 6 }}>
+                      <TriangleAlert className="icon icon--xs" style={{ marginTop: 3, flexShrink: 0 }} aria-hidden="true" />
+                      <span>{errorText}</span>
+                    </div>
+                  ) : busy ? (
+                    <span className="overlay__waiting">
+                      <span className="overlay__waiting-dots" aria-hidden="true">
+                        <span />
+                        <span />
+                        <span />
+                      </span>
+                      <span>Thinking…</span>
+                    </span>
+                  ) : null}
+                </div>
+
+                <footer className="overlay__footer">
+                  {timing && (
+                    <>
+                      {timing.cached ? (
+                        <span className="overlay__timing-badge overlay__timing-badge--cached">instant replay</span>
+                      ) : (
+                        <span className="overlay__timing-badge">{(timing.ms / 1000).toFixed(2)}s</span>
+                      )}
+                      {timing.model && <span className="overlay__model-tag">{timing.model}</span>}
+                      {timing.cached ? (
+                        <span>same question, same screen</span>
+                      ) : timing.totalMs > 0 ? (
+                        <span>complete in {(timing.totalMs / 1000).toFixed(1)}s</span>
+                      ) : null}
+                    </>
+                  )}
+                  {!timing && !busy && !hasAnswer && !errorText && (
+                    <span>Answers stay on this machine unless you use a hosted provider.</span>
+                  )}
+                  <div className="overlay__actions">
+                    {hasAnswer && (
+                      <>
+                        <button className="btn btn--quiet btn--xs" onClick={() => void copyAnswer()} title="Copy the answer">
+                          {copied ? <Check className="icon icon--xs" aria-hidden="true" /> : <Copy className="icon icon--xs" aria-hidden="true" />}
+                          <span>{copied ? 'Copied' : 'Copy'}</span>
+                        </button>
+                        <button
+                          className="btn btn--quiet btn--xs"
+                          onClick={() => void retry()}
+                          disabled={busy || !lastQuestionRef.current}
+                          title="Ask the same question again"
+                        >
+                          <RefreshCcw className="icon icon--xs" aria-hidden="true" />
+                          <span>Retry</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </footer>
+              </div>
             </div>
           )}
-
-          {question && (
-            <div className="overlay__question">
-              <span className="overlay__question-label">Asked</span>
-              <span>{question}</span>
-            </div>
-          )}
-
-          <div className={`overlay__answer${assistNote && !hasAnswer ? ' overlay__answer--error' : ''}`}>
-            {hasAnswer ? (
-              <div className="overlay__answer-text" ref={answerTextRef}>
-                {answer}
-              </div>
-            ) : errorText ? (
-              <div className="row" style={{ alignItems: 'flex-start', gap: 6 }}>
-                <TriangleAlert className="icon icon--xs" style={{ marginTop: 3, flexShrink: 0 }} aria-hidden="true" />
-                <span>{errorText}</span>
-              </div>
-            ) : busy ? (
-              <span className="overlay__waiting">
-                <span className="overlay__waiting-dots" aria-hidden="true">
-                  <span />
-                  <span />
-                  <span />
-                </span>
-                <span>Thinking…</span>
-              </span>
-            ) : null}
-          </div>
-
-          <footer className="overlay__footer">
-            {timing && (
-              <>
-                {timing.cached ? (
-                  <span className="overlay__timing-badge overlay__timing-badge--cached">instant replay</span>
-                ) : (
-                  <span className="overlay__timing-badge">{(timing.ms / 1000).toFixed(2)}s</span>
-                )}
-                {timing.model && <span>{timing.model}</span>}
-                {timing.cached ? (
-                  <span>same question, same screen</span>
-                ) : timing.totalMs > 0 ? (
-                  <span>complete in {(timing.totalMs / 1000).toFixed(1)}s</span>
-                ) : null}
-              </>
-            )}
-            {!timing && !busy && !hasAnswer && !errorText && (
-              <span>Answers stay on this machine unless you use a hosted provider.</span>
-            )}
-            <div className="overlay__actions">
-              {hasAnswer && (
-                <>
-                  <button className="btn btn--quiet btn--xs" onClick={() => void copyAnswer()} title="Copy the answer">
-                    {copied ? <Check className="icon icon--xs" aria-hidden="true" /> : <Copy className="icon icon--xs" aria-hidden="true" />}
-                    <span>{copied ? 'Copied' : 'Copy'}</span>
-                  </button>
-                  <button
-                    className="btn btn--quiet btn--xs"
-                    onClick={() => void retry()}
-                    disabled={busy || !lastQuestionRef.current}
-                    title="Ask the same question again"
-                  >
-                    <RefreshCcw className="icon icon--xs" aria-hidden="true" />
-                    <span>Retry</span>
-                  </button>
-                </>
-              )}
-            </div>
-          </footer>
         </section>
       )}
-      <div className="overlay__resize-corner" aria-hidden="true" title="Drag corner to resize" />
+      <div
+        className="overlay__resize-edge-e"
+        onPointerDown={startResize('x')}
+        aria-hidden="true"
+        title="Drag edge to resize width"
+      />
+      <div
+        className="overlay__resize-edge-s"
+        onPointerDown={startResize('y')}
+        aria-hidden="true"
+        title="Drag edge to resize height"
+      />
+      <div
+        className="overlay__resize-corner"
+        onPointerDown={startResize('both')}
+        aria-hidden="true"
+        title="Drag corner to resize"
+      />
       </div>
     </div>
   )

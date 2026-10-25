@@ -1,6 +1,7 @@
 /** IPC channel names. Single source of truth for main + preload. */
 export const IPC = {
   appInfo: 'app:info',
+  appQuit: 'app:quit',
 
   settingsGet: 'settings:get',
   settingsUpdate: 'settings:update',
@@ -24,6 +25,8 @@ export const IPC = {
   captureSources: 'capture:sources',
   captureGrab: 'capture:grab',
   transcribe: 'audio:transcribe',
+  transcribePrewarm: 'audio:prewarm',
+  ocrExtract: 'ocr:extract',
 
   permissionsCheck: 'permissions:check',
 
@@ -54,6 +57,8 @@ export const IPC = {
 
 
   windowHideOverlay: 'window:hideOverlay',
+  shortcutsStatus: 'shortcuts:status',
+  windowMinimizeOverlay: 'window:minimizeOverlay',
   windowToggleOverlay: 'window:toggleOverlay',
   /** The overlay asks for the height its content needs. */
   overlayResize: 'overlay:resize',

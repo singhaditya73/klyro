@@ -56,6 +56,7 @@ Status legend: **✅ done** · **🟡 partial** · **⬜ planned**
 | Keys encrypted at rest | ✅ | Electron `safeStorage` (OS keychain). Plaintext is refused unless you explicitly opt in. |
 | The overlay is excluded from captures | ✅ | Windows and macOS. **Linux has no per-window exclusion API** — the privacy check says so plainly rather than pretending. |
 | Measured, not claimed | ✅ | The privacy check takes two real captures and reports the changed pixels. |
+| Runs without a visible tray or taskbar entry | ✅ | Settings → Desktop → **Running quietly**: turn the tray icon off, keep the control panel out of the taskbar/Dock, and set a *hide everything* shortcut (empty = off). This changes **what the desktop shows**. It does not hide the process — Klyro remains in Task Manager and System Monitor — and on Linux a whole-screen share still captures the overlay. |
 | Nothing leaves the machine unless you say so | ✅ | A local model never sends anything. A cloud provider gets the question and the picture, and the app says which provider is in use and whether it is local. |
 | Secrets never reach a log | ✅ | Prompts, answers, transcripts, keys and frames are not logged. |
 | Data you can see and clear | ✅ | Counts per scope, one click to clear, a storage report and a clean-up. |

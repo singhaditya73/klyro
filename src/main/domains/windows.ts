@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { BrowserWindow, screen, shell, nativeImage } from 'electron'
+import { BrowserWindow, app, screen, shell, nativeImage } from 'electron'
 import { KLYRO_ICON_DATA_URL } from '../assets'
 import { isExternalHttpUrl, isTrustedRendererUrl } from '../security/origins'
 import { diagnostics } from '../diagnostics'
@@ -19,11 +19,48 @@ let overlayWindow: BrowserWindow | null = null
 let overlayStickyRecording = false
 /** The height the overlay's content asked for, so showing it is the right size. */
 let overlayContentHeight = 0
-/** User-customized position and dimensions remembered across moves and resizes. */
-let userOverlayBounds: { x: number; y: number; width: number; height: number } | null = null
+/** The user's custom dragged position on screen. Null = default top center. */
+let userOverlayPos: { x: number; y: number } | null = null
+/** The user's custom resized width. Null = default OVERLAY_WIDTH (640). */
+let userOverlayWidth: number | null = null
 
 function isDev(): boolean {
   return Boolean(process.env.ELECTRON_RENDERER_URL)
+}
+
+/** Whether the control panel stays out of the taskbar/Dock. */
+function hideMainFromTaskbar(): boolean {
+  try {
+    return settingsDomain.get().hideFromTaskbar === true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Apply the taskbar choice to the control panel.
+ *
+ * This hides the window's *button*, not the window and not the process: the
+ * control panel still opens on screen and the app still runs.
+ */
+export function applyMainWindowVisibility(): void {
+  const hidden = hideMainFromTaskbar()
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try {
+      mainWindow.setSkipTaskbar(hidden)
+    } catch (error) {
+      logger.warn('setSkipTaskbar failed', error)
+    }
+  }
+  // macOS has no taskbar entry to remove; the Dock icon is the equivalent.
+  if (process.platform === 'darwin') {
+    try {
+      if (hidden) app.dock?.hide()
+      else app.dock?.show()
+    } catch (error) {
+      logger.warn('Dock visibility failed', error)
+    }
+  }
 }
 
 /**
@@ -93,6 +130,7 @@ export function createMainWindow(): BrowserWindow {
     webPreferences: baseWebPreferences()
   })
   mainWindow.once('ready-to-show', () => mainWindow?.show())
+  applyMainWindowVisibility()
   attachNavigationGuards(mainWindow)
   loadRoute(mainWindow, '/')
   mainWindow.on('closed', () => {
@@ -104,15 +142,15 @@ export function createMainWindow(): BrowserWindow {
 export function createOverlayWindow(): BrowserWindow {
   if (overlayWindow && !overlayWindow.isDestroyed()) return overlayWindow
   overlayWindow = new BrowserWindow({
-    width: userOverlayBounds?.width || OVERLAY_WIDTH,
-    height: userOverlayBounds?.height || OVERLAY_HEIGHT,
-    minWidth: 380,
-    minHeight: 120,
-    maxWidth: 1600,
-    maxHeight: 1200,
+    width: userOverlayWidth || OVERLAY_WIDTH,
+    height: OVERLAY_HEIGHT,
+    minWidth: 420,
+    minHeight: OVERLAY_MIN_HEIGHT,
+    maxWidth: 1400,
+    maxHeight: 1000,
     show: false,
     frame: false,
-    resizable: true,
+    resizable: false,
     movable: true,
     alwaysOnTop: true,
     skipTaskbar: true,
@@ -127,23 +165,33 @@ export function createOverlayWindow(): BrowserWindow {
   applyOverlayPrivateMode()
   applyOverlayOpacity()
 
-  const saveBounds = (): void => {
+  // Remember where the user dragged it, so it stays there across toggles
+  overlayWindow.on('moved', () => {
     if (overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible()) {
-      userOverlayBounds = overlayWindow.getBounds()
+      const b = overlayWindow.getBounds()
+      userOverlayPos = { x: b.x, y: b.y }
     }
-  }
-  overlayWindow.on('moved', saveBounds)
+  })
+
+  // Remember if the user manually resized width from edges
   overlayWindow.on('resized', () => {
-    saveBounds()
-    // Re-affirm stealth capture exclusion whenever resized
-    applyOverlayPrivateMode()
+    if (overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible()) {
+      const b = overlayWindow.getBounds()
+      if (Math.abs(b.width - OVERLAY_WIDTH) > 10) {
+        userOverlayWidth = b.width
+      }
+      applyOverlayPrivateMode()
+    }
   })
 
   overlayWindow.on('blur', () => {
-    // While meeting-assist recording is live the overlay must keep running even
-    // when focus returns to the meeting app; private mode has the same need
-    // (reading notes while the meeting has focus) without recording.
-    if (!overlayStickyRecording && !overlayPrivateModeActive()) void hideOverlayAnimated()
+    // If the user has dragged the overlay somewhere on screen (userOverlayPos),
+    // or manually resized it (userOverlayWidth), or is recording / in private mode,
+    // it stays pinned on screen and does NOT vanish on click outside.
+    // When in default top-center popup mode without recording, it can auto-dismiss.
+    if (!overlayStickyRecording && !overlayPrivateModeActive() && !userOverlayPos && !userOverlayWidth) {
+      void hideOverlayAnimated()
+    }
   })
   attachNavigationGuards(overlayWindow)
   loadRoute(overlayWindow, 'overlay')
@@ -227,30 +275,30 @@ function overlayDisplay(): Electron.Display {
 }
 
 function positionOverlay(win: BrowserWindow): void {
-  if (userOverlayBounds) {
+  const display = overlayDisplay()
+  const { workArea } = display
+  const width = userOverlayWidth || OVERLAY_WIDTH
+  const height = overlayContentHeight || OVERLAY_HEIGHT
+
+  let x = Math.round(workArea.x + (workArea.width - width) / 2)
+  let y = Math.round(workArea.y + workArea.height * 0.16)
+
+  if (userOverlayPos) {
     const displays = screen.getAllDisplays()
-    const onScreen = displays.some((d) => {
-      const b = d.bounds
-      return (
-        userOverlayBounds!.x + userOverlayBounds!.width > b.x &&
-        userOverlayBounds!.x < b.x + b.width &&
-        userOverlayBounds!.y + userOverlayBounds!.height > b.y &&
-        userOverlayBounds!.y < b.y + b.height
-      )
-    })
+    const onScreen = displays.some(
+      (d) =>
+        userOverlayPos!.x + width > d.bounds.x &&
+        userOverlayPos!.x < d.bounds.x + d.bounds.width &&
+        userOverlayPos!.y + height > d.bounds.y &&
+        userOverlayPos!.y < d.bounds.y + d.bounds.height
+    )
     if (onScreen) {
-      win.setBounds(userOverlayBounds)
-      return
+      x = userOverlayPos.x
+      y = userOverlayPos.y
     }
   }
 
-  const { workArea } = overlayDisplay()
-  win.setBounds({
-    x: Math.round(workArea.x + (workArea.width - OVERLAY_WIDTH) / 2),
-    y: Math.round(workArea.y + workArea.height * 0.16),
-    width: OVERLAY_WIDTH,
-    height: overlayContentHeight || OVERLAY_HEIGHT
-  })
+  win.setBounds({ x, y, width, height })
 }
 
 /** Connected displays, for the settings picker. */
@@ -277,19 +325,24 @@ export function applyOverlayDisplay(): void {
  * forever. The top edge stays where the user put it, so the overlay grows
  * downwards and never jumps.
  */
-export function resizeOverlay(height: number): number {
+export function resizeOverlay(height: number, width?: number): number {
   const win = overlayWindow
   const wanted = Math.round(Number(height))
   if (!Number.isFinite(wanted) || wanted <= 0) return 0
   const clamped = Math.min(OVERLAY_MAX_HEIGHT, Math.max(OVERLAY_MIN_HEIGHT, wanted))
   overlayContentHeight = clamped
+
+  if (typeof width === 'number' && Number.isFinite(width)) {
+    const clampedWidth = Math.min(1400, Math.max(420, Math.round(width)))
+    userOverlayWidth = clampedWidth
+  }
+
   if (!win || win.isDestroyed() || !win.isVisible()) return clamped
   const bounds = win.getBounds()
-  const width = userOverlayBounds?.width ?? bounds.width ?? OVERLAY_WIDTH
-  const targetHeight = userOverlayBounds?.height ? Math.max(userOverlayBounds.height, clamped) : clamped
-  if (Math.abs(bounds.height - targetHeight) < 2 && bounds.width === width) return bounds.height
+  const targetWidth = userOverlayWidth || bounds.width || OVERLAY_WIDTH
+  if (Math.abs(bounds.height - clamped) < 2 && bounds.width === targetWidth) return bounds.height
   try {
-    win.setBounds({ x: bounds.x, y: bounds.y, width, height: targetHeight })
+    win.setBounds({ x: bounds.x, y: bounds.y, width: targetWidth, height: clamped })
     applyOverlayPrivateMode()
   } catch (error) {
     logger.warn('Could not resize the overlay', error)
@@ -300,9 +353,12 @@ export function resizeOverlay(height: number): number {
 
 export function toggleOverlay(): void {
   const win = createOverlayWindow()
-  if (win.isVisible()) {
+  if (win.isVisible() && !win.isMinimized()) {
     void hideOverlayAnimated()
     return
+  }
+  if (win.isMinimized()) {
+    win.restore()
   }
   positionOverlay(win)
   applyOverlayPrivateMode()
@@ -393,11 +449,56 @@ export function hideOverlay(): void {
   void hideOverlayAnimated()
 }
 
+export function minimizeOverlay(): void {
+  const win = overlayWindow
+  if (!win || win.isDestroyed()) return
+  try {
+    win.minimize()
+  } catch {
+    void hideOverlayAnimated()
+  }
+}
+
 export function showMainWindow(): void {
   const win = createMainWindow()
   if (win.isMinimized()) win.restore()
   win.show()
   win.focus()
+}
+
+/**
+ * Hide the control panel without closing it.
+ *
+ * A hidden window has no taskbar button on any platform, so this is the fast
+ * way out of the way that does not take the tray icon with it.
+ */
+export function hideMainWindow(): void {
+  const win = mainWindow
+  if (!win || win.isDestroyed()) return
+  try {
+    win.hide()
+  } catch (error) {
+    logger.warn('hideMainWindow failed', error)
+  }
+}
+
+/**
+ * Hide everything the user can see, immediately.
+ *
+ * The panic shortcut uses this: the overlay and the control panel disappear in
+ * one keystroke. The process keeps running — hiding a window is not hiding a
+ * process, and it is not meant to be.
+ */
+export function hideEverything(): void {
+  const overlay = overlayWindow
+  if (overlay && !overlay.isDestroyed()) {
+    try {
+      overlay.hide()
+    } catch (error) {
+      logger.warn('hide overlay failed', error)
+    }
+  }
+  hideMainWindow()
 }
 
 export function getOverlayWindow(): BrowserWindow | null {

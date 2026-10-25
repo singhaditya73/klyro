@@ -6,7 +6,8 @@ import { logger } from '../logger'
 import { getProvider } from '../providers'
 import { DEFAULT_PROVIDERS, PROVIDER_META } from '../providers/defaults'
 import { classifyThrown, ProviderError, toUserMessage } from '../providers/errors'
-import { providerCarriesImages, resolveRoute } from '../providers/routing'
+import { providerCarriesImages, resolveRoute, visionSupport } from '../providers/routing'
+import { ocrExtractText } from './ocr'
 import type { ChatTurn } from '../providers/types'
 import type { ProviderId } from '@shared/types'
 import { audit } from './audit'
@@ -226,13 +227,35 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
       signal: abort.signal
     }
 
-    // A picture that the provider cannot carry must not vanish without a word:
-    // the model would answer as if it had never seen the screen.
+    // Check if the provider/model can carry and understand images.
+    // When a model is text-only (e.g. Antigravity, OpenCode text models, Ollama, DeepSeek),
+    // local OCR extracts text and code from the screen so the model can read it!
     const attachments = request.attachments ?? []
-    if (attachments.length > 0 && !providerCarriesImages(providerId)) {
-      const note = `⚠️ **${PROVIDER_META[providerId]?.label ?? providerId} cannot carry an image.** The answer below is based on the text only — the picture did not reach the model. Switch to OpenCode, Claude Code, Codex or a vision provider to send pictures.`
-      text = note
-      emit({ type: 'delta', messageId: assistantId, text: note })
+    let promptContent = request.content
+    let effectiveImages = attachments.map((a) => ({ dataUrl: a.dataUrl, mime: a.mime }))
+
+    const canCarryImage = providerCarriesImages(providerId)
+    const vision = visionSupport(providerId, route.model)
+    const isImageCapable = canCarryImage && vision !== 'no'
+
+    if (attachments.length > 0 && !isImageCapable) {
+      const ocrText = await ocrExtractText(attachments[0].dataUrl).catch(() => '')
+      if (ocrText.trim()) {
+        promptContent = `${promptContent}\n\n[Screen Content (via Local OCR)]:\n\`\`\`\n${ocrText.trim()}\n\`\`\`\n`
+        effectiveImages = []
+      } else if (!canCarryImage) {
+        const note = `⚠️ **${PROVIDER_META[providerId]?.label ?? providerId} cannot carry an image.** No readable text was detected on screen by local OCR.`
+        text = note
+        emit({ type: 'delta', messageId: assistantId, text: note })
+      }
+    }
+
+    if (promptContent !== request.content && turns.length > 0) {
+      const lastUserTurn = [...turns].reverse().find((t) => t.role === 'user')
+      if (lastUserTurn) {
+        lastUserTurn.text = promptContent
+        lastUserTurn.images = effectiveImages
+      }
     }
 
     // Turbo: the same question about the same screen was answered moments
@@ -279,11 +302,8 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
           model: route.model,
           baseUrl: route.baseUrl,
           apiKey: route.apiKey,
-          prompt: request.content,
-          images: (request.attachments ?? []).map((attachment) => ({
-            dataUrl: attachment.dataUrl,
-            mime: attachment.mime
-          })),
+          prompt: promptContent,
+          images: effectiveImages,
           // The agent CLIs are programs: the daemon runs the same one the app
           // would have run.
           binary: binaryFor(providerId) ?? '',

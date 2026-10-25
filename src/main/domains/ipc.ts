@@ -17,12 +17,16 @@ import { privacy } from './privacy'
 import { listProviderModels } from './provider-models'
 import { interviews } from './interviews'
 import { summarizeInterview } from './interview-summary'
-import { transcribeAudio } from './audio'
+import { prewarmTranscribe, transcribeAudio } from './audio'
+import { ocrExtractText } from './ocr'
 import {
+  applyMainWindowVisibility,
   applyOverlayDisplay,
   applyOverlayOpacity,
   applyOverlayPrivateMode,
+  hideOverlay,
   listDisplays,
+  minimizeOverlay,
   overlayPrivateModeSupported,
   resizeOverlay,
   setOverlayStickyRecording,
@@ -34,7 +38,8 @@ import { providersPatchSchema } from './provider-settings'
 import { checkPermissions } from './permissions'
 import { grabScreen, listCaptureSources, probeOverlayVisibility } from './screenshot'
 import { settingsDomain } from './settings'
-import { registerShortcuts } from './shortcuts'
+import { registerShortcuts, shortcutStatus } from './shortcuts'
+import { applyTrayVisibility } from './tray'
 import { antigravity } from './antigravity'
 import { audit } from './audit'
 import { usage } from './usage'
@@ -76,6 +81,9 @@ const settingsPatchSchema = z
     theme: z.enum(['system', 'dark', 'light']).optional(),
     launchAtLogin: z.boolean().optional(),
     toggleShortcut: z.string().max(64).optional(),
+    showTray: z.boolean().optional(),
+    hideFromTaskbar: z.boolean().optional(),
+    panicShortcut: z.string().max(64).optional(),
     memoryEnabled: z.boolean().optional(),
     memoryAutoExtract: z.boolean().optional(),
     memoryRecallCount: z.number().int().min(1).max(20).optional(),
@@ -137,7 +145,11 @@ export function registerIpcHandlers(): void {
     platform: process.platform
   }))
 
+  handle(IPC.appQuit, () => app.quit())
+
   handle(IPC.settingsGet, () => settingsDomain.get())
+
+  handle(IPC.shortcutsStatus, () => shortcutStatus())
 
   handle(IPC.settingsUpdate, (_event, patch: unknown) => {
     const parsed = settingsPatchSchema.parse(patch) as Partial<AppSettings>
@@ -149,7 +161,9 @@ export function registerIpcHandlers(): void {
         logger.warn('Failed to update login item', error)
       }
     }
-    if ('toggleShortcut' in parsed) registerShortcuts()
+    if ('showTray' in parsed) applyTrayVisibility()
+    if ('hideFromTaskbar' in parsed) applyMainWindowVisibility()
+    if ('toggleShortcut' in parsed || 'panicShortcut' in parsed) registerShortcuts()
     if ('overlayPrivateMode' in parsed) applyOverlayPrivateMode()
     if ('overlayOpacity' in parsed) applyOverlayOpacity()
     if ('overlayDisplay' in parsed) applyOverlayDisplay()
@@ -243,6 +257,15 @@ export function registerIpcHandlers(): void {
     return transcribeAudio(copy, mime, pcm).then((text) => ({ text }))
   })
 
+  handle(IPC.transcribePrewarm, () => {
+    void prewarmTranscribe().catch(() => undefined)
+  })
+
+  handle(IPC.ocrExtract, (_event, image: unknown) => {
+    const dataUrl = z.string().parse(image)
+    return ocrExtractText(dataUrl)
+  })
+
   handle(IPC.permissionsCheck, () => checkPermissions())
 
   handle(IPC.securityStatus, (): SecurityStatus => ({
@@ -305,14 +328,23 @@ export function registerIpcHandlers(): void {
   })
 
   // The overlay asks for the height its content needs; the window follows.
-  handle(IPC.overlayResize, (_event, height: unknown) => {
+  handle(IPC.overlayResize, (_event, height: unknown, width?: unknown) => {
     const parsed = z.number().finite().safeParse(height)
-    return parsed.success ? resizeOverlay(parsed.data) : 0
+    const parsedWidth = typeof width === 'number' && Number.isFinite(width) ? width : undefined
+    return parsed.success ? resizeOverlay(parsed.data, parsedWidth) : 0
   })
 
   // The same window the hotkey opens, opened from the control panel.
   handle(IPC.windowToggleOverlay, () => {
     toggleOverlay()
+  })
+
+  handle(IPC.windowHideOverlay, () => {
+    hideOverlay()
+  })
+
+  handle(IPC.windowMinimizeOverlay, () => {
+    minimizeOverlay()
   })
 
   /* ---------- Audit log ---------- */

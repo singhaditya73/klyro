@@ -2,6 +2,27 @@
 
 All notable changes to Klyro are recorded here. Versions follow [SemVer](https://semver.org/).
 
+## [0.9.23] — 2026-10-25
+
+Bundled offline RapidOCR (PP-OCRv6) vision engine, smart screen-to-text fallback for non-vision models, running quietly stealth controls, and packaging size optimizations.
+
+### Added
+- **Bundled Offline RapidOCR (PP-OCR) Engine.** Integrated a self-contained local OCR engine powered by PP-OCR ONNX models (`PP-OCRv6_det_small.onnx`, `PP-OCRv6_rec_small.onnx`) and character dictionary in `models/ocr/`, packaged directly inside installer builds for 100% offline, zero-network screen reading.
+- **Smart Model Screen Vision Fallback.** Text-only models and transports (Antigravity, OpenCode text models, DeepSeek, Groq, Ollama) now automatically receive extracted code and text from screenshots via local OCR in ~100ms, enabling them to accurately answer questions about code or problems on screen without cloud vision API dependencies.
+- **Running quietly.** Settings → Desktop has a *Running quietly* group: turn the
+  tray icon off, keep the control panel out of the taskbar (Windows/Linux) and
+  the Dock (macOS), and set a *hide everything* shortcut that takes the overlay
+  and the control panel off the screen in one keystroke. An empty hide shortcut
+  turns it off; it is never registered twice or over the overlay toggle.
+- The tray icon is now applied from settings at launch and on change, instead
+  of always being created.
+- **Packaging size optimization.** Pruned multi-platform and CUDA/TensorRT binaries from onnxruntime in installer builds, reducing the installed disk size from ~842MB to ~472MB.
+
+### Fixed
+- The 0.9.22 note claimed the overlay stays "100% invisible during screen
+  shares". That is only true on Windows and macOS; Linux has no per-window
+  capture exclusion. The note now says what is actually true.
+
 ## [0.9.22] — 2026-10-23
 
 Overlay drag and resize anywhere, multi-turn session Q&A history, audio feedback glow, multi-threaded Whisper inference, model pre-warming, and hardware echo cancellation.
@@ -9,7 +30,7 @@ Overlay drag and resize anywhere, multi-turn session Q&A history, audio feedback
 ### Added
 - **Multi-turn overlay session history.** Past questions and answers are now preserved in the overlay for the current session in a toggleable history tray with individual copy buttons.
 - **Drag & resize anywhere on screen.** The overlay is now resizable and can be freely moved and repositioned anywhere on screen. Position and custom dimensions are remembered across toggles.
-- **Continuous stealth protection.** Re-affirms OS-level capture exclusion (`WDA_EXCLUDEFROMCAPTURE` / `CGWindowSharingNone`) across drag, repositioning, and resize events to guarantee the overlay remains 100% invisible during screen shares.
+- **Continuous capture exclusion.** Re-affirms OS-level capture exclusion (`WDA_EXCLUDEFROMCAPTURE` / `CGWindowSharingNone`) across drag, repositioning, and resize events, so the overlay stays out of captures on Windows and macOS. Linux has no per-window exclusion API: full-screen sharing there still shows the overlay, and the privacy check says so.
 - **Glowing audio feedback borders.** Real-time visual pulse along the overlay borders indicating hearing (cyan glow), thinking (purple glow), listening (emerald glow), and recording (red glow).
 - **Whisper model pre-warming on launch.** Pre-loads Whisper model weights into memory upon daemon launch so the first voice prompt starts inference instantly with zero disk read delay.
 - **Multi-threaded Whisper inference.** Leverages CPU parallelism dynamically with clamped thread pools for 2–4x faster local speech recognition.

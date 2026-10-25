@@ -13,6 +13,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
   launchAtLogin: false,
   toggleShortcut: 'CommandOrControl+Shift+Space',
+  // The tray is the normal way back to the control panel; it can be turned off.
+  showTray: true,
+  hideFromTaskbar: false,
+  // Instant hide for the overlay and the control panel.
+  panicShortcut: 'CommandOrControl+Shift+H',
   memoryEnabled: true,
   memoryAutoExtract: false,
   memoryRecallCount: 5,
@@ -55,12 +60,19 @@ class SettingsDomain {
       // Older settings files predate the diagnostics opt-in; default it to off.
       healed = true
     }
+    if (current.showTray === undefined || current.hideFromTaskbar === undefined || current.panicShortcut === undefined) {
+      // Older settings files predate the stealth controls; the tray stays on.
+      healed = true
+    }
     const result = healed
       ? this.store.set({
           ...current,
           providers,
           allowUnencryptedSecrets: current.allowUnencryptedSecrets ?? false,
-          diagnosticsOptIn: current.diagnosticsOptIn ?? false
+          diagnosticsOptIn: current.diagnosticsOptIn ?? false,
+          showTray: current.showTray ?? true,
+          hideFromTaskbar: current.hideFromTaskbar ?? false,
+          panicShortcut: current.panicShortcut ?? 'CommandOrControl+Shift+H'
         })
       : current
     secrets.setPlaintextPolicy(result.allowUnencryptedSecrets)

@@ -18,6 +18,13 @@ files:
   # but its Express/Hono stack does not ship.
   - '!node_modules/@modelcontextprotocol/sdk/dist/esm/**'
   - '!node_modules/{express,raw-body,jose,cors,@hono}/**'
+  # Prune unused onnxruntime native binaries (Darwin, ARM64, and heavy 260MB+ CUDA/TensorRT GPU blobs)
+  - '!node_modules/onnxruntime-node/bin/napi-v6/darwin/**'
+  - '!node_modules/onnxruntime-node/bin/napi-v6/**/arm64/**'
+  - '!node_modules/onnxruntime-node/bin/napi-v6/**/libonnxruntime_providers_cuda.so'
+  - '!node_modules/onnxruntime-node/bin/napi-v6/**/libonnxruntime_providers_tensorrt.so'
+  - '!node_modules/onnxruntime-node/bin/napi-v6/**/onnxruntime_providers_cuda.dll'
+  - '!node_modules/onnxruntime-node/bin/napi-v6/**/onnxruntime_providers_tensorrt.dll'
 asar: true
 # The daemon: one small Rust binary next to the app. It owns the hot path, so
 # the overlay opens in milliseconds instead of waiting on a browser runtime.
@@ -30,6 +37,11 @@ extraResources:
     to: models/whisper
     filter:
       - '*.bin'
+  - from: resources/models/ocr
+    to: models/ocr
+    filter:
+      - '*.onnx'
+      - '*.txt'
 compression: normal
 artifactName: ${productName}-${version}-${arch}.${ext}
 

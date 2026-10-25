@@ -80,6 +80,7 @@ export interface LevelWatcher {
    * recorder keep the audio from just before it.
    */
   speechStartedAt(): number
+  isVoiced?(): boolean
   dispose(): void
 }
 
@@ -95,7 +96,20 @@ export const HARDWARE_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
   sampleRate: 16000
 }
 
-/** Watch the level of a stream. Null when Web Audio is unavailable. */
+/** Zero crossing rate: ratio of zero crossings to total samples. Speech typically falls in 0.04..0.48. */
+export function zeroCrossingRate(data: Uint8Array): number {
+  if (data.length < 2) return 0
+  let crossings = 0
+  const len = data.length
+  for (let i = 1; i < len; i += 1) {
+    if ((data[i] >= 128 && data[i - 1] < 128) || (data[i] < 128 && data[i - 1] >= 128)) {
+      crossings += 1
+    }
+  }
+  return crossings / len
+}
+
+/** Watch the level of a stream with adaptive noise floor and zero-crossing VAD. */
 export function createLevelWatcher(stream: MediaStream): LevelWatcher | null {
   try {
     const AudioCtor = window.AudioContext
@@ -109,13 +123,29 @@ export function createLevelWatcher(stream: MediaStream): LevelWatcher | null {
     let lastVoicedAt = Date.now()
     let speechStartedAt = 0
     let voicedStreak = 0
+    let noiseFloor = SILENCE_RMS_THRESHOLD
+    let currentlyVoiced = false
+
     const timer = window.setInterval(() => {
       analyser.getByteTimeDomainData(buffer)
       const rms = rmsFromTimeDomain(buffer)
-      // Hysteresis: entering speech requires crossing higher threshold; sustaining speech allows lower threshold.
-      const isVoiced = speechStartedAt > 0
-        ? rms >= SILENCE_RMS_THRESHOLD * 0.75
-        : rms >= SILENCE_RMS_THRESHOLD
+      const zcr = zeroCrossingRate(buffer)
+
+      // Human speech formant frequency distribution check (rejects clicks, keyboard keys >0.50 and fan hum <0.03)
+      const isVoiceFormant = zcr >= 0.04 && zcr <= 0.48
+
+      // Track ambient background noise floor when not speaking
+      if (rms < noiseFloor * 1.5 && speechStartedAt === 0) {
+        noiseFloor = noiseFloor * 0.95 + rms * 0.05
+      }
+
+      // Dynamic SNR threshold: speech must exceed adaptive noise floor and match voice formant
+      const threshold = speechStartedAt > 0
+        ? Math.max(SILENCE_RMS_THRESHOLD * 0.7, noiseFloor * 1.35)
+        : Math.max(SILENCE_RMS_THRESHOLD, noiseFloor * 1.8)
+
+      const isVoiced = rms >= threshold && isVoiceFormant
+      currentlyVoiced = isVoiced
 
       if (!isVoiced) {
         voicedStreak = 0
@@ -138,6 +168,7 @@ export function createLevelWatcher(stream: MediaStream): LevelWatcher | null {
     return {
       msSinceVoice: () => Date.now() - lastVoicedAt,
       speechStartedAt: () => speechStartedAt,
+      isVoiced: () => currentlyVoiced || (Date.now() - lastVoicedAt < 250),
       dispose: () => {
         window.clearInterval(timer)
         void context.close().catch(() => undefined)
@@ -162,10 +193,18 @@ export class UtteranceAssembler {
 
   constructor(private readonly now: () => number = () => Date.now()) {}
 
-  /** Add a recorded slice. */
+  /** Add a recorded slice with rolling circular buffer protection. */
   push(slice: Blob): void {
+    const timestamp = this.now()
     this.slices.push(slice)
-    this.sliceAt.push(this.now())
+    this.sliceAt.push(timestamp)
+    // Rolling circular buffer: when not assembling an utterance, keep max ~15s of rolling audio preroll
+    if (this.utteranceStart === 0) {
+      while (this.sliceAt.length > 1 && timestamp - this.sliceAt[0] > 15000) {
+        this.slices.shift()
+        this.sliceAt.shift()
+      }
+    }
   }
 
   /**
@@ -322,23 +361,23 @@ export function createSilenceWatcher(stream: MediaStream): SilenceWatcher | null
 }
 
 /**
- * Decodes any browser-recorded audio blob into 16000Hz mono Float32 PCM samples,
- * base64-encoded. Used for instantaneous local Whisper offline transcription.
+ * Decodes any browser-recorded audio blob into a zero-copy 16000Hz mono Float32 PCM ArrayBuffer.
+ * This can be passed across Electron IPC with zero string serialization overhead.
  */
-export async function decodeAudioToPcm16kBase64(blob: Blob): Promise<string> {
+export async function decodeAudioToPcm16kBuffer(blob: Blob): Promise<ArrayBuffer> {
   const arrayBuffer = await blob.arrayBuffer()
   const AudioContextClass =
     typeof window !== 'undefined'
       ? window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
       : null
-  if (!AudioContextClass) return ''
+  if (!AudioContextClass) return new ArrayBuffer(0)
 
   const tempContext = new AudioContextClass()
   try {
     const audioBuffer = await tempContext.decodeAudioData(arrayBuffer.slice(0))
     const sampleRate = 16000
     const length = Math.ceil(audioBuffer.duration * sampleRate)
-    if (length <= 0) return ''
+    if (length <= 0) return new ArrayBuffer(0)
 
     const offlineContext = new OfflineAudioContext(1, length, sampleRate)
     const source = offlineContext.createBufferSource()
@@ -348,19 +387,28 @@ export async function decodeAudioToPcm16kBase64(blob: Blob): Promise<string> {
 
     const rendered = await offlineContext.startRendering()
     const channelData = rendered.getChannelData(0)
-
-    const u8 = new Uint8Array(channelData.buffer, channelData.byteOffset, channelData.byteLength)
-    let binary = ''
-    const chunkSize = 16384
-    const len = u8.length
-    for (let i = 0; i < len; i += chunkSize) {
-      const slice = u8.subarray(i, Math.min(i + chunkSize, len))
-      binary += String.fromCharCode.apply(null, slice as unknown as number[])
-    }
-    return btoa(binary)
+    return channelData.buffer.slice(channelData.byteOffset, channelData.byteOffset + channelData.byteLength)
   } catch {
-    return ''
+    return new ArrayBuffer(0)
   } finally {
     void tempContext.close().catch(() => undefined)
   }
+}
+
+/**
+ * Decodes any browser-recorded audio blob into 16000Hz mono Float32 PCM samples,
+ * base64-encoded.
+ */
+export async function decodeAudioToPcm16kBase64(blob: Blob): Promise<string> {
+  const pcmBuf = await decodeAudioToPcm16kBuffer(blob)
+  if (pcmBuf.byteLength === 0) return ''
+  const u8 = new Uint8Array(pcmBuf)
+  let binary = ''
+  const chunkSize = 32768
+  const len = u8.length
+  for (let i = 0; i < len; i += chunkSize) {
+    const slice = u8.subarray(i, Math.min(i + chunkSize, len))
+    binary += String.fromCharCode.apply(null, slice as unknown as number[])
+  }
+  return btoa(binary)
 }

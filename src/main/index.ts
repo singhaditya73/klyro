@@ -7,7 +7,7 @@ import { isAllowedPermission, isTrustedRendererUrl, setPackagedRenderer } from '
 import { registerIpcHandlers } from './domains/ipc'
 import { registerShortcuts, unregisterShortcuts } from './domains/shortcuts'
 import { settingsDomain } from './domains/settings'
-import { createTray } from './domains/tray'
+import { applyTrayVisibility } from './domains/tray'
 import { createMainWindow, createOverlayWindow, showMainWindow } from './domains/windows'
 import { maintenance } from './domains/maintenance'
 import { interviews } from './domains/interviews'
@@ -18,6 +18,7 @@ import { warmupScreenPermission } from './domains/screenshot'
 import { localAgentLauncher } from './domains/local-agent-launcher'
 import { antigravity } from './domains/antigravity'
 import { daemon } from './domains/daemon'
+import { prewarmOcr } from './domains/ocr'
 
 app.setName('Klyro')
 
@@ -103,7 +104,7 @@ if (!gotLock) {
     registerIpcHandlers()
     createMainWindow()
     createOverlayWindow()
-    createTray()
+    applyTrayVisibility()
     registerShortcuts()
     // Ask the OS for screen-capture permission at launch, not in the middle of
     // a meeting: on macOS the first capture raises a system prompt, and it is
@@ -121,6 +122,7 @@ if (!gotLock) {
     // few megabytes, so the overlay's answer does not wait on a browser
     // runtime. If it is not built, the app carries on without it.
     void daemon.start()
+    prewarmOcr()
     logger.info(`Klyro ${app.getVersion()} ready on ${process.platform}`)
 
     app.on('activate', () => {

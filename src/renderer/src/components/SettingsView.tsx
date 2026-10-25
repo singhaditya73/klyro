@@ -7,6 +7,7 @@ import {
   HardDrive,
   Keyboard,
   Monitor,
+  Power,
   Shield,
   Sparkles,
   Trash2,
@@ -174,6 +175,8 @@ export function SettingsView({ onNavigate }: { onNavigate: (route: Route) => voi
   const [providers, setProviders] = useState<ProviderStatus[]>([])
   const [permissions, setPermissions] = useState<PermissionState | null>(null)
   const [displays, setDisplays] = useState<Array<{ index: number; label: string; primary: boolean; bounds: { width: number; height: number } }>>([])
+  /** Which global shortcuts the app actually holds. A taken one is reported. */
+  const [shortcuts, setShortcuts] = useState<Array<{ kind: 'toggle' | 'hide'; accelerator: string; registered: boolean }>>([])
   const [reportCount, setReportCount] = useState(0)
   const [version, setVersion] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -208,6 +211,10 @@ export function SettingsView({ onNavigate }: { onNavigate: (route: Route) => voi
       setLoadError(failures.length > 0 ? failures.join(' · ') : null)
     })()
     void window.klyro.screenListDisplays().then(setDisplays).catch(() => setDisplays([]))
+    void window.klyro
+      .shortcutStatus()
+      .then(setShortcuts)
+      .catch(() => setShortcuts([]))
   }, [])
 
   const patch = useCallback(async (next: Partial<AppSettings>): Promise<void> => {
@@ -317,7 +324,14 @@ export function SettingsView({ onNavigate }: { onNavigate: (route: Route) => voi
                 />
               </SettingRow>
               <SettingRow label="Quick-ask shortcut" hint="Opens the overlay from anywhere." stacked>
-                <input value={settings.toggleShortcut} onChange={(event) => void patch({ toggleShortcut: event.target.value })} />
+                <input
+                  value={settings.toggleShortcut}
+                  onChange={(event) =>
+                    void patch({ toggleShortcut: event.target.value }).then(() =>
+                      window.klyro.shortcutStatus().then(setShortcuts).catch(() => undefined)
+                    )
+                  }
+                />
               </SettingRow>
               <SettingRow
                 label={`Overlay visibility — ${settings.overlayOpacity === 100 ? 'solid' : `${settings.overlayOpacity}% opacity`}`}
@@ -379,6 +393,68 @@ export function SettingsView({ onNavigate }: { onNavigate: (route: Route) => voi
                   <span>Show it again</span>
                 </button>
               </SettingRow>
+            </Group>
+          )}
+
+          {section === 'desktop' && (
+            <Group
+              title="Running quietly"
+              description="What the desktop shows while Klyro is open. None of this changes what the operating system sees: the process is still there, still named Klyro, and still in Task Manager and System Monitor."
+            >
+              <SettingRow
+                label="Tray icon"
+                hint="Off removes the icon from the tray and the menu bar. The quick-ask shortcut still opens the overlay, and launching Klyro again brings this window back."
+              >
+                <input
+                  type="checkbox"
+                  checked={settings.showTray}
+                  onChange={(event) => void patch({ showTray: event.target.checked })}
+                />
+              </SettingRow>
+              <SettingRow
+                label="Keep this window out of the taskbar"
+                hint="Removes the taskbar button on Windows and Linux, and the Dock icon on macOS. The window still opens on screen while you are using it."
+              >
+                <input
+                  type="checkbox"
+                  checked={settings.hideFromTaskbar}
+                  onChange={(event) => void patch({ hideFromTaskbar: event.target.checked })}
+                />
+              </SettingRow>
+              <SettingRow
+                label="Hide everything shortcut"
+                hint="Instantly hides the overlay and this window. The process keeps running — a fast way off the screen, not a way out of the process list. Leave empty to turn it off."
+                stacked
+              >
+                <input
+                  value={settings.panicShortcut}
+                  placeholder="CommandOrControl+Shift+H"
+                  onChange={(event) =>
+                    void patch({ panicShortcut: event.target.value }).then(() =>
+                      window.klyro.shortcutStatus().then(setShortcuts).catch(() => undefined)
+                    )
+                  }
+                />
+              </SettingRow>
+              <SettingRow
+                label="Quit Klyro"
+                hint="With the tray icon off, this is how you stop the app without opening the task manager."
+              >
+                <button className="btn btn--ghost btn--sm" onClick={() => void window.klyro.quitApp()}>
+                  <Power className="icon icon--xs" aria-hidden="true" />
+                  <span>Quit</span>
+                </button>
+              </SettingRow>
+              {shortcuts
+                .filter((shortcut) => !shortcut.registered)
+                .map((shortcut) => (
+                  <Hint key={shortcut.kind}>
+                    <AlertCircle className="icon icon--xs" aria-hidden="true" />{' '}
+                    {shortcut.kind === 'toggle' ? 'The quick-ask' : 'The hide-everything'} shortcut{' '}
+                    <code>{shortcut.accelerator || '—'}</code> could not be registered — another app is probably
+                    using it. Pick a different combination, or the key will do nothing.
+                  </Hint>
+                ))}
             </Group>
           )}
 

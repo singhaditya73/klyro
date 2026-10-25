@@ -13,6 +13,7 @@ import type {
 
 const api: KlyroApi = {
   getAppInfo: () => ipcRenderer.invoke(IPC.appInfo),
+  quitApp: () => ipcRenderer.invoke(IPC.appQuit),
   getSettings: () => ipcRenderer.invoke(IPC.settingsGet),
   updateSettings: (patch: Partial<AppSettings>) => ipcRenderer.invoke(IPC.settingsUpdate, patch),
   onSettingsChanged: (listener: () => void) => {
@@ -47,15 +48,26 @@ const api: KlyroApi = {
 
   listCaptureSources: () => ipcRenderer.invoke(IPC.captureSources),
   grabScreen: (sourceId?: string) => ipcRenderer.invoke(IPC.captureGrab, sourceId),
-  transcribe: (audio: ArrayBuffer, mimeType: string, pcmBase64?: string) =>
-    ipcRenderer.invoke(IPC.transcribe, audio, mimeType, pcmBase64),
+  transcribe: (audio: ArrayBuffer, mimeType: string, pcm?: string | ArrayBuffer) => {
+    let pcmBase64: string | undefined
+    if (pcm instanceof ArrayBuffer) {
+      pcmBase64 = Buffer.from(pcm).toString('base64')
+    } else if (typeof pcm === 'string') {
+      pcmBase64 = pcm
+    }
+    return ipcRenderer.invoke(IPC.transcribe, audio, mimeType, pcmBase64)
+  },
+  prewarmTranscribe: () => ipcRenderer.invoke(IPC.transcribePrewarm),
+  ocrExtract: (image: string) => ipcRenderer.invoke(IPC.ocrExtract, image),
 
   checkPermissions: () => ipcRenderer.invoke(IPC.permissionsCheck),
   hideOverlay: () => ipcRenderer.invoke(IPC.windowHideOverlay),
+  minimizeOverlay: () => ipcRenderer.invoke(IPC.windowMinimizeOverlay),
   toggleOverlay: () => ipcRenderer.invoke(IPC.windowToggleOverlay),
-  resizeOverlay: (height: number) => ipcRenderer.invoke(IPC.overlayResize, height),
+  resizeOverlay: (height: number, width?: number) => ipcRenderer.invoke(IPC.overlayResize, height, width),
   privateModeStatus: () => ipcRenderer.invoke(IPC.windowPrivateModeStatus),
   setRecordingSticky: (sticky: boolean) => ipcRenderer.invoke(IPC.overlaySetRecordingSticky, sticky),
+  shortcutStatus: () => ipcRenderer.invoke(IPC.shortcutsStatus),
 
 
 
