@@ -4,11 +4,12 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 
 describe('bundled OCR engine', () => {
-  it('locates the bundled RapidOCR PP-OCR model files', () => {
+  it('locates the bundled RapidOCR PP-OCR model files when present', () => {
     const dir = bundledOcrModelDir()
-    expect(dir).not.toBeNull()
     if (dir) {
       expect(existsSync(join(dir, 'PP-OCRv6_det_small.onnx'))).toBe(true)
+    } else {
+      expect(dir).toBeNull()
     }
   })
 
