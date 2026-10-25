@@ -31,7 +31,7 @@
  *
  * Exits non-zero and prints the missing files, so CI fails before upload.
  */
-const { existsSync } = require('node:fs')
+const { existsSync, readFileSync } = require('node:fs')
 const path = require('node:path')
 const { join, resolve } = path
 // Archive paths are always forward-slash, whatever platform the check runs on,
@@ -58,6 +58,36 @@ if (!existsSync(archive)) {
 /** Every path inside the archive, normalized to forward slashes, no leading slash. */
 const entries = asar.listPackage(archive).map((entry) => entry.replace(/\\/g, '/').replace(/^\//, ''))
 const files = new Set(entries.filter((entry) => !entry.endsWith('/')))
+
+/**
+ * Optional dependencies are allowed to be absent.
+ *
+ * npm installs some of them on every platform (sharp's `@img/sharp-wasm32` is
+ * a pure-wasm fallback with no `os`/`cpu` restriction), while electron-builder
+ * leaves out what this platform cannot load. Optional means the code already
+ * handles the package not being there — sharp's `require` sits in a try/catch
+ * — so a missing one is not a packaging bug. Required dependencies still fail.
+ */
+function readOptionalPackages() {
+  const names = new Set()
+  for (const lockName of ['package-lock.json', 'npm-shrinkwrap.json']) {
+    let lock
+    try {
+      lock = JSON.parse(readFileSync(join(root, lockName), 'utf8'))
+    } catch {
+      continue
+    }
+    for (const [entryPath, entry] of Object.entries(lock.packages ?? {})) {
+      if (!entry || entry.optional !== true) continue
+      const index = entryPath.lastIndexOf('node_modules/')
+      if (index === -1) continue
+      names.add(entryPath.slice(index + 'node_modules/'.length))
+    }
+    return names
+  }
+  return names
+}
+const optionalPackages = readOptionalPackages()
 
 const unpackedRoot = archive.replace(/app\.asar$/, 'app.asar.unpacked')
 
@@ -97,6 +127,7 @@ const isTypesOnly = (target) => /\.d\.(ts|mts|cts)$/.test(target)
 const SKIP_CONDITIONS = new Set(['types', 'import', 'browser', 'deno', 'development'])
 
 const missing = []
+const optionalSkipped = new Set()
 const checked = { packages: 0, entries: 0, requires: 0, dependencies: 0, native: 0 }
 
 // --- 1. declared entry points ---------------------------------------------
@@ -267,8 +298,11 @@ while (queue.length > 0 && seen.size < MAX_FILES) {
       const name = packageName(specifier)
       const dir = packageDir(file, name)
       if (!dir) {
-        if (existsSync(join(root, 'node_modules', name, 'package.json'))) {
-          missing.push({ kind: 'dependency', from: file, target: name })
+        // Not installed at all: nothing was removed by packaging.
+        const installed = existsSync(join(root, 'node_modules', name, 'package.json'))
+        if (installed) {
+          if (optionalPackages.has(name)) optionalSkipped.add(name)
+          else missing.push({ kind: 'dependency', from: file, target: name })
         }
         continue
       }
@@ -306,6 +340,9 @@ for (const item of missing) unique.set(`${item.from} -> ${item.target}`, item)
 console.log(
   `package check: ${checked.packages} packages, ${checked.entries} entry points, ${checked.requires} relative imports, ${checked.dependencies} bare imports, ${checked.native} native libraries, ${files.size} files`
 )
+if (optionalSkipped.size > 0) {
+  console.log(`package check: optional dependencies not shipped (allowed): ${[...optionalSkipped].sort().join(', ')}`)
+}
 
 if (unique.size > 0) {
   console.error(`package check FAILED: ${unique.size} runtime file(s) missing from ${archive}`)
