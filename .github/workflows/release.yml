@@ -85,3 +85,7 @@ jobs:
           gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1 \
             || gh release create "$TAG" --repo "$REPO" --title "Klyro $TAG" --generate-notes
           gh release upload "$TAG" --repo "$REPO" --clobber artifacts/*
+          # A draft can be left behind by an earlier attempt (or made by hand).
+          # Publishing it explicitly is what makes the new version the public
+          # "Latest"; without this the release page keeps showing the old one.
+          gh release edit "$TAG" --repo "$REPO" --draft=false --latest
