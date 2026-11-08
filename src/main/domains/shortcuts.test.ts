@@ -10,7 +10,7 @@ vi.mock('electron', () => ({
   globalShortcut: { register: vi.fn(() => true), unregisterAll: vi.fn() }
 }))
 vi.mock('./settings', () => ({ settingsDomain: { get: () => ({}) } }))
-vi.mock('./windows', () => ({ toggleOverlay: vi.fn(), hideEverything: vi.fn() }))
+vi.mock('./windows', () => ({ toggleOverlay: vi.fn(), hideEverything: vi.fn(), panicKillswitch: vi.fn(), toggleOverlayGhostMode: vi.fn() }))
 
 const { shortcutBindings } = await import('./shortcuts')
 
@@ -42,5 +42,24 @@ describe('which shortcuts are registered', () => {
 
   it('falls back to the documented default when the toggle is cleared', () => {
     expect(shortcutBindings({ toggleShortcut: '' })[0].accelerator).toBe('CommandOrControl+Shift+Space')
+  })
+
+  it('registers the ghost-mode shortcut when it is set', () => {
+    expect(
+      shortcutBindings({
+        toggleShortcut: 'A',
+        panicShortcut: 'B',
+        ghostShortcut: 'CommandOrControl+Shift+G'
+      })
+    ).toEqual([
+      { kind: 'toggle', accelerator: 'A' },
+      { kind: 'hide', accelerator: 'B' },
+      { kind: 'ghost', accelerator: 'CommandOrControl+Shift+G' }
+    ])
+  })
+
+  it('never registers the ghost shortcut over the other two', () => {
+    const bindings = shortcutBindings({ toggleShortcut: 'A', panicShortcut: 'B', ghostShortcut: 'B' })
+    expect(bindings.map((binding) => binding.kind)).toEqual(['toggle', 'hide'])
   })
 })

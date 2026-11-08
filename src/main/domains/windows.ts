@@ -116,7 +116,7 @@ function baseWebPreferences(): Electron.WebPreferences {
   }
 }
 
-export function createMainWindow(): BrowserWindow {
+export function createMainWindow(options: { show?: boolean } = {}): BrowserWindow {
   if (mainWindow && !mainWindow.isDestroyed()) return mainWindow
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -129,7 +129,11 @@ export function createMainWindow(): BrowserWindow {
     backgroundColor: '#0b0d12',
     webPreferences: baseWebPreferences()
   })
-  mainWindow.once('ready-to-show', () => mainWindow?.show())
+  // A hidden control panel is created for the HUD-first startup: it must not
+  // put itself on screen, and `showMainWindow()` can reveal it later.
+  if (options.show !== false) {
+    mainWindow.once('ready-to-show', () => mainWindow?.show())
+  }
   applyMainWindowVisibility()
   attachNavigationGuards(mainWindow)
   loadRoute(mainWindow, '/')
@@ -155,6 +159,7 @@ export function createOverlayWindow(): BrowserWindow {
     alwaysOnTop: true,
     skipTaskbar: true,
     fullscreenable: false,
+    focusable: !overlayZeroFocus,
     // Matched to the renderer's glass surface so the window never flashes a
     // different colour on the way in.
     backgroundColor: '#14171b',
@@ -256,6 +261,107 @@ export function applyOverlayOpacity(): number {
 /** Meeting-assist recording keeps the overlay alive across focus changes. */
 export function setOverlayStickyRecording(sticky: boolean): void {
   overlayStickyRecording = sticky === true
+}
+
+let overlayGhostMode = false
+
+export function getOverlayGhostMode(): boolean {
+  return overlayGhostMode
+}
+
+export function setOverlayGhostMode(ghost: boolean): boolean {
+  if (!overlayWindow || overlayWindow.isDestroyed()) return false
+  overlayGhostMode = ghost
+  try {
+    if (ghost) {
+      overlayWindow.setIgnoreMouseEvents(true, { forward: true })
+      overlayWindow.setOpacity(0.22)
+    } else {
+      overlayWindow.setIgnoreMouseEvents(false)
+      applyOverlayOpacity()
+    }
+    overlayWindow.webContents.send('overlay:ghostModeChanged', ghost)
+  } catch (error) {
+    logger.warn('Failed to set ghost mode', error)
+  }
+  return overlayGhostMode
+}
+
+export function toggleOverlayGhostMode(): boolean {
+  return setOverlayGhostMode(!overlayGhostMode)
+}
+
+let overlayZeroFocus = false
+
+export function getOverlayZeroFocus(): boolean {
+  return overlayZeroFocus
+}
+
+export function setOverlayZeroFocus(zeroFocus: boolean): boolean {
+  overlayZeroFocus = zeroFocus
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    try {
+      overlayWindow.setFocusable(!zeroFocus)
+      overlayWindow.webContents.send('overlay:zeroFocusChanged', zeroFocus)
+    } catch {
+      // Ignored
+    }
+  }
+  return overlayZeroFocus
+}
+
+export function toggleOverlayZeroFocus(): boolean {
+  return setOverlayZeroFocus(!overlayZeroFocus)
+}
+
+/** Snap overlay directly beneath the webcam notch for direct eye contact. */
+export function snapOverlayToNotch(): void {
+  if (!overlayWindow || overlayWindow.isDestroyed()) return
+  const display = overlayDisplay()
+  const { workArea } = display
+  const width = userOverlayWidth || OVERLAY_WIDTH
+  const height = overlayContentHeight || OVERLAY_HEIGHT
+  const x = Math.round(workArea.x + (workArea.width - width) / 2)
+  const y = Math.round(workArea.y + 4)
+  userOverlayPos = { x, y }
+  overlayWindow.setBounds({ x, y, width, height })
+  applyOverlayPrivateMode()
+}
+
+/**
+ * Emergency panic killswitch: vanishes overlay, clears active stream, hides all windows.
+ */
+export function panicKillswitch(): void {
+  try {
+    // Panic must not leave stealth modes behind: the next show has to be
+    // clickable and focusable, otherwise the user cannot get back in.
+    overlayGhostMode = false
+    overlayZeroFocus = false
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+      try {
+        overlayWindow.setIgnoreMouseEvents(false)
+        overlayWindow.setFocusable(true)
+        applyOverlayOpacity()
+      } catch {
+        // Best effort: the window is being hidden anyway.
+      }
+      overlayWindow.webContents.send('overlay:emergencyReset')
+      overlayWindow.hide()
+    }
+    hideEverything()
+    // The phone mirror shows the same meeting on another screen: a killswitch
+    // that leaves it streaming would only hide half the content.
+    import('./remote-hud')
+      .then(({ stopRemoteHudServer }) => stopRemoteHudServer())
+      .catch(() => undefined)
+    import('./chat')
+      .then(({ abortChat }) => {
+        abortChat()
+      })
+      .catch(() => undefined)
+  } catch (error) {
+    logger.warn('panicKillswitch failed', error)
+  }
 }
 
 /**
@@ -382,15 +488,20 @@ function overlayOpacityValue(): number {
  * launch, so the hotkey only pays for the animation.
  */
 function showOverlayAnimated(win: BrowserWindow): void {
-  const target = overlayOpacityValue()
+  // Ghost mode is deliberately faint; do not fade it up to full opacity.
+  const target = overlayGhostMode ? 0.22 : overlayOpacityValue()
   const started = Date.now()
   try {
     win.setOpacity(0)
   } catch {
     // Some Linux compositors refuse opacity changes; the overlay still shows.
   }
-  win.show()
-  win.focus()
+  if (overlayZeroFocus) {
+    win.showInactive()
+  } else {
+    win.show()
+    win.focus()
+  }
   const step = (): void => {
     if (!overlayWindow || overlayWindow.isDestroyed()) return
     const elapsed = Date.now() - started

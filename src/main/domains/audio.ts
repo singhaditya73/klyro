@@ -4,6 +4,7 @@ import { resolveRoute } from '../providers/routing'
 import { usage } from './usage'
 import { settingsDomain } from './settings'
 import { daemon, bundledWhisperModelPath } from './daemon'
+import { prefetchKnowledgeContext } from './context'
 import { logger } from '../logger'
 
 /**
@@ -34,6 +35,7 @@ export async function transcribeAudio(audio: ArrayBuffer, mimeType: string, pcmB
           mimeType
         })
         usage.record(providerId, 'transcribe')
+        if (text && text.trim().length > 4) prefetchKnowledgeContext(text)
         return text
       } catch (error) {
         logger.warn(`Provider ${providerId} transcription failed: ${(error as Error).message}. Attempting local fallback...`)
@@ -47,6 +49,7 @@ export async function transcribeAudio(audio: ArrayBuffer, mimeType: string, pcmB
     try {
       const text = await daemon.transcribe(pcmBase64, modelPath)
       usage.record(providerId, 'transcribe')
+      if (text && text.trim().length > 4) prefetchKnowledgeContext(text)
       return text
     } catch (error) {
       logger.error(`Local Whisper transcription error: ${(error as Error).message}`)

@@ -1,4 +1,6 @@
 import { join } from 'node:path'
+import { setFlagsFromString } from 'node:v8'
+import { runInNewContext } from 'node:vm'
 import { BrowserWindow, app, desktopCapturer, session } from 'electron'
 import { logger } from './logger'
 import { diagnostics } from './diagnostics'
@@ -8,7 +10,7 @@ import { registerIpcHandlers } from './domains/ipc'
 import { registerShortcuts, unregisterShortcuts } from './domains/shortcuts'
 import { settingsDomain } from './domains/settings'
 import { applyTrayVisibility } from './domains/tray'
-import { createMainWindow, createOverlayWindow, showMainWindow } from './domains/windows'
+import { createMainWindow, createOverlayWindow, showMainWindow, toggleOverlay } from './domains/windows'
 import { maintenance } from './domains/maintenance'
 import { interviews } from './domains/interviews'
 import { conversations } from './domains/conversations'
@@ -19,8 +21,61 @@ import { localAgentLauncher } from './domains/local-agent-launcher'
 import { antigravity } from './domains/antigravity'
 import { daemon } from './domains/daemon'
 import { prewarmOcr } from './domains/ocr'
+import { installAirgapFetchGuard, setAirgapShield } from './providers/request'
 
 app.setName('Klyro')
+
+// Hardware Acceleration, Zero-Copy GPU Rasterization & V8 Memory Flags
+app.commandLine.appendSwitch('enable-gpu-rasterization')
+app.commandLine.appendSwitch('enable-zero-copy')
+app.commandLine.appendSwitch('ignore-gpu-blocklist')
+// Screen Recording Border & Indicator Bypass (Prevents Windows 11 / macOS yellow/purple capture borders)
+app.commandLine.appendSwitch('disable-features', 'DrawBorderOnScreenCapture,ScreenCaptureBorder,CaptureBorder')
+
+// Periodic V8 heap compaction on idle to keep RAM minimal. `js-flags` only
+// applies to renderer processes, so the main process needs its own GC handle.
+const IDLE_GC_INTERVAL_MS = 5 * 60_000
+/** Forcing a collection below this heap size costs more than it reclaims. */
+const IDLE_GC_HEAP_THRESHOLD_BYTES = 120 * 1024 * 1024
+let idleGcTimer: NodeJS.Timeout | null = null
+let mainProcessGc: (() => void) | null = null
+
+/** Expose V8's collector in the main process (the `--expose-gc` trick). */
+function resolveMainProcessGc(): (() => void) | null {
+  if (mainProcessGc) return mainProcessGc
+  try {
+    setFlagsFromString('--expose-gc')
+    const candidate: unknown = runInNewContext('gc')
+    if (typeof candidate === 'function') mainProcessGc = candidate as () => void
+  } catch {
+    // GC is an optimisation, not a requirement.
+  }
+  return mainProcessGc
+}
+
+function startIdleMemoryCompaction(): void {
+  if (idleGcTimer) clearInterval(idleGcTimer)
+  const gc = resolveMainProcessGc()
+  if (!gc) {
+    logger.info('Main-process GC is unavailable; idle compaction is disabled')
+    return
+  }
+  idleGcTimer = setInterval(() => {
+    try {
+      // Only compact when the user is not looking at a window, and only when
+      // there is enough garbage to make the pause worth taking.
+      const focused = BrowserWindow.getAllWindows().some(
+        (window) => !window.isDestroyed() && window.isFocused()
+      )
+      if (focused) return
+      if (process.memoryUsage().heapUsed < IDLE_GC_HEAP_THRESHOLD_BYTES) return
+      gc()
+    } catch {
+      // GC optional
+    }
+  }, IDLE_GC_INTERVAL_MS)
+  idleGcTimer.unref()
+}
 
 /** Strict CSP in production; the dev server needs inline scripts for HMR. */
 function applyContentSecurityPolicy(): void {
@@ -89,6 +144,11 @@ if (!gotLock) {
     secrets.init()
     setPackagedRenderer(join(__dirname, '../renderer/index.html'))
     settingsDomain.get() // applies the plaintext-secrets policy before any key is written
+    // Restore the local-only network switch before the first provider request.
+    // The fetch guard covers every other outbound call (calendar, webhooks,
+    // diagnostics), not just the provider adapter path.
+    installAirgapFetchGuard()
+    setAirgapShield(settingsDomain.get().airgap === true)
     // Remove leftovers from a previous run before anything writes again.
     maintenance.sweep()
     // A retention policy is only a policy if it is applied: what is older than
@@ -102,15 +162,29 @@ if (!gotLock) {
     applyPermissionPolicy()
     applyDisplayMediaPolicy()
     registerIpcHandlers()
-    createMainWindow()
-    createOverlayWindow()
+    // First run: the control panel, because onboarding (provider key, model,
+    // permissions) needs a real window. Every later run: the HUD, with the
+    // control panel one click away — its own button, the tray, and the
+    // "launch Klyro again" path all open it.
+    const showPanelAtLaunch = settingsDomain.get().onboardingComplete !== true
+    createMainWindow({ show: showPanelAtLaunch })
+    const overlay = createOverlayWindow()
     applyTrayVisibility()
     registerShortcuts()
-    // Ask the OS for screen-capture permission at launch, not in the middle of
-    // a meeting: on macOS the first capture raises a system prompt, and it is
-    // much better to answer it before the call starts. Windows never asks per
-    // capture, and on Linux (Wayland portals) asking here would pop a dialog
-    // at launch — so the warm-up is macOS-only.
+    if (!showPanelAtLaunch) {
+      // Wait for the renderer so the HUD fades in already painted instead of
+      // flashing an empty background colour.
+      if (overlay.webContents.isLoading()) {
+        overlay.once('ready-to-show', () => toggleOverlay())
+      } else {
+        toggleOverlay()
+      }
+    }
+    // Opt-in only: a capture permission prompt at launch is a prompt the user
+    // did not trigger. This stays off unless the user turns on
+    // "Ask for screen permission at launch" in Settings; capture asks for the
+    // permission on the click instead. macOS-only, because Windows never asks
+    // per capture and the Wayland portal would raise a dialog at startup.
     if (settingsDomain.get().screenPreWarm && process.platform === 'darwin') {
       void warmupScreenPermission()
     }
@@ -123,6 +197,7 @@ if (!gotLock) {
     // runtime. If it is not built, the app carries on without it.
     void daemon.start()
     prewarmOcr()
+    startIdleMemoryCompaction()
     logger.info(`Klyro ${app.getVersion()} ready on ${process.platform}`)
 
     app.on('activate', () => {
@@ -136,6 +211,7 @@ if (!gotLock) {
   })
 
   app.on('will-quit', () => {
+    if (idleGcTimer) clearInterval(idleGcTimer)
     unregisterShortcuts()
     // Never leave a server we started running behind us.
     localAgentLauncher.stopOpenCode()

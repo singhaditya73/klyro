@@ -110,4 +110,23 @@ describe('meeting-notes formatting', () => {
     expect(ratio.userPct + ratio.othersPct).toBe(100)
     expect(ratio.pacingNote).toBeTruthy()
   })
+
+  it('calculates multi-speaker breakdown for 3+ attendee meetings', () => {
+    const multiSpeakerSession: InterviewSession = {
+      ...sampleSession,
+      transcript: [
+        '[You]: Thanks everyone for hopping on the architecture review.',
+        '[Alice]: What are the latency requirements for the local embeddings?',
+        '[Bob]: We need under 2 seconds E2E response time.',
+        '[Alice]: That sounds feasible with local ONNX models.'
+      ]
+    }
+    const ratio = computeTalkRatio(multiSpeakerSession)
+    expect(ratio.speakers).toBeDefined()
+    expect(ratio.speakers!.length).toBe(3)
+    const speakers = ratio.speakers!
+    expect(speakers.map((s) => s.label)).toContain('You')
+    expect(speakers.map((s) => s.label)).toContain('Alice')
+    expect(speakers.map((s) => s.label)).toContain('Bob')
+  })
 })

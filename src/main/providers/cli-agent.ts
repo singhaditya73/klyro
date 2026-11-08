@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { isAirgapShield } from './request'
 
 /**
  * Shared runner for local agent CLIs.
@@ -31,6 +32,15 @@ export class CliAgentError extends Error {
 
 export async function* runCliAgent(options: CliAgentOptions): AsyncGenerator<string, void, unknown> {
   const { binary, args, parseLine, plain, signal, timeoutMs = 180000 } = options
+  // A CLI agent is a separate process with its own network access. While the
+  // airgap shield is on, refusing it is the only honest option: Klyro cannot
+  // inspect whether the agent is talking to a local server or the cloud.
+  if (isAirgapShield()) {
+    throw new CliAgentError(
+      `Airgap Shield is on: ${binary} is an external agent and may reach the network. Turn the shield off in Settings to use it.`,
+      ''
+    )
+  }
   const command = process.platform === 'win32' ? `"${binary}"` : binary
   const child = spawn(command, args, {
     stdio: ['ignore', 'pipe', 'pipe'],

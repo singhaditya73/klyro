@@ -60,10 +60,36 @@ const api: KlyroApi = {
   prewarmTranscribe: () => ipcRenderer.invoke(IPC.transcribePrewarm),
   ocrExtract: (image: string) => ipcRenderer.invoke(IPC.ocrExtract, image),
 
-  checkPermissions: () => ipcRenderer.invoke(IPC.permissionsCheck),
+   checkPermissions: () => ipcRenderer.invoke(IPC.permissionsCheck),
   hideOverlay: () => ipcRenderer.invoke(IPC.windowHideOverlay),
+  showMainWindow: () => ipcRenderer.invoke(IPC.windowShowMain),
   minimizeOverlay: () => ipcRenderer.invoke(IPC.windowMinimizeOverlay),
   toggleOverlay: () => ipcRenderer.invoke(IPC.windowToggleOverlay),
+  snapToNotch: () => ipcRenderer.invoke(IPC.windowSnapToNotch),
+  setGhostMode: (enabled: boolean) => ipcRenderer.invoke(IPC.windowSetGhostMode, enabled),
+  setZeroFocus: (enabled: boolean) => ipcRenderer.invoke(IPC.windowSetZeroFocus, enabled),
+  panicKillswitch: () => ipcRenderer.invoke(IPC.windowPanicKillswitch),
+  humanizeType: (text: string, options?: { wpm?: number }) => ipcRenderer.invoke(IPC.humanizeType, text, options),
+  remoteHudStart: (port?: number) => ipcRenderer.invoke(IPC.remoteHudStart, port),
+  remoteHudStop: () => ipcRenderer.invoke(IPC.remoteHudStop),
+  remoteHudStatus: () => ipcRenderer.invoke(IPC.remoteHudStatus),
+  remoteHudTranscript: (line: string) => ipcRenderer.invoke(IPC.remoteHudTranscript, line),
+  setAirgap: (enabled: boolean) => ipcRenderer.invoke(IPC.networkSetAirgap, enabled),
+  onEmergencyReset: (listener: () => void) => {
+    const fn = (): void => listener()
+    ipcRenderer.on('overlay:emergencyReset', fn)
+    return () => ipcRenderer.off('overlay:emergencyReset', fn)
+  },
+  onGhostModeChanged: (listener: (ghost: boolean) => void) => {
+    const fn = (_event: unknown, ghost: boolean): void => listener(ghost)
+    ipcRenderer.on('overlay:ghostModeChanged', fn)
+    return () => ipcRenderer.off('overlay:ghostModeChanged', fn)
+  },
+  onZeroFocusChanged: (listener: (zeroFocus: boolean) => void) => {
+    const fn = (_event: unknown, zeroFocus: boolean): void => listener(zeroFocus)
+    ipcRenderer.on('overlay:zeroFocusChanged', fn)
+    return () => ipcRenderer.off('overlay:zeroFocusChanged', fn)
+  },
   resizeOverlay: (height: number, width?: number) => ipcRenderer.invoke(IPC.overlayResize, height, width),
   privateModeStatus: () => ipcRenderer.invoke(IPC.windowPrivateModeStatus),
   setRecordingSticky: (sticky: boolean) => ipcRenderer.invoke(IPC.overlaySetRecordingSticky, sticky),
@@ -162,7 +188,14 @@ const api: KlyroApi = {
   mcpAddServer: (input: any) => ipcRenderer.invoke(IPC.mcpAddServer, input),
   mcpRemoveServer: (id: string) => ipcRenderer.invoke(IPC.mcpRemoveServer, id),
   mcpToggleServer: (id: string, enabled: boolean) => ipcRenderer.invoke(IPC.mcpToggleServer, { id, enabled }),
-  mcpTestServer: (id: string) => ipcRenderer.invoke(IPC.mcpTestServer, id)
+  mcpTestServer: (id: string) => ipcRenderer.invoke(IPC.mcpTestServer, id),
+
+  calendarGetStatus: () => ipcRenderer.invoke(IPC.calendarGetStatus),
+  calendarSetFeedUrl: (url: string | null) => ipcRenderer.invoke(IPC.calendarSetFeedUrl, url),
+  calendarSync: (feedUrl?: string) => ipcRenderer.invoke(IPC.calendarSync, feedUrl),
+  calendarGetUpcoming: () => ipcRenderer.invoke(IPC.calendarGetUpcoming),
+  calendarDismiss: (id: string) => ipcRenderer.invoke(IPC.calendarDismiss, id),
+  calendarToggleAutoDetect: (enabled: boolean) => ipcRenderer.invoke(IPC.calendarToggleAutoDetect, enabled)
 }
 
 contextBridge.exposeInMainWorld('klyro', api)

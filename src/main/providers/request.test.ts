@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ProviderError } from './errors'
-import { openResponse, responseDetail } from './request'
+import { isLocalEndpoint, openResponse, responseDetail, setAirgapShield } from './request'
 
 const noSleep = async (): Promise<void> => undefined
 
 afterEach(() => {
+  setAirgapShield(false)
   vi.unstubAllGlobals()
 })
 
@@ -114,6 +115,38 @@ describe('openResponse', () => {
       openResponse('https://api.example.com/v1/models', {}, { signal: controller.signal, sleep: noSleep })
     ).rejects.toMatchObject({ kind: 'cancelled' })
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('refuses a hosted endpoint while the airgap shield is on', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ ok: true }))
+    vi.stubGlobal('fetch', fetchMock)
+    setAirgapShield(true)
+
+    await expect(openResponse('https://api.openai.com/v1/models', {}, { sleep: noSleep })).rejects.toThrow(
+      /Airgap Shield/
+    )
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('still reaches loopback while the airgap shield is on', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ ok: true }))
+    vi.stubGlobal('fetch', fetchMock)
+    setAirgapShield(true)
+
+    await expect(
+      openResponse('http://localhost:11434/api/chat', {}, { provider: 'ollama', sleep: noSleep })
+    ).resolves.toBeTruthy()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('isLocalEndpoint', () => {
+  it('only treats loopback as local', () => {
+    expect(isLocalEndpoint('http://localhost:11434/api/chat')).toBe(true)
+    expect(isLocalEndpoint('http://127.0.0.1:1234/v1')).toBe(true)
+    expect(isLocalEndpoint('http://[::1]:8080/v1')).toBe(true)
+    expect(isLocalEndpoint('https://api.groq.com/openai/v1')).toBe(false)
+    expect(isLocalEndpoint('http://192.168.1.10:11434')).toBe(false)
   })
 })
 

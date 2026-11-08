@@ -1,11 +1,11 @@
 import { globalShortcut } from 'electron'
 import { logger } from '../logger'
 import { settingsDomain } from './settings'
-import { hideEverything, toggleOverlay } from './windows'
+import { panicKillswitch, toggleOverlay, toggleOverlayGhostMode } from './windows'
 
 const DEFAULT_ACCELERATOR = 'CommandOrControl+Shift+Space'
 
-export type ShortcutKind = 'toggle' | 'hide'
+export type ShortcutKind = 'toggle' | 'hide' | 'ghost'
 
 export interface ShortcutBinding {
   kind: ShortcutKind
@@ -14,19 +14,18 @@ export interface ShortcutBinding {
 
 /**
  * Which global shortcuts to register, and what each one does.
- *
- * Pure on purpose: an empty hide shortcut means "off", and the same
- * accelerator twice would make the second registration fail silently, so both
- * cases are decided here and can be tested without an OS.
  */
 export function shortcutBindings(settings: {
   toggleShortcut?: string
   panicShortcut?: string
+  ghostShortcut?: string
 }): ShortcutBinding[] {
   const toggle = (settings.toggleShortcut || '').trim() || DEFAULT_ACCELERATOR
   const bindings: ShortcutBinding[] = [{ kind: 'toggle', accelerator: toggle }]
   const hide = (settings.panicShortcut || '').trim()
   if (hide && hide !== toggle) bindings.push({ kind: 'hide', accelerator: hide })
+  const ghost = (settings.ghostShortcut || '').trim()
+  if (ghost && ghost !== toggle && ghost !== hide) bindings.push({ kind: 'ghost', accelerator: ghost })
   return bindings
 }
 
@@ -42,12 +41,14 @@ export function registerShortcuts(): void {
   unregisterShortcuts()
   for (const binding of shortcutBindings(settingsDomain.get())) {
     try {
-      const ok = globalShortcut.register(binding.accelerator, () =>
-        binding.kind === 'toggle' ? toggleOverlay() : hideEverything()
-      )
+      const ok = globalShortcut.register(binding.accelerator, () => {
+        if (binding.kind === 'toggle') toggleOverlay()
+        else if (binding.kind === 'ghost') toggleOverlayGhostMode()
+        else panicKillswitch()
+      })
       if (!ok) {
         logger.warn(
-          `${binding.kind === 'toggle' ? 'Global' : 'Hide'} shortcut unavailable (already in use?): ${binding.accelerator}`
+          `${binding.kind} shortcut unavailable (already in use?): ${binding.accelerator}`
         )
       }
     } catch (error) {

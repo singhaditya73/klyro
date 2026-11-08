@@ -3,7 +3,7 @@ import type { KnowledgeHit, MemoryDraft, MemoryRecord, MemorySource } from '@sha
 import { logger } from '../logger'
 import { getProvider } from '../providers'
 import { resolveRoute } from '../providers/routing'
-import { bm25Search, jaccard } from '../knowledge/retrieval'
+import { hybridSearch, jaccard } from '../knowledge/retrieval'
 import { JsonStore } from '../store/json-store'
 import { usage } from './usage'
 import { settingsDomain } from './settings'
@@ -132,7 +132,7 @@ class MemoryDomain {
     const records = this.store.get().records
     if (records.length === 0) return []
     const pinned = records.filter((record) => record.pinned)
-    const ranked = bm25Search(
+    const ranked = hybridSearch(
       query,
       records.map((record) => ({ id: record.id, text: `${record.text} ${record.tags.join(' ')}` })),
       limit
@@ -148,7 +148,7 @@ class MemoryDomain {
 
   search(query: string, limit = 20): KnowledgeHit[] {
     const records = this.store.get().records
-    const ranked = bm25Search(
+    const ranked = hybridSearch(
       query,
       records.map((record) => ({ id: record.id, text: `${record.text} ${record.tags.join(' ')}` })),
       limit

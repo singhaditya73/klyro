@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { evaluateRetrieval, type EvalCase } from './eval'
-import { chunkDocument, reciprocalRank, type Doc } from './retrieval'
+import { chunkDocument, hybridSearch, reciprocalRank, type Doc } from './retrieval'
 
 /**
  * Retrieval evaluation fixtures.
  *
  * The corpus is deliberately small and deterministic. Two families of queries
  * are measured: keyword-style queries (which lexical BM25 should handle) and
- * paraphrases (which it provably does not). Keeping the paraphrase family in the
- * suite is what lets us say "we evaluated embeddings" instead of guessing.
+ * paraphrases (which lexical retrieval provably does not). Keeping the
+ * paraphrase family in the suite documents the real limit of a local TF-IDF
+ * vector index instead of pretending it is a semantic embedding model.
  */
 const corpus: Doc[] = [
   { id: 'keys', text: 'API keys are encrypted at rest using the operating system keychain or DPAPI.' },
@@ -57,9 +58,23 @@ describe('retrieval evaluation', () => {
 
   it('documents the known paraphrase gap (lexical retrieval fails these)', () => {
     const report = evaluateRetrieval(corpus, paraphraseCases, 5)
-    // This is the measured reason hybrid/embedding search was not justified yet:
-    // it would fix exactly these cases, but nothing else in the suite is failing.
     expect(report.recallAtK).toBe(0)
+  })
+
+  it('does not claim to close the paraphrase gap with lexical vectors', () => {
+    const report = evaluateRetrieval(corpus, paraphraseCases, 5, hybridSearch)
+    // The vector index is TF-IDF (lexical), not a neural embedding: it must not
+    // pretend words with no shared vocabulary are related.
+    expect(report.recallAtK).toBe(0)
+  })
+
+  it('uses character trigrams to match morphological variants', () => {
+    const docs: Doc[] = [
+      { id: 'transcribe', text: 'The meeting was transcribed in fifteen second chunks.' },
+      { id: 'release', text: 'Release builds are published as AppImage and deb artifacts.' }
+    ]
+    const ranked = hybridSearch('transcription', docs, 1)
+    expect(ranked[0]?.id).toBe('transcribe')
   })
 })
 

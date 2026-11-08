@@ -1384,6 +1384,112 @@ button.pill:hover { background: var(--surface-hover); color: var(--text-primary)
 }
 .overlay__state-label { max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ---------- Upcoming Meeting Banner / Chip ---------- */
+.overlay__meeting-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin: 0 var(--space-3) var(--space-2);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: rgba(16, 26, 22, 0.95);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25), 0 0 12px rgba(52, 211, 153, 0.08);
+  animation: bannerSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes bannerSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.overlay__meeting-banner-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.overlay__meeting-banner-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: rgba(52, 211, 153, 0.15);
+  color: var(--status-ok);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.overlay__meeting-banner-details {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.overlay__meeting-banner-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.25;
+}
+
+.overlay__meeting-banner-company {
+  color: var(--status-ok);
+  font-weight: 500;
+}
+
+.overlay__meeting-banner-sub {
+  display: flex;
+  align-items: center;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overlay__meeting-banner-status {
+  color: var(--status-ok);
+  font-weight: 600;
+}
+
+.overlay__meeting-banner-participants {
+  color: var(--text-muted);
+}
+
+.overlay__meeting-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.overlay__meeting-banner-start {
+  background: linear-gradient(135deg, rgba(52, 211, 153, 0.95), rgba(16, 185, 129, 0.95)) !important;
+  color: #061c14 !important;
+  font-weight: 600 !important;
+  border: 1px solid rgba(52, 211, 153, 0.4) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3) !important;
+}
+
+.overlay__meeting-banner-start:hover {
+  background: linear-gradient(135deg, rgba(52, 211, 153, 1), rgba(16, 185, 129, 1)) !important;
+}
+
 /* ---------- Composer ---------- */
 .overlay__composer {
   display: flex;
@@ -1495,12 +1601,22 @@ button.pill:hover { background: var(--surface-hover); color: var(--text-primary)
   animation: blink 1.4s var(--ease-inout) infinite;
 }
 .overlay__source {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: var(--text-xs);
   color: var(--text-muted);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-pill);
   padding: 1px 8px;
   white-space: nowrap;
+  line-height: 1.4;
+}
+.overlay__source--dual {
+  color: var(--status-ok);
+  border-color: rgba(62, 207, 142, 0.4);
+  background: rgba(62, 207, 142, 0.08);
+  font-weight: 550;
 }
 .overlay__note {
   display: inline-flex;
@@ -1555,6 +1671,33 @@ button.pill:hover { background: var(--surface-hover); color: var(--text-primary)
   overflow-wrap: anywhere;
 }
 .overlay__answer--error { color: var(--danger-hover); white-space: pre-wrap; }
+.overlay__citation-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #7dd3fc;
+  padding: 1px 7px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  margin: 0 3px;
+  cursor: help;
+  vertical-align: baseline;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+.overlay__citation-badge:hover {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: rgba(56, 189, 248, 0.55);
+  color: #bae6fd;
+  transform: translateY(-1px);
+}
+.overlay__citation-icon {
+  font-size: 10px;
+  opacity: 0.85;
+}
 .overlay__waiting {
   display: inline-flex;
   align-items: center;
@@ -1575,6 +1718,174 @@ button.pill:hover { background: var(--surface-hover); color: var(--text-primary)
   0%, 100% { opacity: 0.25; transform: translateY(0); }
   50% { opacity: 1; transform: translateY(-2px); }
 }
+
+/* ---------- Optimistic Skeleton Preview (Predictive UI) ---------- */
+.overlay__optimistic-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-1) 0;
+  box-sizing: border-box;
+}
+
+.overlay__skeleton-bar {
+  height: 12px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.11) 50%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.4s ease-in-out infinite;
+}
+
+.overlay__skeleton-bar--title {
+  width: 55%;
+  height: 14px;
+}
+
+.overlay__skeleton-bar--body {
+  width: 92%;
+}
+
+.overlay__skeleton-bar--short {
+  width: 70%;
+}
+
+@keyframes skeletonShimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ---------- Stealth Decoy Camouflage (Notepad Skin) ---------- */
+.overlay__decoy {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 180px;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  font-family: 'Consolas', 'Segoe UI', monospace, sans-serif;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  user-select: none;
+}
+
+.overlay__decoy-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 10px;
+  background: #2d2d2d;
+  border-bottom: 1px solid #3c3c3c;
+  font-size: 12px;
+}
+
+.overlay__decoy-title {
+  font-weight: 500;
+  color: #cccccc;
+}
+
+.overlay__decoy-menu {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: #999999;
+}
+
+.overlay__decoy-close {
+  background: none;
+  border: none;
+  color: #888888;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.overlay__decoy-close:hover {
+  color: #ffffff;
+}
+
+.overlay__decoy-content {
+  flex: 1;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  background: #1e1e1e;
+  color: #d4d4d4;
+}
+
+.overlay__decoy-line {
+  white-space: pre-wrap;
+}
+
+.overlay__decoy-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 15px;
+  background: #cccccc;
+  animation: cursorBlink 1s step-end infinite;
+}
+
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.overlay__decoy-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  padding: 3px 12px;
+  background: #252526;
+  border-top: 1px solid #333333;
+  font-size: 11px;
+  color: #888888;
+}
+
+/* ---------- Stealth Ghost Mode & Notch Teleprompter ---------- */
+.overlay__ghost-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 12px;
+  background: rgba(30, 41, 59, 0.9);
+  border-bottom: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+
+.overlay--ghost {
+  opacity: 0.25 !important;
+  pointer-events: none;
+}
+
+.overlay--prompter .overlay__head {
+  padding-top: var(--space-1);
+  padding-bottom: var(--space-1);
+}
+
+.overlay--prompter .overlay__answer-text {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
 
 /* ---------- Answer footer: timing and actions ---------- */
 .overlay__footer {
@@ -1601,6 +1912,40 @@ button.pill:hover { background: var(--surface-hover); color: var(--text-primary)
   border: 1px solid var(--border-default);
   color: var(--text-secondary);
   font-weight: 500;
+}
+.overlay__timing-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.overlay__timing-badge--budget-ok {
+  background: rgba(52, 211, 153, 0.15);
+  color: var(--status-ok);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+.overlay__timing-badge--budget-warn {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--status-warn);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+.overlay__timing-badge--fallback {
+  background: rgba(139, 92, 246, 0.15);
+  color: #c4b5fd;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+.overlay__streaming-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--status-ok);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  animation: pulseStreaming 1.2s ease-in-out infinite;
+}
+@keyframes pulseStreaming {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
 }
 .overlay__actions { margin-left: auto; display: flex; gap: var(--space-1); align-items: center; }
 

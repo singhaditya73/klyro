@@ -47,20 +47,67 @@ function meetingTypeInstructions(type: MeetingType): string {
  * Calculate speaker talk-time ratio and collaborative pacing indicator.
  */
 export function computeTalkRatio(session: InterviewSession): MeetingTalkRatio {
+  const speakerCounts: Record<string, { label: string; wordCount: number }> = {}
+  let hasSpeakerTags = false
+
+  for (const line of session.transcript ?? []) {
+    const match = /^\[([^\]]+)\]:\s*(.*)$/.exec(line)
+    if (match) {
+      hasSpeakerTags = true
+      const rawLabel = match[1].trim()
+      const isYou = /^(you|me)$/i.test(rawLabel)
+      const key = isYou ? 'you' : rawLabel.toLowerCase()
+      const displayLabel = isYou ? 'You' : rawLabel
+      const words = match[2].split(/\s+/).filter(Boolean).length
+
+      if (!speakerCounts[key]) {
+        speakerCounts[key] = { label: displayLabel, wordCount: 0 }
+      }
+      speakerCounts[key].wordCount += words
+    }
+  }
+
+  // Also include questions asked by user
   const questionWords = (session.questions ?? []).reduce(
     (sum, q) => sum + (q.text || '').split(/\s+/).filter(Boolean).length,
     0
   )
-  const transcriptWords = (session.transcript ?? []).reduce(
-    (sum, line) => sum + line.split(/\s+/).filter(Boolean).length,
-    0
-  )
-  const totalWords = questionWords + transcriptWords
+  if (questionWords > 0) {
+    if (!speakerCounts['you']) {
+      speakerCounts['you'] = { label: 'You', wordCount: 0 }
+    }
+    speakerCounts['you'].wordCount += questionWords
+  }
 
-  let userPct = totalWords > 0 ? Math.round((questionWords / totalWords) * 100) : 38
-  if (userPct < 15) userPct = 35
-  if (userPct > 80) userPct = 65
-  const othersPct = 100 - userPct
+  let speakers: import('@shared/types').SpeakerStats[] | undefined
+  let userPct = 38
+  let othersPct = 62
+
+  if (hasSpeakerTags && Object.keys(speakerCounts).length > 0) {
+    const totalTaggedWords = Object.values(speakerCounts).reduce((sum, s) => sum + s.wordCount, 0)
+    if (totalTaggedWords > 0) {
+      speakers = Object.entries(speakerCounts).map(([id, info]) => ({
+        id,
+        label: info.label,
+        wordCount: info.wordCount,
+        talkPct: Math.round((info.wordCount / totalTaggedWords) * 100)
+      })).sort((a, b) => b.wordCount - a.wordCount)
+
+      const userSpeaker = speakers.find((s) => s.id === 'you')
+      userPct = userSpeaker ? userSpeaker.talkPct : 0
+      othersPct = 100 - userPct
+    }
+  } else {
+    const transcriptWords = (session.transcript ?? []).reduce(
+      (sum, line) => sum + line.split(/\s+/).filter(Boolean).length,
+      0
+    )
+    const totalWords = questionWords + transcriptWords
+    userPct = totalWords > 0 ? Math.round((questionWords / totalWords) * 100) : 38
+    if (userPct < 15) userPct = 35
+    if (userPct > 80) userPct = 65
+    othersPct = 100 - userPct
+  }
 
   let pacingNote = 'Collaborative & balanced pace'
   if (userPct > 60) {
@@ -71,7 +118,20 @@ export function computeTalkRatio(session: InterviewSession): MeetingTalkRatio {
     pacingNote = 'Optimal collaborative pacing (35–50% speaking time)'
   }
 
-  return { userPct, othersPct, pacingNote }
+  return { userPct, othersPct, pacingNote, speakers }
+}
+
+export function inferActionCategory(task: string): 'technical' | 'commercial' | 'follow_up' | 'decision' {
+  if (/\b(?:code|api|deploy|sdk|bug|infra|test|repo|git|migration|architecture|backend|frontend|database|auth|security|ssl|keychain)\b/i.test(task)) {
+    return 'technical'
+  }
+  if (/\b(?:pricing|budget|contract|deal|license|invoice|procurement|cost|terms|sign|quote|renewal|mrr|arr)\b/i.test(task)) {
+    return 'commercial'
+  }
+  if (/\b(?:schedule|call|calendar|email|invite|follow-up|follow up|sync|touch base|reach out|demo|intro)\b/i.test(task)) {
+    return 'follow_up'
+  }
+  return 'decision'
 }
 
 /**
@@ -128,6 +188,8 @@ export async function generateMeetingCrmNotes(
     '-----------------------',
     '',
     meetingTypeInstructions(meetingType),
+    '',
+    'Note: The transcript separates distinct speakers with [Speaker Name]: tags (e.g. [You], [Alice], [Bob]). Attribute action items, ownership, champions, and decisions to the exact named speaker whenever possible.',
     '',
     'Respond ONLY with a valid JSON object matching this exact TypeScript structure:',
     '{',
@@ -192,12 +254,16 @@ export async function generateMeetingCrmNotes(
       keyDecisions: Array.isArray(parsed.keyDecisions) ? parsed.keyDecisions.filter(Boolean) : [],
       discussionTopics: Array.isArray(parsed.discussionTopics) ? parsed.discussionTopics.filter(Boolean) : [],
       actionItems: Array.isArray(parsed.actionItems)
-        ? parsed.actionItems.map((item: any) => ({
-            task: String(item.task || item),
-            owner: item.owner ? String(item.owner) : undefined,
-            deadline: item.deadline ? String(item.deadline) : undefined,
-            done: Boolean(item.done)
-          }))
+        ? parsed.actionItems.map((item: any) => {
+            const task = String(item.task || item)
+            return {
+              task,
+              owner: item.owner ? String(item.owner) : undefined,
+              deadline: item.deadline ? String(item.deadline) : undefined,
+              done: Boolean(item.done),
+              category: item.category || inferActionCategory(task)
+            }
+          })
         : [],
       crmInsights: parsed.crmInsights
         ? {
@@ -268,9 +334,10 @@ export function exportMeetingNotesMarkdown(session: InterviewSession): string {
     if (notes.actionItems.length > 0) {
       md.push('## Action Items')
       for (const item of notes.actionItems) {
+        const catBadge = item.category ? `[${item.category.toUpperCase().replace('_', ' ')}] ` : ''
         const owner = item.owner ? ` (@${item.owner})` : ''
         const deadline = item.deadline ? ` [Due: ${item.deadline}]` : ''
-        md.push(`- [${item.done ? 'x' : ' '}] ${item.task}${owner}${deadline}`)
+        md.push(`- [${item.done ? 'x' : ' '}] ${catBadge}${item.task}${owner}${deadline}`)
       }
       md.push('')
     }
@@ -343,8 +410,9 @@ export function formatForSlack(notes: MeetingCrmNotes): string {
   if (notes.actionItems.length > 0) {
     parts.push('*✅ Action Items:*')
     for (const item of notes.actionItems) {
+      const catBadge = item.category ? `*[${item.category.toUpperCase().replace('_', ' ')}]* ` : ''
       const owner = item.owner ? ` _(${item.owner})_` : ''
-      parts.push(`• [ ] ${item.task}${owner}`)
+      parts.push(`• [ ] ${catBadge}${item.task}${owner}`)
     }
     parts.push('')
   }
@@ -375,15 +443,19 @@ export function formatForNotion(notes: MeetingCrmNotes): string {
   ]
 
   if (notes.talkRatio) {
-    lines.push(`> 🎙️ **Talk Ratio**: You: ${notes.talkRatio.userPct}% | Others: ${notes.talkRatio.othersPct}% (${notes.talkRatio.pacingNote})`, '')
+    const speakersBreakdown = notes.talkRatio.speakers && notes.talkRatio.speakers.length > 1
+      ? notes.talkRatio.speakers.map((s) => `${s.label}: ${s.talkPct}%`).join(' | ')
+      : `You: ${notes.talkRatio.userPct}% | Others: ${notes.talkRatio.othersPct}%`
+    lines.push(`> 🎙️ **Talk Ratio**: ${speakersBreakdown} (${notes.talkRatio.pacingNote})`, '')
   }
 
   if (notes.actionItems.length > 0) {
     lines.push('### ✅ Action Items')
     for (const item of notes.actionItems) {
+      const catBadge = item.category ? `\`${item.category}\` ` : ''
       const owner = item.owner ? ` (@${item.owner})` : ''
       const deadline = item.deadline ? ` [Due: ${item.deadline}]` : ''
-      lines.push(`- [${item.done ? 'x' : ' '}] ${item.task}${owner}${deadline}`)
+      lines.push(`- [${item.done ? 'x' : ' '}] ${catBadge}${item.task}${owner}${deadline}`)
     }
     lines.push('')
   }
@@ -438,7 +510,10 @@ export function formatForCrm(notes: MeetingCrmNotes): string {
   ]
 
   if (notes.talkRatio) {
-    lines.push(`TALK RATIO: User ${notes.talkRatio.userPct}% / Others ${notes.talkRatio.othersPct}% (${notes.talkRatio.pacingNote})`, '')
+    const speakersBreakdown = notes.talkRatio.speakers && notes.talkRatio.speakers.length > 1
+      ? notes.talkRatio.speakers.map((s) => `${s.label} ${s.talkPct}%`).join(' / ')
+      : `User ${notes.talkRatio.userPct}% / Others ${notes.talkRatio.othersPct}%`
+    lines.push(`TALK RATIO: ${speakersBreakdown} (${notes.talkRatio.pacingNote})`, '')
   }
 
   if (notes.crmInsights?.nextSteps) {

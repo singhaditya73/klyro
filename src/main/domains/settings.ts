@@ -18,6 +18,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   hideFromTaskbar: false,
   // Instant hide for the overlay and the control panel.
   panicShortcut: 'CommandOrControl+Shift+H',
+  // Click-through mode; the overlay's own hint names this combination.
+  ghostShortcut: 'CommandOrControl+Shift+G',
   memoryEnabled: true,
   memoryAutoExtract: false,
   memoryRecallCount: 5,
@@ -25,12 +27,16 @@ export const DEFAULT_SETTINGS: AppSettings = {
   documentRecallCount: 4,
   allowUnencryptedSecrets: false,
   diagnosticsOptIn: false,
+  // Local-only mode: no hosted provider request leaves the machine.
+  airgap: false,
   // On by default: the overlay is the one thing that must never show up in a
   // screen share during the meeting it is meant for.
   overlayPrivateMode: true,
   overlayOpacity: 100,
   screenAutoCapture: true,
-  screenPreWarm: true,
+  // Off by default: asking the OS for screen-capture permission at launch is a
+  // prompt the user did not trigger. Capture asks for it on the click instead.
+  screenPreWarm: false,
   overlayDisplay: 'primary',
   overlayAnswerCache: true,
   // Keep the history until it is deleted. A number of days prunes it.

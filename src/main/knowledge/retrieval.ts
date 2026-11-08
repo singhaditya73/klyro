@@ -4,6 +4,8 @@
  * Pure functions — no Electron/Node imports — so they are unit-testable.
  */
 
+import { vectorSearch } from './vector-index'
+
 const STOPWORDS = new Set([
   'the', 'a', 'an', 'and', 'or', 'but', 'if', 'then', 'than', 'that', 'this', 'these', 'those',
   'is', 'are', 'was', 'were', 'be', 'been', 'being', 'am', 'do', 'does', 'did', 'doing',
@@ -49,18 +51,39 @@ export function bm25Search(query: string, docs: Doc[], limit = 5): ScoredDoc[] {
   const averageLength = docLengths.reduce((sum, length) => sum + length, 0) / docLengths.length || 1
 
   const documentFrequency = new Map<string, number>()
-  for (const tokens of docTokens) {
+  const postingList = new Map<string, number[]>()
+
+  for (let index = 0; index < docTokens.length; index++) {
+    const tokens = docTokens[index]
     for (const term of unique(tokens)) {
       documentFrequency.set(term, (documentFrequency.get(term) ?? 0) + 1)
+      let postings = postingList.get(term)
+      if (!postings) {
+        postings = []
+        postingList.set(term, postings)
+      }
+      postings.push(index)
     }
   }
+
+  // Pre-filter candidate documents that contain at least one query term
+  const candidateIndices = new Set<number>()
+  for (const term of queryTerms) {
+    const postings = postingList.get(term)
+    if (postings) {
+      for (const idx of postings) candidateIndices.add(idx)
+    }
+  }
+
+  if (candidateIndices.size === 0) return []
 
   const k1 = 1.5
   const b = 0.75
   const total = docs.length
   const scored: ScoredDoc[] = []
 
-  docTokens.forEach((tokens, index) => {
+  for (const index of candidateIndices) {
+    const tokens = docTokens[index]
     const termFrequency = new Map<string, number>()
     for (const token of tokens) termFrequency.set(token, (termFrequency.get(token) ?? 0) + 1)
 
@@ -74,7 +97,7 @@ export function bm25Search(query: string, docs: Doc[], limit = 5): ScoredDoc[] {
       score += idf * ((frequency * (k1 + 1)) / denominator)
     }
     if (score > 0) scored.push({ id: docs[index].id, score })
-  })
+  }
 
   return scored.sort((a, b) => b.score - a.score).slice(0, limit)
 }
@@ -184,4 +207,64 @@ export function reciprocalRank(rankedIds: string[], relevant: string[]): number 
   const index = rankedIds.findIndex((id) => wanted.has(id))
   return index < 0 ? 0 : 1 / (index + 1)
 }
+
+/**
+ * Hybrid Reciprocal Rank Fusion (RRF) combining lexical BM25 and TF-IDF vector
+ * search, followed by a cross-matching reranker.
+ */
+export function hybridSearch(query: string, docs: Doc[], limit = 5, bm25Weight = 0.5): ScoredDoc[] {
+  if (!query.trim() || docs.length === 0 || limit <= 0) return []
+
+  const bm25Hits = bm25Search(query, docs, docs.length)
+  const vectorHits = vectorSearch(query, docs, docs.length)
+
+  const docMap = new Map<string, Doc>(docs.map((d) => [d.id, d]))
+  const scores = new Map<string, number>()
+
+  const RRF_K = 60
+  // Reciprocal Rank Fusion
+  bm25Hits.forEach((hit, rank) => {
+    const contribution = bm25Weight / (RRF_K + rank + 1)
+    scores.set(hit.id, (scores.get(hit.id) ?? 0) + contribution)
+  })
+
+  const vectorWeight = 1 - bm25Weight
+  vectorHits.forEach((hit, rank) => {
+    const contribution = vectorWeight / (RRF_K + rank + 1)
+    scores.set(hit.id, (scores.get(hit.id) ?? 0) + contribution)
+  })
+
+  // Cross-attentive Reranker: boosts exact bi-grams and phrase containment
+  const queryTokens = tokenize(query)
+  const queryBigrams: string[] = []
+  for (let i = 0; i < queryTokens.length - 1; i++) {
+    queryBigrams.push(`${queryTokens[i]} ${queryTokens[i + 1]}`)
+  }
+
+  const reranked: ScoredDoc[] = []
+  for (const [id, rrfScore] of scores.entries()) {
+    const doc = docMap.get(id)
+    if (!doc) continue
+
+    let rerankScore = rrfScore
+    const docLower = doc.text.toLowerCase()
+
+    // Bigram phrase matching boost
+    for (const bigram of queryBigrams) {
+      if (docLower.includes(bigram)) {
+        rerankScore += 0.008
+      }
+    }
+
+    // Exact query string containment boost
+    if (query.length > 5 && docLower.includes(query.toLowerCase())) {
+      rerankScore += 0.015
+    }
+
+    reranked.push({ id, score: rerankScore })
+  }
+
+  return reranked.sort((a, b) => b.score - a.score).slice(0, limit)
+}
+
 

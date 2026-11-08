@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import { BrowserWindow } from 'electron'
-import type { ChatStreamEvent, Conversation, ResponseStyle, SendChatRequest } from '@shared/types'
+import type { AppSettings, ChatStreamEvent, Conversation, ResponseStyle, SendChatRequest } from '@shared/types'
 import { IPC } from '@shared/ipc'
 import { logger } from '../logger'
 import { getProvider } from '../providers'
 import { DEFAULT_PROVIDERS, PROVIDER_META } from '../providers/defaults'
 import { classifyThrown, ProviderError, toUserMessage } from '../providers/errors'
 import { providerCarriesImages, resolveRoute, visionSupport } from '../providers/routing'
+import { isAirgapShield, isLocalEndpoint, airgapError } from '../providers/request'
 import { ocrExtractText } from './ocr'
 import type { ChatTurn } from '../providers/types'
 import type { ProviderId } from '@shared/types'
@@ -42,6 +43,12 @@ let pendingTool: PendingTool | null = null
 function emit(event: ChatStreamEvent): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) win.webContents.send(IPC.chatStream, event)
+  }
+  try {
+    const { broadcastRemoteHud } = require('./remote-hud')
+    broadcastRemoteHud(event)
+  } catch {
+    // Optional
   }
 }
 
@@ -79,6 +86,18 @@ const DAEMON_PROVIDERS = new Set<ProviderId>([
 ])
 
 /**
+ * Providers that are programs or local agent services rather than a model
+ * endpoint. They can reach the network on their own, so the airgap shield
+ * cannot prove they stay local and refuses them.
+ */
+const NETWORK_AGENT_PROVIDERS = new Set<ProviderId>([
+  'opencode',
+  'claude-code',
+  'codex',
+  'antigravity'
+])
+
+/**
  * How much history is sent to the model. Without a bound, a long conversation
  * grows every request (and its cost) forever; the newest turns are the ones that
  * matter for the next answer.
@@ -108,6 +127,72 @@ function buildTurns(conversation: Conversation): ChatTurn[] {  const usable = co
     text: m.content,
     images: withImages.has(m.id) ? (m.attachments ?? []).map((a) => ({ dataUrl: a.dataUrl, mime: a.mime })) : []
   }))
+}
+
+/** Character-based token estimate. Honest enough for a local spend counter. */
+function estimateTokens(value: string | undefined): number {
+  return value ? Math.ceil(value.length / 4) : 0
+}
+
+function findFastFallbackRoute(
+  primaryProvider: ProviderId,
+  settings: AppSettings
+): { providerId: ProviderId; model: string; baseUrl: string; apiKey: string | null } | null {
+  // The airgap shield promises that inference stays on this machine. A silent
+  // fallback to a hosted model would break that promise, so only the local
+  // runtime is eligible while it is on.
+  const allowHosted = !isAirgapShield()
+
+  // 1. Groq (LPUs, TTFT typically ~200-400ms)
+  if (allowHosted && primaryProvider !== 'groq') {
+    const groqKey = settingsDomain.apiKey('groq')
+    if (groqKey) {
+      return {
+        providerId: 'groq',
+        model: settings.providers.groq?.fastModel || settings.providers.groq?.model || 'openai/gpt-oss-120b',
+        baseUrl: settings.providers.groq?.baseUrl || 'https://api.groq.com/openai/v1',
+        apiKey: groqKey
+      }
+    }
+  }
+
+  // 2. Google Gemini 2.0 Flash (~350-500ms)
+  if (allowHosted && primaryProvider !== 'gemini') {
+    const geminiKey = settingsDomain.apiKey('gemini')
+    if (geminiKey) {
+      return {
+        providerId: 'gemini',
+        model: settings.providers.gemini?.fastModel || settings.providers.gemini?.model || 'gemini-2.0-flash',
+        baseUrl: settings.providers.gemini?.baseUrl || 'https://generativelanguage.googleapis.com/v1beta',
+        apiKey: geminiKey
+      }
+    }
+  }
+
+  // 3. OpenAI gpt-4o-mini
+  if (allowHosted && primaryProvider !== 'openai') {
+    const openaiKey = settingsDomain.apiKey('openai')
+    if (openaiKey) {
+      return {
+        providerId: 'openai',
+        model: settings.providers.openai?.fastModel || settings.providers.openai?.model || 'gpt-4o-mini',
+        baseUrl: settings.providers.openai?.baseUrl || 'https://api.openai.com/v1',
+        apiKey: openaiKey
+      }
+    }
+  }
+
+  // 4. Local Ollama
+  if (primaryProvider !== 'ollama' && settings.providers.ollama?.baseUrl) {
+    return {
+      providerId: 'ollama',
+      model: settings.providers.ollama?.fastModel || settings.providers.ollama?.model || 'llama3.1',
+      baseUrl: settings.providers.ollama?.baseUrl || 'http://localhost:11434',
+      apiKey: null
+    }
+  }
+
+  return null
 }
 
 export async function sendChat(request: SendChatRequest): Promise<void> {
@@ -155,6 +240,16 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
   // Registered before anything is emitted, so a Stop pressed the instant the
   // answer starts is never ignored.
   controller = abort
+  /** Whose signal is carrying the request right now; the fallback swaps it. */
+  let activeAbort = abort
+
+  // The Ghost Phone HUD mirrors the live question, not just the answer.
+  try {
+    const { broadcastRemoteHud } = require('./remote-hud')
+    broadcastRemoteHud({ type: 'question', question: request.content })
+  } catch {
+    // Optional companion HUD
+  }
 
   emit({
     type: 'start',
@@ -209,6 +304,22 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
       apiKey: settingsDomain.apiKey(providerId),
       purpose: request.useFastModel ? 'overlay' : 'chat'
     })
+
+    // The shield is a promise that inference stays on this machine. Enforce it
+    // before the daemon gets the request: the daemon is a separate process and
+    // would otherwise contact a hosted endpoint on our behalf.
+    if (isAirgapShield() && NETWORK_AGENT_PROVIDERS.has(providerId)) {
+      throw new ProviderError(
+        `Airgap Shield is on: ${route.label} runs through an agent that can reach the network. Choose a local provider (Ollama or a local OpenAI-compatible server) or turn the shield off.`,
+        { kind: 'bad_request', provider: providerId }
+      )
+    }
+    if (isAirgapShield() && !isLocalEndpoint(route.baseUrl)) {
+      throw new ProviderError(airgapError(route.baseUrl).message, {
+        kind: 'bad_request',
+        provider: providerId
+      })
+    }
     const baseOptions = {
       model: route.model,
       baseUrl: route.baseUrl,
@@ -226,6 +337,10 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
         .join('\n\n'),
       signal: abort.signal
     }
+
+    /** Prompt size at record time, after OCR/context rewrites have been applied. */
+    const inputTokensFor = (): number =>
+      estimateTokens([baseOptions.system, ...turns.map((turn) => turn.text)].join('\n'))
 
     // Check if the provider/model can carry and understand images.
     // When a model is text-only (e.g. Antigravity, OpenCode text models, Ollama, DeepSeek),
@@ -333,24 +448,114 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
         conversations.updateMessage(conversationId, assistantId, { content: text })
         const totalMs = Date.now() - startedAt
         emit({ type: 'done', messageId: assistantId, ms: firstTokenMs ?? totalMs, totalMs, model: route.model })
-        usage.record(providerId, 'chat')
+        usage.record(providerId, 'chat', {
+          inputTokens: inputTokensFor(),
+          outputTokens: estimateTokens(text)
+        })
         recordInHistory(text, firstTokenMs ?? totalMs)
         return
       }
     }
 
-    // One pass, one answer. The assistant answers questions; it does not call
-    // tools, so there is no loop to bound and nothing to approve.
-    for await (const delta of withIdleTimeout(provider.chat({ ...baseOptions, turns }), { onStall: () => abort.abort() })) {
-      if (firstTokenMs === null) firstTokenMs = Date.now() - startedAt
-      text += delta
-      emit({ type: 'delta', messageId: assistantId, text: delta })
+    // One pass, one answer. For fast overlay queries, enforce a 2-second first-token latency budget
+    // and seamlessly fall back to Groq or Gemini Flash if the primary provider stalls or errors out.
+    const fallbackRoute = request.useFastModel ? findFastFallbackRoute(providerId, settings) : null
+    let activeModel = route.model
+    let activeProviderId = providerId
+    let fallbackInfo: { from: ProviderId; to: ProviderId; reason: string } | undefined
+
+    let firstTokenTimer: NodeJS.Timeout | null = null
+    let didFallback = false
+
+    const startFirstTokenBudget = (currentAbort: AbortController) => {
+      if (request.useFastModel && fallbackRoute && !didFallback) {
+        firstTokenTimer = setTimeout(() => {
+          if (firstTokenMs === null && !currentAbort.signal.aborted) {
+            logger.warn(
+              `Primary provider ${providerId} exceeded 2000ms latency budget. Falling back to ${fallbackRoute.providerId}...`
+            )
+            didFallback = true
+            currentAbort.abort()
+          }
+        }, 2000)
+      }
+    }
+
+    const clearFirstTokenBudget = () => {
+      if (firstTokenTimer) {
+        clearTimeout(firstTokenTimer)
+        firstTokenTimer = null
+      }
+    }
+
+    startFirstTokenBudget(abort)
+
+    try {
+      for await (const delta of withIdleTimeout(provider.chat({ ...baseOptions, turns }), {
+        onStall: () => abort.abort()
+      })) {
+        clearFirstTokenBudget()
+        if (firstTokenMs === null) firstTokenMs = Date.now() - startedAt
+        text += delta
+        emit({ type: 'delta', messageId: assistantId, text: delta })
+      }
+    } catch (primaryErr) {
+      clearFirstTokenBudget()
+      // A Stop key nulls `controller`; the budget timer only aborts our own
+      // signal. Distinguish the two, or a user cancel at the 2s mark would
+      // still start the fallback and answer a question nobody is waiting for.
+      const userCancelled = controller !== abort
+      // If primary failed or timed out before emitting any token, fall back to fast provider
+      if (text.length === 0 && fallbackRoute && !userCancelled && (didFallback || !abort.signal.aborted)) {
+        logger.info(`Switching to fast fallback: ${fallbackRoute.providerId} (${fallbackRoute.model})`)
+        fallbackInfo = {
+          from: providerId,
+          to: fallbackRoute.providerId,
+          reason: didFallback ? 'budget_2s_exceeded' : 'provider_error'
+        }
+        activeModel = fallbackRoute.model
+        activeProviderId = fallbackRoute.providerId
+
+        const fallbackAbort = new AbortController()
+        controller = fallbackAbort
+        activeAbort = fallbackAbort
+        const fallbackProvider = getProvider(fallbackRoute.providerId)
+        const fallbackOptions = {
+          ...baseOptions,
+          model: fallbackRoute.model,
+          baseUrl: fallbackRoute.baseUrl,
+          apiKey: fallbackRoute.apiKey,
+          signal: fallbackAbort.signal
+        }
+
+        for await (const delta of withIdleTimeout(fallbackProvider.chat({ ...fallbackOptions, turns }), {
+          onStall: () => fallbackAbort.abort()
+        })) {
+          if (firstTokenMs === null) firstTokenMs = Date.now() - startedAt
+          text += delta
+          emit({ type: 'delta', messageId: assistantId, text: delta })
+        }
+      } else {
+        throw primaryErr
+      }
+    } finally {
+      clearFirstTokenBudget()
     }
 
     conversations.updateMessage(conversationId, assistantId, { content: text })
     const totalMs = Date.now() - startedAt
-    emit({ type: 'done', messageId: assistantId, ms: firstTokenMs ?? totalMs, totalMs, model: route.model })
-    usage.record(providerId, 'chat')
+    emit({
+      type: 'done',
+      messageId: assistantId,
+      ms: firstTokenMs ?? totalMs,
+      totalMs,
+      model: activeModel,
+      fallback: fallbackInfo
+    })
+    usage.record(activeProviderId, 'chat', {
+      inputTokens: inputTokensFor(),
+      outputTokens: estimateTokens(text)
+    })
     recordInHistory(text, firstTokenMs ?? totalMs)
     // Extraction costs a model call, so only run it for substantive exchanges.
     if (
@@ -381,7 +586,7 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
     // A stalled stream aborts the request too, so check the stall *before* the
     // abort flag — otherwise a dead provider looks like the user pressed Stop.
     const stalled = error instanceof StreamStalledError
-    const aborted = !stalled && abort.signal.aborted
+    const aborted = !stalled && activeAbort.signal.aborted
     if (aborted) {
       conversations.updateMessage(conversationId, assistantId, { content: text || '(cancelled)' })
       emit({ type: 'done', messageId: assistantId })

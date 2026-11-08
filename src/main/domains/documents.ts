@@ -5,7 +5,7 @@ import { basename, extname } from 'node:path'
 import { dialog } from 'electron'
 import type { DocumentRecord, ImportResult, KnowledgeHit } from '@shared/types'
 import { logger } from '../logger'
-import { bm25Search, chunkDocument } from '../knowledge/retrieval'
+import { chunkDocument, hybridSearch } from '../knowledge/retrieval'
 import { JsonStore } from '../store/json-store'
 
 /** A chunk plus where it came from, so citations can point at real locations. */
@@ -313,7 +313,7 @@ class DocumentDomain {
       }))
     )
     const byId = new Map(corpus.map((entry) => [entry.id, entry]))
-    return bm25Search(
+    return hybridSearch(
       query,
       corpus.map((entry) => ({ id: entry.id, text: entry.text })),
       limit
@@ -350,7 +350,7 @@ class DocumentDomain {
         }))
       )
     const byId = new Map(corpus.map((entry) => [entry.id, entry]))
-    return bm25Search(
+    return hybridSearch(
       query,
       corpus.map((entry) => ({ id: entry.id, text: entry.text })),
       limit

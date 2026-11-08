@@ -4,6 +4,7 @@ import {
   AlertCircle,
   Blocks,
   Briefcase,
+  Calendar,
   Check,
   CheckCircle2,
   Database,
@@ -18,7 +19,8 @@ import {
   Send,
   Server,
   Share2,
-  Trash2
+  Trash2,
+  Zap
 } from 'lucide-react'
 import { Badge, EmptyState, Group, PageHeader } from './ui'
 import type { DirectIntegrations, MCPServerState } from '@shared/types'
@@ -84,18 +86,77 @@ export function IntegrationsView(): React.ReactNode {
   const [testingMcpId, setTestingMcpId] = useState<string | null>(null)
   const [mcpTestResult, setMcpTestResult] = useState<Record<string, string>>({})
 
+  // Calendar Sync state
+  const [calendarStatus, setCalendarStatus] = useState<{
+    feedUrl: string | null
+    lastSyncAt: string | null
+    eventCount: number
+    autoDetectWindows: boolean
+  }>({
+    feedUrl: null,
+    lastSyncAt: null,
+    eventCount: 0,
+    autoDetectWindows: false
+  })
+  const [calendarUrlInput, setCalendarUrlInput] = useState('')
+  const [syncingCalendar, setSyncingCalendar] = useState(false)
+  const [calendarFeedback, setCalendarFeedback] = useState<{ ok: boolean; msg: string } | null>(null)
+
   const loadData = useCallback(async (): Promise<void> => {
     try {
-      const [intConfig, mcpList] = await Promise.all([
+      const [intConfig, mcpList, calStatus] = await Promise.all([
         window.klyro.integrationsGet(),
-        window.klyro.mcpServers()
+        window.klyro.mcpServers(),
+        window.klyro.calendarGetStatus()
       ])
       if (intConfig) setIntegrations(intConfig)
       if (mcpList) setServers(mcpList)
+      if (calStatus) {
+        setCalendarStatus(calStatus)
+        setCalendarUrlInput(calStatus.feedUrl || '')
+      }
     } catch (err) {
       console.error('Failed to load integrations', err)
     }
   }, [])
+
+  const handleSaveAndSyncCalendar = async (): Promise<void> => {
+    setSyncingCalendar(true)
+    setCalendarFeedback(null)
+    try {
+      const urlToSave = calendarUrlInput.trim() || null
+      // calendarSetFeedUrl persists and syncs in one call; syncing again here
+      // doubled every calendar fetch.
+      const status = await window.klyro.calendarSetFeedUrl(urlToSave)
+      setCalendarStatus(status)
+
+      if (!urlToSave) {
+        setCalendarFeedback({ ok: true, msg: 'Calendar disconnected; cached events were removed.' })
+        return
+      }
+      if (status.error) {
+        setCalendarFeedback({ ok: false, msg: status.error })
+        return
+      }
+      setCalendarFeedback({
+        ok: true,
+        msg: `Synced ${status.eventCount} upcoming events from calendar feed.`
+      })
+    } catch (err) {
+      setCalendarFeedback({ ok: false, msg: (err as Error).message })
+    } finally {
+      setSyncingCalendar(false)
+    }
+  }
+
+  const handleToggleAutoDetectWindows = async (enabled: boolean): Promise<void> => {
+    try {
+      await window.klyro.calendarToggleAutoDetect(enabled)
+      setCalendarStatus((prev) => ({ ...prev, autoDetectWindows: enabled }))
+    } catch (err) {
+      console.error('Failed to toggle auto-detect windows', err)
+    }
+  }
 
   useEffect(() => {
     void loadData()
@@ -295,6 +356,167 @@ export function IntegrationsView(): React.ReactNode {
                   <span>{saveError}</span>
                 </div>
               )}
+
+              {/* Calendar Sync Card */}
+              <div
+                style={{
+                  padding: 18,
+                  borderRadius: 'var(--radius-md)',
+                  background: 'var(--surface-raised)',
+                  border: '1px solid var(--border-subtle)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 14
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div
+                      style={{
+                        width: 34,
+                        height: 34,
+                        borderRadius: 6,
+                        background: 'rgba(52, 211, 153, 0.12)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      <Calendar className="icon icon--sm" style={{ color: 'var(--status-ok)' }} />
+                    </div>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
+                          Google &amp; Outlook Calendar Sync (iCal)
+                        </h4>
+                        <span
+                          style={{
+                            fontSize: 10,
+                            padding: '1px 6px',
+                            borderRadius: 4,
+                            background: 'rgba(52, 211, 153, 0.15)',
+                            color: 'var(--status-ok)',
+                            fontWeight: 600
+                          }}
+                        >
+                          Zero-Click Meeting Start
+                        </span>
+                      </div>
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                        Detects calls 1 minute before start, displays an unobtrusive chip, and 1-click starts dual recording with pre-filled title, participants, and company.
+                      </span>
+                    </div>
+                  </div>
+                  <Badge tone={calendarStatus.feedUrl ? 'ok' : 'idle'}>
+                    {calendarStatus.feedUrl
+                      ? `Connected (${calendarStatus.eventCount} events)`
+                      : 'Not connected'}
+                  </Badge>
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <input
+                    type="url"
+                    placeholder="https://calendar.google.com/calendar/ical/.../basic.ics (or Outlook ICS link)"
+                    value={calendarUrlInput}
+                    onChange={(e) => setCalendarUrlInput(e.target.value)}
+                    style={{
+                      flex: 1,
+                      fontSize: 13,
+                      padding: '8px 12px',
+                      borderRadius: 'var(--radius-sm)',
+                      background: 'var(--surface-input)',
+                      border: '1px solid var(--border-subtle)',
+                      color: 'var(--text-primary)'
+                    }}
+                  />
+                  <button
+                    className="btn btn--primary btn--sm"
+                    onClick={handleSaveAndSyncCalendar}
+                    disabled={syncingCalendar}
+                    title="Save feed URL and fetch upcoming calendar events"
+                  >
+                    {syncingCalendar ? (
+                      <Loader2 className="icon icon--xs spin" />
+                    ) : (
+                      <RefreshCw className="icon icon--xs" />
+                    )}
+                    <span>{syncingCalendar ? 'Syncing…' : 'Save & Sync'}</span>
+                  </button>
+                </div>
+
+                {calendarFeedback && (
+                  <div
+                    role="alert"
+                    style={{
+                      display: 'flex',
+                      gap: 8,
+                      padding: '8px 12px',
+                      borderRadius: 'var(--radius-sm)',
+                      background: calendarFeedback.ok ? 'rgba(52, 211, 153, 0.1)' : 'rgba(255, 99, 99, 0.1)',
+                      border: `1px solid ${calendarFeedback.ok ? 'rgba(52, 211, 153, 0.3)' : 'rgba(255, 99, 99, 0.35)'}`,
+                      fontSize: 12,
+                      color: 'var(--text-primary)',
+                      alignItems: 'center'
+                    }}
+                  >
+                    {calendarFeedback.ok ? (
+                      <CheckCircle2 className="icon icon--xs" style={{ color: 'var(--status-ok)' }} />
+                    ) : (
+                      <AlertCircle className="icon icon--xs" style={{ color: 'var(--status-danger)' }} />
+                    )}
+                    <span>{calendarFeedback.msg}</span>
+                  </div>
+                )}
+
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '8px 12px',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    border: '1px solid var(--border-subtle)'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Zap className="icon icon--xs" style={{ color: 'var(--accent)' }} />
+                    <label
+                      htmlFor="auto-detect-windows"
+                      style={{ fontSize: 12, color: 'var(--text-primary)', cursor: 'pointer' }}
+                    >
+                      Also detect active Zoom, Google Meet &amp; Teams windows (asks your OS for screen-capture access)
+                    </label>
+                  </div>
+                  <input
+                    id="auto-detect-windows"
+                    type="checkbox"
+                    checked={calendarStatus.autoDetectWindows}
+                    onChange={(e) => void handleToggleAutoDetectWindows(e.target.checked)}
+                    style={{ cursor: 'pointer', accentColor: 'var(--accent)' }}
+                  />
+                </div>
+
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: 'var(--text-muted)',
+                    lineHeight: 1.5,
+                    padding: '8px 10px',
+                    borderRadius: 4,
+                    background: 'rgba(255,255,255,0.02)'
+                  }}
+                >
+                  <strong style={{ color: 'var(--text-primary)' }}>How to get your private iCal link:</strong>
+                  <br />
+                  • <strong>Google Calendar:</strong> Calendar Settings ➔ [Your Calendar] ➔ Integrate Calendar ➔ Copy <em>Secret address in iCal format</em>.
+                  <br />
+                  • <strong>Outlook:</strong> Settings ➔ Calendar ➔ Shared calendars ➔ Publish calendar ➔ Copy <em>ICS link</em>.
+                  <br />
+                  • <em>100% Local-First &amp; Zero-Auth:</em> No OAuth, no third-party cloud apps, and no corporate admin approval required.
+                </div>
+              </div>
 
               {/* Slack Integration Card */}
               <div

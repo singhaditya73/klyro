@@ -109,6 +109,17 @@ export function zeroCrossingRate(data: Uint8Array): number {
   return crossings / len
 }
 
+/** Peak amplitude (0..1) of AnalyserNode time-domain bytes centred on 128. */
+export function peakFromTimeDomain(data: Uint8Array): number {
+  if (data.length === 0) return 0
+  let maxDev = 0
+  for (let i = 0; i < data.length; i++) {
+    const dev = Math.abs(data[i] - 128) / 128
+    if (dev > maxDev) maxDev = dev
+  }
+  return maxDev
+}
+
 /** Watch the level of a stream with adaptive noise floor and zero-crossing VAD. */
 export function createLevelWatcher(stream: MediaStream): LevelWatcher | null {
   try {
@@ -129,10 +140,14 @@ export function createLevelWatcher(stream: MediaStream): LevelWatcher | null {
     const timer = window.setInterval(() => {
       analyser.getByteTimeDomainData(buffer)
       const rms = rmsFromTimeDomain(buffer)
+      const peak = peakFromTimeDomain(buffer)
       const zcr = zeroCrossingRate(buffer)
 
+      // Crest factor = peak / rms. Impulsive mechanical clicks & keystrokes have peak/rms > 4.6
+      const isImpulsiveTransient = rms > 0 && peak / rms > 4.6
+
       // Human speech formant frequency distribution check (rejects clicks, keyboard keys >0.50 and fan hum <0.03)
-      const isVoiceFormant = zcr >= 0.04 && zcr <= 0.48
+      const isVoiceFormant = zcr >= 0.04 && zcr <= 0.48 && !isImpulsiveTransient
 
       // Track ambient background noise floor when not speaking
       if (rms < noiseFloor * 1.5 && speechStartedAt === 0) {
@@ -246,6 +261,22 @@ export class UtteranceAssembler {
     if (spoken.length === 0) return null
     if (durationMs < MEETING_MIN_QUESTION_MS) return null
     return mergeBlobs(spoken)
+  }
+
+  /**
+   * Speculatively sample audio currently being spoken without advancing the stream pointer.
+   * Allows decoding the prefix of a question while the person is still speaking.
+   */
+  takeSpeculativePrefix(watcher: LevelWatcher | null, minDurationMs = 1200): Blob | null {
+    if (!watcher) return null
+    const speechStartedAt = watcher.speechStartedAt()
+    if (speechStartedAt === 0 || this.utteranceStart === 0) return null
+    const now = this.now()
+    if (now - speechStartedAt < minDurationMs) return null
+
+    const currentSlices = this.slices.slice(this.utteranceStart)
+    if (currentSlices.length < 3) return null
+    return mergeBlobs(currentSlices)
   }
 
   /** The index of the first slice that covers a moment in time. */

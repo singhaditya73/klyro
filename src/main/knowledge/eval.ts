@@ -29,7 +29,12 @@ export interface EvalReport {
   latencyMsPerQuery: number
 }
 
-export function evaluateRetrieval(corpus: Doc[], cases: EvalCase[], k = 5): EvalReport {
+export function evaluateRetrieval(
+  corpus: Doc[],
+  cases: EvalCase[],
+  k = 5,
+  searchFn: (query: string, docs: Doc[], limit: number) => { id: string }[] = bm25Search
+): EvalReport {
   if (cases.length === 0) {
     return { cases: 0, k, recallAtK: 0, mrr: 0, avgContextChars: 0, latencyMsPerQuery: 0 }
   }
@@ -40,7 +45,7 @@ export function evaluateRetrieval(corpus: Doc[], cases: EvalCase[], k = 5): Eval
 
   const started = performance.now()
   for (const testCase of cases) {
-    const ranked = bm25Search(testCase.query, corpus, k)
+    const ranked = searchFn(testCase.query, corpus, k)
     const ids = ranked.map((hit) => hit.id)
     if (ids.some((id) => testCase.relevant.includes(id))) hits += 1
     reciprocalSum += reciprocalRank(ids, testCase.relevant)

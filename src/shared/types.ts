@@ -58,6 +58,11 @@ export interface AppSettings {
    * fast hide, not a way to leave the process list.
    */
   panicShortcut: string
+  /**
+   * Toggles ghost (click-through, faint) mode for the overlay. Empty = off.
+   * The overlay is still visible but mouse events pass to the app beneath it.
+   */
+  ghostShortcut: string
   memoryEnabled: boolean
   memoryAutoExtract: boolean
   memoryRecallCount: number
@@ -67,6 +72,11 @@ export interface AppSettings {
   allowUnencryptedSecrets: boolean
   /** Opt-in crash/diagnostics capture (local files; upload only via explicit endpoint). */
   diagnosticsOptIn: boolean
+  /**
+   * Local-only network mode: hosted provider requests are refused, so only
+   * loopback endpoints (Ollama, LM Studio, the local daemon) can answer.
+   */
+  airgap: boolean
   /**
    * Private mode for the quick-ask overlay: excluded from screen captures and
    * shares, and it stays visible when another app takes focus. Supported on
@@ -254,6 +264,8 @@ export type ChatStreamEvent =
       model?: string
       /** True when the answer was replayed from the cache. */
       cached?: boolean
+      /** Fast provider fallback info when latency budget was enforced. */
+      fallback?: { from: ProviderId; to: ProviderId; reason: string }
     }
   | { type: 'error'; messageId: string; message: string }
 
@@ -328,6 +340,7 @@ export interface MeetingActionItem {
   owner?: string
   deadline?: string
   done?: boolean
+  category?: 'technical' | 'commercial' | 'follow_up' | 'decision'
 }
 
 export interface MeetingCrmInsights {
@@ -347,10 +360,18 @@ export interface MeddpicInsights {
   competition?: string
 }
 
+export interface SpeakerStats {
+  id: string
+  label: string
+  talkPct: number
+  wordCount: number
+}
+
 export interface MeetingTalkRatio {
   userPct: number
   othersPct: number
   pacingNote?: string
+  speakers?: SpeakerStats[]
 }
 
 export interface MeetingCrmNotes {
@@ -594,6 +615,32 @@ export interface DirectIntegrations {
   gmailRecipient?: string
   notionToken?: string
   linearApiKey?: string
+  calendarFeedUrl?: string
+  calendarAutoDetect?: boolean
+}
+
+/* ---------- Calendar Sync & Auto-Meeting Detection ---------- */
+
+export interface CalendarEvent {
+  id: string
+  title: string
+  startTime: string
+  endTime: string
+  location?: string
+  meetingUrl?: string
+  attendees: string[]
+  company?: string
+  description?: string
+  source: 'ical' | 'window'
+  statusText?: string
+}
+
+export interface CalendarSyncStatus {
+  feedUrl: string | null
+  lastSyncAt: string | null
+  eventCount: number
+  autoDetectWindows: boolean
+  error: string | null
 }
 
 /* ---------- MCP connector (bring-your-own tool servers) ---------- */
@@ -826,9 +873,20 @@ export type WorkflowEvent =
 /** The API exposed on `window.klyro` by the preload bridge. */
 /** A global shortcut, and whether the operating system let this app have it. */
 export interface ShortcutStatus {
-  kind: 'toggle' | 'hide'
+  kind: 'toggle' | 'hide' | 'ghost'
   accelerator: string
   registered: boolean
+}
+
+export interface ProviderUsageRow {
+  provider: ProviderId
+  requests: number
+  toolCalls: number
+  failures: number
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+  estimatedSpendUsd: number
 }
 
 export interface KlyroApi {
@@ -863,9 +921,32 @@ export interface KlyroApi {
 
   checkPermissions(): Promise<PermissionState>
   hideOverlay(): Promise<void>
+  /** Bring the control panel to the front (HUD-first launches start with it hidden). */
+  showMainWindow(): Promise<void>
   minimizeOverlay(): Promise<void>
   /** Show the quick-ask overlay (the same window the hotkey opens). */
   toggleOverlay(): Promise<void>
+  /** Snap overlay directly beneath the webcam notch for natural direct eye contact. */
+  snapToNotch(): Promise<void>
+  /** Toggle ghost click-through mode (transparent + mouse events passed through). */
+  setGhostMode(enabled: boolean): Promise<boolean>
+  /** Toggle zero-focus window mode (overlay never steals window focus from tests/browsers). */
+  setZeroFocus(enabled: boolean): Promise<boolean>
+  /** Emergency panic cloak: immediately hide all windows, abort LLM, clear session. */
+  panicKillswitch(): Promise<void>
+  /** Humanizer: inject code as simulated authentic human typing instead of instant clipboard paste. */
+  humanizeType(text: string, options?: { wpm?: number }): Promise<boolean>
+  /** Start Ghost Phone companion HUD server for zero on-screen footprint. */
+  remoteHudStart(port?: number): Promise<{ url: string; port: number }>
+  remoteHudStop(): Promise<void>
+  remoteHudStatus(): Promise<{ running: boolean; url: string }>
+  /** Push one live transcript line to the Ghost Phone companion HUD. */
+  remoteHudTranscript(line: string): Promise<void>
+  /** Force all transcription and inference to stay purely local on 127.0.0.1. */
+  setAirgap(enabled: boolean): Promise<boolean>
+  onEmergencyReset?(listener: () => void): () => void
+  onGhostModeChanged?(listener: (ghost: boolean) => void): () => void
+  onZeroFocusChanged?(listener: (zeroFocus: boolean) => void): () => void
   /** Tell the main process how tall/wide the overlay's content is. */
   resizeOverlay(height: number, width?: number): Promise<number>
   /** Private-mode status for the overlay: capture exclusion support and current state. */
@@ -880,7 +961,7 @@ export interface KlyroApi {
   auditClear(): Promise<void>
 
   /* Local usage ledger */
-  usageRows(): Promise<Array<{ provider: string; requests: number; toolCalls: number; failures: number }>>
+  usageRows(): Promise<ProviderUsageRow[]>
   usageClear(): Promise<void>
 
   /**
@@ -1038,4 +1119,11 @@ export interface KlyroApi {
   mcpRemoveServer(id: string): Promise<boolean>
   mcpToggleServer(id: string, enabled: boolean): Promise<MCPServerState | null>
   mcpTestServer(id: string): Promise<{ ok: boolean; toolsCount: number; error?: string }>
+
+  calendarGetStatus(): Promise<CalendarSyncStatus>
+  calendarSetFeedUrl(url: string | null): Promise<CalendarSyncStatus>
+  calendarSync(feedUrl?: string): Promise<{ success: boolean; eventCount: number; error?: string }>
+  calendarGetUpcoming(): Promise<CalendarEvent | null>
+  calendarDismiss(id: string): Promise<boolean>
+  calendarToggleAutoDetect(enabled: boolean): Promise<boolean>
 }

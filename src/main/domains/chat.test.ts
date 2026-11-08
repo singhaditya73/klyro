@@ -14,7 +14,9 @@ const userData = mkdtempSync(join(tmpdir(), 'klyro-chat-'))
 const h = vi.hoisted(() => ({
   events: [] as { channel: string; payload: any }[],
   chat: null as null | ((options: any) => AsyncGenerator<string>),
+  fallbackChat: null as null | ((options: any) => AsyncGenerator<string>),
   apiKey: 'test-key' as string | null,
+  groqKey: null as string | null,
   settings: {} as any
 }))
 
@@ -31,9 +33,9 @@ vi.mock('electron', () => ({
 }))
 
 vi.mock('../providers', () => ({
-  getProvider: () => ({
-    id: 'openai',
-    chat: (options: any) => h.chat!(options)
+  getProvider: (id: string) => ({
+    id,
+    chat: (options: any) => (id === 'groq' && h.fallbackChat ? h.fallbackChat(options) : h.chat!(options))
   })
 }))
 
@@ -41,15 +43,23 @@ vi.mock('./context', () => ({
   buildKnowledgeContext: () => ({ block: '', memories: 0, documents: 0 })
 }))
 
+vi.mock('./daemon', () => ({
+  daemon: { available: async () => false }
+}))
+
 vi.mock('./memory', () => ({
   memory: { extractFromExchange: async () => [] }
 }))
 
 vi.mock('./settings', () => ({
-  settingsDomain: { get: () => h.settings, apiKey: () => h.apiKey }
+  settingsDomain: {
+    get: () => h.settings,
+    apiKey: (id?: string) => (id === 'groq' ? h.groqKey : h.apiKey)
+  }
 }))
 
 const { sendChat, abortChat } = await import('./chat')
+const { setAirgapShield } = await import('../providers/request')
 const { conversations } = await import('./conversations')
 
 /** A stall-shaped provider: aborting the request rejects the pending read. */
@@ -78,6 +88,7 @@ beforeEach(() => {
   h.events.length = 0
   h.chat = null
   h.apiKey = 'test-key'
+  h.groqKey = null
   h.settings = {
     activeProvider: 'openai',
     providers: { openai: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' } },
@@ -88,6 +99,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  setAirgapShield(false)
   vi.useRealTimers()
 })
 
@@ -165,5 +177,56 @@ describe('sendChat', () => {
     const error = h.events.find((event) => event.payload.type === 'error')?.payload
     expect(error?.message).toMatch(/rate limiting/)
     expect(lastMessage(conversation.id).content).toMatch(/rate limiting/)
+  })
+
+  it('falls back to Groq when primary provider fails in fast model mode', async () => {
+    h.groqKey = 'gsk-test-groq-key'
+    h.settings.providers.groq = { baseUrl: 'https://api.groq.com/openai/v1', model: 'openai/gpt-oss-120b' }
+
+    // Primary fails
+    h.chat = function () {
+      return (async function* () {
+        throw new Error('primary 429 rate limit')
+      })()
+    }
+
+    // Fallback succeeds
+    h.fallbackChat = async function* () {
+      yield 'Fast '
+      yield 'answer from Groq'
+    }
+
+    const conversation = conversations.create()
+    await sendChat({ conversationId: conversation.id, content: 'fast question', useFastModel: true })
+
+    expect(conversations.get(conversation.id)!.messages.at(-1)!.content).toBe('Fast answer from Groq')
+    const doneEvent = h.events.find((e) => e.payload.type === 'done')?.payload
+    expect(doneEvent).toBeDefined()
+    expect(doneEvent.fallback).toEqual({
+      from: 'openai',
+      to: 'groq',
+      reason: 'provider_error'
+    })
+  })
+
+  it('never falls back to a hosted provider while the airgap shield is on', async () => {
+    h.groqKey = 'gsk-test-groq-key'
+    h.settings.providers.groq = { baseUrl: 'https://api.groq.com/openai/v1', model: 'openai/gpt-oss-120b' }
+    h.chat = function () {
+      return (async function* () {
+        throw new Error('primary 429 rate limit')
+      })()
+    }
+    h.fallbackChat = async function* () {
+      yield 'This must not be reached'
+    }
+
+    const conversation = conversations.create()
+    setAirgapShield(true)
+    await sendChat({ conversationId: conversation.id, content: 'fast question', useFastModel: true })
+
+    expect(conversations.get(conversation.id)!.messages.at(-1)!.content).not.toContain('must not be reached')
+    expect(h.events.some((event) => event.payload.type === 'done' && event.payload.fallback)).toBe(false)
+    expect(h.events.some((event) => event.payload.type === 'error')).toBe(true)
   })
 })

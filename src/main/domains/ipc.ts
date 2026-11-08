@@ -19,6 +19,7 @@ import { interviews } from './interviews'
 import { summarizeInterview } from './interview-summary'
 import { exportMeetingNotesMarkdown, generateMeetingCrmNotes } from './meeting-notes'
 import { integrationsDomain } from './integrations'
+import { calendarDomain } from './calendar'
 import { prewarmTranscribe, transcribeAudio } from './audio'
 import { ocrExtractText } from './ocr'
 import {
@@ -30,10 +31,18 @@ import {
   listDisplays,
   minimizeOverlay,
   overlayPrivateModeSupported,
+  panicKillswitch,
   resizeOverlay,
+  setOverlayGhostMode,
   setOverlayStickyRecording,
+  setOverlayZeroFocus,
+  showMainWindow,
+  snapOverlayToNotch,
   toggleOverlay
 } from './windows'
+import { simulateHumanTyping } from './humanizer'
+import { startRemoteHudServer, stopRemoteHudServer, getRemoteHudUrl, isRemoteHudRunning, broadcastRemoteHud } from './remote-hud'
+import { installAirgapFetchGuard, setAirgapShield, isAirgapShield } from '../providers/request'
 import { conversations } from './conversations'
 import { overlayCatalogue } from './overlay-models'
 import { providersPatchSchema } from './provider-settings'
@@ -345,8 +354,63 @@ export function registerIpcHandlers(): void {
     hideOverlay()
   })
 
+  // The HUD's way into the control panel on a HUD-first launch.
+  handle(IPC.windowShowMain, () => {
+    showMainWindow()
+  })
+
   handle(IPC.windowMinimizeOverlay, () => {
     minimizeOverlay()
+  })
+
+  handle(IPC.windowSnapToNotch, () => {
+    snapOverlayToNotch()
+  })
+
+  handle(IPC.windowSetGhostMode, (_event, enabled: unknown) => {
+    return setOverlayGhostMode(Boolean(enabled))
+  })
+
+  handle(IPC.windowPanicKillswitch, () => {
+    panicKillswitch()
+  })
+
+  handle(IPC.windowSetZeroFocus, (_event, enabled: unknown) => {
+    return setOverlayZeroFocus(Boolean(enabled))
+  })
+
+  handle(IPC.humanizeType, async (_event, text: unknown, options?: unknown) => {
+    return simulateHumanTyping(String(text || ''), (options as any) || {})
+  })
+
+  handle(IPC.remoteHudStart, (_event, port?: unknown) => {
+    const p = typeof port === 'number' && port > 1024 && port < 65535 ? port : 5892
+    return startRemoteHudServer(p)
+  })
+
+  handle(IPC.remoteHudStop, () => {
+    stopRemoteHudServer()
+    return { ok: true }
+  })
+
+  handle(IPC.remoteHudStatus, () => ({
+    running: isRemoteHudRunning(),
+    url: getRemoteHudUrl()
+  }))
+
+  handle(IPC.remoteHudTranscript, (_event, line: unknown) => {
+    if (typeof line === 'string' && line.trim()) {
+      broadcastRemoteHud({ type: 'transcript', line: line.trim() })
+    }
+  })
+
+  handle(IPC.networkSetAirgap, (_event, enabled: unknown) => {
+    const on = z.boolean().parse(enabled)
+    // Persist it: a privacy switch that resets on restart is not a switch.
+    settingsDomain.update({ airgap: on })
+    installAirgapFetchGuard()
+    setAirgapShield(on)
+    return isAirgapShield()
   })
 
   /* ---------- Audit log ---------- */
@@ -540,6 +604,22 @@ export function registerIpcHandlers(): void {
   })
   handle(IPC.mcpTestServer, (_event, id: unknown) => {
     return integrationsDomain.testServer(z.string().min(1).parse(id))
+  })
+
+  /* Calendar & Auto-Meeting Detection */
+  handle(IPC.calendarGetStatus, () => calendarDomain.getStatus())
+  handle(IPC.calendarSetFeedUrl, (_event, url: unknown) => {
+    return calendarDomain.setFeedUrl(z.string().nullable().parse(url))
+  })
+  handle(IPC.calendarSync, (_event, feedUrl: unknown) => {
+    return calendarDomain.sync(z.string().optional().parse(feedUrl))
+  })
+  handle(IPC.calendarGetUpcoming, () => calendarDomain.getUpcomingMeeting())
+  handle(IPC.calendarDismiss, (_event, id: unknown) => {
+    return calendarDomain.dismissMeeting(z.string().min(1).parse(id))
+  })
+  handle(IPC.calendarToggleAutoDetect, (_event, enabled: unknown) => {
+    return calendarDomain.toggleAutoDetect(z.boolean().parse(enabled))
   })
 
   handle(IPC.overlayCatalogue, () => overlayCatalogue())

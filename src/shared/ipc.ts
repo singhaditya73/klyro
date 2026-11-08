@@ -57,9 +57,20 @@ export const IPC = {
 
 
   windowHideOverlay: 'window:hideOverlay',
+  windowShowMain: 'window:showMain',
   shortcutsStatus: 'shortcuts:status',
   windowMinimizeOverlay: 'window:minimizeOverlay',
   windowToggleOverlay: 'window:toggleOverlay',
+  windowSnapToNotch: 'window:snapToNotch',
+  windowSetGhostMode: 'window:setGhostMode',
+  windowSetZeroFocus: 'window:setZeroFocus',
+  windowPanicKillswitch: 'window:panicKillswitch',
+  humanizeType: 'humanize:type',
+  remoteHudStart: 'remoteHud:start',
+  remoteHudStop: 'remoteHud:stop',
+  remoteHudStatus: 'remoteHud:status',
+  remoteHudTranscript: 'remoteHud:transcript',
+  networkSetAirgap: 'network:setAirgap',
   /** The overlay asks for the height its content needs. */
   overlayResize: 'overlay:resize',
   windowPrivateModeStatus: 'window:privateModeStatus',
@@ -135,7 +146,15 @@ export const IPC = {
 
   /* Privacy: does this machine exclude the overlay from screen captures? */
   privacyProbeOverlay: 'privacy:probeOverlay',
-  screenListDisplays: 'screen:listDisplays'
+  screenListDisplays: 'screen:listDisplays',
+
+  /* Calendar & Auto-Meeting Detection */
+  calendarGetStatus: 'calendar:getStatus',
+  calendarSetFeedUrl: 'calendar:setFeedUrl',
+  calendarSync: 'calendar:sync',
+  calendarGetUpcoming: 'calendar:getUpcoming',
+  calendarDismiss: 'calendar:dismiss',
+  calendarToggleAutoDetect: 'calendar:toggleAutoDetect'
 } as const
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC]

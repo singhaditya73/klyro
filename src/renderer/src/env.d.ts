@@ -39,15 +39,29 @@ interface KlyroApi {
 
   checkPermissions(): Promise<any>
   hideOverlay(): Promise<void>
+  showMainWindow(): Promise<void>
   minimizeOverlay(): Promise<void>
   /** Show the quick-ask overlay (the same window the hotkey opens). */
   toggleOverlay(): Promise<void>
+  snapToNotch(): Promise<void>
+  setGhostMode(enabled: boolean): Promise<boolean>
+  setZeroFocus(enabled: boolean): Promise<boolean>
+  panicKillswitch(): Promise<void>
+  humanizeType(text: string, options?: { wpm?: number }): Promise<boolean>
+  remoteHudStart(port?: number): Promise<{ url: string; port: number }>
+  remoteHudStop(): Promise<void>
+  remoteHudStatus(): Promise<{ running: boolean; url: string }>
+  remoteHudTranscript?(line: string): Promise<void>
+  setAirgap(enabled: boolean): Promise<boolean>
+  onEmergencyReset?(listener: () => void): () => void
+  onGhostModeChanged?(listener: (ghost: boolean) => void): () => void
+  onZeroFocusChanged?(listener: (zeroFocus: boolean) => void): () => void
   /** Tell the main process how tall/wide the overlay's content is. */
   resizeOverlay(height: number, width?: number): Promise<number>
   privateModeStatus(): Promise<{ supported: boolean; enabled: boolean }>
   setRecordingSticky(sticky: boolean): Promise<void>
   /** Which shortcuts this app actually holds; a taken one is reported, not hidden. */
-  shortcutStatus(): Promise<Array<{ kind: 'toggle' | 'hide'; accelerator: string; registered: boolean }>>
+  shortcutStatus(): Promise<Array<{ kind: 'toggle' | 'hide' | 'ghost'; accelerator: string; registered: boolean }>>
   securityStatus(): Promise<any>
   dataSummary(): Promise<any>
   dataClear(scope: string): Promise<any>
@@ -117,7 +131,7 @@ interface KlyroApi {
   auditList(limit?: number): Promise<any[]>
   auditClear(): Promise<void>
 
-  usageRows(): Promise<any[]>
+  usageRows(): Promise<import('@shared/types').ProviderUsageRow[]>
   usageClear(): Promise<void>
 
   screenListDisplays(): Promise<Array<{ index: number; label: string; primary: boolean; bounds: { x: number; y: number; width: number; height: number } }>>
@@ -167,6 +181,7 @@ interface KlyroApi {
   interviewsGet(id: string): Promise<any>
   interviewsStart(input?: { company?: string; role?: string; ephemeral?: boolean }): Promise<any>
   interviewsAddQuestion(input: { id: string; text: string; source: 'voice' | 'text'; answer?: string; answerMs?: number }): Promise<any>
+  interviewsAddTranscript(input: { id: string; line: string }): Promise<boolean>
   interviewsUpdate(input: { id: string; company?: string; role?: string; notes?: string; summary?: string; crmNotes?: any; tags?: string[]; stage?: string }): Promise<any>
   interviewsUpdateQuestion(input: { id: string; questionId: string; note?: string; progress?: string; answer?: string; bookmarked?: boolean }): Promise<boolean>
   interviewsToggleBookmark(input: { id: string; questionId?: string }): Promise<boolean>
@@ -236,6 +251,13 @@ interface KlyroApi {
   workflowDelete(id: string): Promise<any[]>
   workflowRuns(): Promise<any[]>
   onWorkflowEvent(listener: (event: any) => void): () => void
+
+  calendarGetStatus(): Promise<any>
+  calendarSetFeedUrl(url: string | null): Promise<any>
+  calendarSync(feedUrl?: string): Promise<{ success: boolean; eventCount: number; error?: string }>
+  calendarGetUpcoming(): Promise<any | null>
+  calendarDismiss(id: string): Promise<boolean>
+  calendarToggleAutoDetect(enabled: boolean): Promise<boolean>
 }
 
 interface Window {

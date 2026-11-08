@@ -43,9 +43,9 @@ const SECTIONS: Array<{ id: Section; label: string; icon: typeof Sparkles }> = [
   { id: 'usage', label: 'Usage & Diagnostics', icon: Zap }
 ]
 
-/** Local per-provider request ledger: BYOK users deserve an honest counter. */
+/** Local per-provider request & cost ledger: BYOK users deserve an honest counter and spend breakdown. */
 function UsageSection(): React.ReactNode {
-  const [rows, setRows] = useState<Array<{ provider: string; requests: number; toolCalls: number; failures: number }>>([])
+  const [rows, setRows] = useState<import('@shared/types').ProviderUsageRow[]>([])
 
   useEffect(() => {
     void window.klyro.usageRows().then(setRows)
@@ -53,27 +53,77 @@ function UsageSection(): React.ReactNode {
 
   const providerLabel = (id: string): string => id.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 
+  const totalSpend = rows.reduce((sum, r) => sum + (r.estimatedSpendUsd || 0), 0)
+  const totalTokens = rows.reduce((sum, r) => sum + (r.totalTokens || 0), 0)
+  const totalRequests = rows.reduce((sum, r) => sum + (r.requests || 0), 0)
+  const totalIn = rows.reduce((sum, r) => sum + (r.inputTokens || 0), 0)
+  const totalOut = rows.reduce((sum, r) => sum + (r.outputTokens || 0), 0)
+
   return (
     <Group
-      title="Provider usage"
-      description="How many model requests Klyro made on each provider's key. Counted locally, reset when you clear it. Transcription chunks are skipped for silence in listen mode, so quiet minutes cost nothing."
+      title="Cost & Usage Intelligence"
+      description="Token consumption and estimated spend per provider key. Measured locally on device so you stay in complete control of your API budgets."
       icon={Zap}
     >
       {rows.length > 0 ? (
         <>
-          <div className="list" style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-            {rows.map((row) => (
-              <div key={row.provider} className="list__row">
-                <div className="list__main">
-                  <div className="list__title">{providerLabel(row.provider)}</div>
-                </div>
-                <div className="list__actions">
-                  <Badge>{row.requests} request{row.requests === 1 ? '' : 's'}</Badge>
-                  {row.toolCalls > 0 && <Badge>{row.toolCalls} tool call{row.toolCalls === 1 ? '' : 's'}</Badge>}
-                  {row.failures > 0 && <Badge tone="warn">{row.failures} failed</Badge>}
-                </div>
+          {/* Top KPI Summary Metrics Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 16 }}>
+            <div style={{ background: 'var(--bg-surface-elevated, #161922)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '12px 14px' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Estimated Spend</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: totalSpend > 0 ? '#38bdf8' : '#34d399', marginTop: 4 }}>
+                ${totalSpend.toFixed(3)}
               </div>
-            ))}
+              <div style={{ fontSize: 11, color: 'var(--text-disabled)', marginTop: 2 }}>USD BYOK usage</div>
+            </div>
+
+            <div style={{ background: 'var(--bg-surface-elevated, #161922)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '12px 14px' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Tokens</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginTop: 4 }}>
+                {totalTokens > 1000 ? `${(totalTokens / 1000).toFixed(1)}k` : totalTokens}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-disabled)', marginTop: 2 }}>{Math.round(totalIn / 1000)}k in · {Math.round(totalOut / 1000)}k out</div>
+            </div>
+
+            <div style={{ background: 'var(--bg-surface-elevated, #161922)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '12px 14px' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Invocations</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginTop: 4 }}>
+                {totalRequests}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-disabled)', marginTop: 2 }}>Model API calls</div>
+            </div>
+          </div>
+
+          {/* Provider Breakdown List */}
+          <div className="list" style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+            {rows.map((row) => {
+              const spend = row.estimatedSpendUsd || 0
+              const isFree = /ollama|lmstudio|whisper_local|local/i.test(row.provider)
+              return (
+                <div key={row.provider} className="list__row" style={{ padding: '12px 16px' }}>
+                  <div className="list__main">
+                    <div className="row" style={{ alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>{providerLabel(row.provider)}</span>
+                      {isFree ? (
+                        <Badge tone="ok">100% Free / Local</Badge>
+                      ) : (
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: '#38bdf8' }}>
+                          ${spend.toFixed(4)}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                      Tokens: {(row.totalTokens || 0).toLocaleString()} (In: {(row.inputTokens || 0).toLocaleString()} · Out: {(row.outputTokens || 0).toLocaleString()})
+                    </div>
+                  </div>
+                  <div className="list__actions">
+                    <Badge>{row.requests} request{row.requests === 1 ? '' : 's'}</Badge>
+                    {row.toolCalls > 0 && <Badge>{row.toolCalls} tool call{row.toolCalls === 1 ? '' : 's'}</Badge>}
+                    {row.failures > 0 && <Badge tone="warn">{row.failures} failed</Badge>}
+                  </div>
+                </div>
+              )
+            })}
           </div>
           <div className="row" style={{ marginTop: 12, justifyContent: 'flex-end' }}>
             <button className="btn btn--danger-quiet btn--sm" onClick={() => void window.klyro.usageClear().then(() => setRows([]))}>
@@ -176,7 +226,7 @@ export function SettingsView({ onNavigate }: { onNavigate: (route: Route) => voi
   const [permissions, setPermissions] = useState<PermissionState | null>(null)
   const [displays, setDisplays] = useState<Array<{ index: number; label: string; primary: boolean; bounds: { width: number; height: number } }>>([])
   /** Which global shortcuts the app actually holds. A taken one is reported. */
-  const [shortcuts, setShortcuts] = useState<Array<{ kind: 'toggle' | 'hide'; accelerator: string; registered: boolean }>>([])
+  const [shortcuts, setShortcuts] = useState<Array<{ kind: 'toggle' | 'hide' | 'ghost'; accelerator: string; registered: boolean }>>([])
   const [reportCount, setReportCount] = useState(0)
   const [version, setVersion] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -379,7 +429,7 @@ export function SettingsView({ onNavigate }: { onNavigate: (route: Route) => voi
               </SettingRow>
               <SettingRow
                 label="Ask for screen permission at launch"
-                hint="On macOS the system raises a one-time prompt the first time anything captures the screen. Asking at launch means you answer it before a call. Windows never asks per capture; on Linux this is left off."
+                hint="Off by default. macOS raises a one-time prompt the first time anything captures the screen; capturing on demand means it appears when you click capture, not when Klyro starts. Turn this on only if you would rather answer it before a call. Windows never asks per capture; on Linux this has no effect."
               >
                 <input
                   type="checkbox"
@@ -437,6 +487,34 @@ export function SettingsView({ onNavigate }: { onNavigate: (route: Route) => voi
                 />
               </SettingRow>
               <SettingRow
+                label="Ghost mode shortcut"
+                hint="Toggles click-through mode: the overlay stays visible but faint, and mouse clicks reach the app underneath. Leave empty to turn it off."
+                stacked
+              >
+                <input
+                  value={settings.ghostShortcut}
+                  placeholder="CommandOrControl+Shift+G"
+                  onChange={(event) =>
+                    void patch({ ghostShortcut: event.target.value }).then(() =>
+                      window.klyro.shortcutStatus().then(setShortcuts).catch(() => undefined)
+                    )
+                  }
+                />
+              </SettingRow>
+              <SettingRow
+                label="Local-only network (airgap)"
+                hint="Refuses every hosted provider request, so only models on this machine (Ollama, LM Studio, the local daemon) can answer. Meeting audio and documents then never leave the device."
+              >
+                <input
+                  type="checkbox"
+                  checked={settings.airgap === true}
+                  onChange={(event) => {
+                    const next = event.target.checked
+                    void patch({ airgap: next }).then(() => window.klyro.setAirgap(next))
+                  }}
+                />
+              </SettingRow>
+              <SettingRow
                 label="Quit Klyro"
                 hint="With the tray icon off, this is how you stop the app without opening the task manager."
               >
@@ -450,7 +528,12 @@ export function SettingsView({ onNavigate }: { onNavigate: (route: Route) => voi
                 .map((shortcut) => (
                   <Hint key={shortcut.kind}>
                     <AlertCircle className="icon icon--xs" aria-hidden="true" />{' '}
-                    {shortcut.kind === 'toggle' ? 'The quick-ask' : 'The hide-everything'} shortcut{' '}
+                    {shortcut.kind === 'toggle'
+                      ? 'The quick-ask'
+                      : shortcut.kind === 'ghost'
+                        ? 'The ghost-mode'
+                        : 'The hide-everything'}{' '}
+                    shortcut{' '}
                     <code>{shortcut.accelerator || '—'}</code> could not be registered — another app is probably
                     using it. Pick a different combination, or the key will do nothing.
                   </Hint>
