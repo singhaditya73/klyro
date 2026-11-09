@@ -2,7 +2,7 @@
 
 All notable changes to Klyro are recorded here. Versions follow [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [0.9.25] — 2026-11-09
 
 The audit batch: every documented feature either works or says why it cannot.
 The false claims were removed, the private paths were tightened, and the app
