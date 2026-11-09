@@ -1,6 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
-import { Blocks, Brain, Clock, Cpu, House, Keyboard, PanelLeft, Settings, ShieldCheck, Zap } from 'lucide-react'
+import { Blocks, Brain, Clock, Cpu, Download, House, Keyboard, PanelLeft, Settings, ShieldCheck, Zap } from 'lucide-react'
 import { useHashRoute, type Route } from './hooks/useHashRoute'
+import type { UpdateStatus } from '@shared/types'
 import KlyroMark from './assets/logo/klyro-mark.svg'
 
 /**
@@ -50,6 +51,24 @@ export default function App() {
   const [narrow, setNarrow] = useState(() => window.innerWidth <= 980)
   const [shortcut, setShortcut] = useState('CommandOrControl+Shift+Space')
   const [version, setVersion] = useState<string | null>(null)
+  const [update, setUpdate] = useState<UpdateStatus | null>(null)
+
+  // The sidebar is always visible, so it is the one place that can say "an
+  // update is downloaded and waiting" without the user opening Settings.
+  useEffect(() => {
+    let live = true
+    void window.klyro
+      .updateStatus?.()
+      .then((next) => {
+        if (live) setUpdate(next)
+      })
+      .catch(() => undefined)
+    const off = window.klyro.onUpdateStatus?.((next) => setUpdate(next))
+    return () => {
+      live = false
+      off?.()
+    }
+  }, [])
 
   // Theme: 'system' follows the OS, the others are explicit. The attribute is
   // applied to <html> so the whole design system flips in one paint.
@@ -176,6 +195,16 @@ export default function App() {
             <span>{shortcut}</span>
           </div>
           {version && <div className="sidebar__version">Klyro {version}</div>}
+          {update?.phase === 'ready' && (
+            <button
+              className="btn btn--quiet btn--sm"
+              onClick={() => void window.klyro.updateInstall?.()}
+              title={`Version ${update.version ?? 'newer'} is downloaded. Restart to finish installing.`}
+            >
+              <Download className="icon icon--xs" aria-hidden="true" />
+              <span>Restart to update</span>
+            </button>
+          )}
         </div>
       </aside>
 

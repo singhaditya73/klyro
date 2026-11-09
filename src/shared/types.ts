@@ -111,6 +111,25 @@ export interface AppSettings {
   /** Replay an answer instantly when the same question meets the same screen. */
   overlayAnswerCache: boolean
   /**
+   * Allow the overlay to answer through a *different* hosted provider when the
+   * chosen one is slow or fails. Off by default: prompts and screenshots reach
+   * only the provider the user picked. Local fallback (Ollama) is always
+   * allowed because nothing leaves the machine.
+   */
+  allowHostedFallback: boolean
+  /**
+   * Expose the Ghost Phone HUD to other devices on the local network. Off by
+   * default: the HUD carries live meeting content, so it binds to loopback
+   * until the user deliberately asks for phone access over their LAN.
+   */
+  remoteHudLan: boolean
+  /**
+   * Ask the release page once per launch whether a newer version exists.
+   * Off means the user checks by hand; the app never installs anything on its
+   * own either way. Skipped automatically while Airgap Shield is on.
+   */
+  autoUpdateCheck: boolean
+  /**
    * How long Klyro keeps what it wrote — interview transcripts, the chat
    * history and the audit log — in days. `0` keeps it until it is deleted.
    * Older entries are pruned when the app starts and when the window changes.
@@ -262,6 +281,8 @@ export type ChatStreamEvent =
       /** Milliseconds until the answer was complete. */
       totalMs?: number
       model?: string
+      /** The provider that actually answered (differs from `start` after a fallback). */
+      provider?: ProviderId
       /** True when the answer was replayed from the cache. */
       cached?: boolean
       /** Fast provider fallback info when latency budget was enforced. */
@@ -643,6 +664,19 @@ export interface CalendarSyncStatus {
   error: string | null
 }
 
+/**
+ * The live meeting transcript as the main process has it on disk. The renderer
+ * can restore this after a reload so a crash mid-meeting does not lose what
+ * was already transcribed.
+ */
+export interface MeetingTranscriptSnapshot {
+  lines: string[]
+  startedAt: number | null
+  updatedAt: number | null
+  /** True when the buffer is recent enough to be offered for recovery. */
+  resumable: boolean
+}
+
 /* ---------- MCP connector (bring-your-own tool servers) ---------- */
 
 export interface MCPServerConfig {
@@ -736,8 +770,6 @@ export interface SecurityStatus {
 
 export type DataScope = 'conversations' | 'memory' | 'documents' | 'meetings' | 'agentTasks'
 
-export type WorkspaceView = 'home' | 'chat' | 'screen' | 'agent' | 'workflows' | 'memory' | 'integrations'
-
 export interface StorageReport {
   dataBytes: number
   dataFiles: number
@@ -767,109 +799,6 @@ export interface DataSummary {
   storage: StorageReport
 }
 
-/* ---------- Workflows ---------- */
-
-export type WorkflowStepKind =
-  | 'prompt'
-  | 'githubIssues'
-  | 'githubCreateIssue'
-  | 'knowledge'
-  | 'meetingSummary'
-
-/** Fields every step shares. All are optional so older drafts stay valid. */
-export interface WorkflowStepOptions {
-  /** Stable id. Generated when omitted; unique within a workflow. */
-  id?: string
-  name: string
-  /** Stop the run (default) or record the failure and carry on. */
-  onFailure?: 'stop' | 'continue'
-  /** Extra attempts after the first failure (0–3). */
-  retries?: number
-  /** Per-step timeout in milliseconds. */
-  timeoutMs?: number
-  /** Key later steps refer to as {{steps.<key>}}. Defaults to the step id. */
-  output?: string
-}
-
-export type WorkflowStep = WorkflowStepOptions &
-  (
-    | { kind: 'prompt'; template: string }
-    | { kind: 'githubIssues'; repo: string }
-    | { kind: 'githubCreateIssue'; repo: string; title: string; body: string }
-    | { kind: 'knowledge'; query: string }
-    | { kind: 'meetingSummary'; meetingId: string }
-  )
-
-export interface WorkflowRecord {
-  id: string
-  /** Schema version of this definition. */
-  version: number
-  name: string
-  description: string
-  builtin: boolean
-  steps: WorkflowStep[]
-  createdAt: number
-  updatedAt?: number
-}
-
-export interface WorkflowDraft {
-  name: string
-  description?: string
-  steps: WorkflowStep[]
-}
-
-export interface WorkflowStepResult {
-  id: string
-  name: string
-  output: string
-  ok: boolean
-  /** How many attempts were made (1 when it worked first time). */
-  attempts?: number
-  error?: string
-}
-
-export type WorkflowRunStatus = 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
-
-export interface WorkflowRunStepState {
-  id: string
-  name: string
-  status: 'pending' | 'running' | 'done' | 'failed' | 'skipped'
-  output?: string
-  error?: string
-  detail?: string
-  attempts: number
-  startedAt?: number
-  finishedAt?: number
-}
-
-/** Durable record of one workflow run, kept across restarts. */
-export interface WorkflowRun {
-  id: string
-  workflowId: string
-  workflowName: string
-  input: string
-  conversationId: string
-  status: WorkflowRunStatus
-  startedAt: number
-  finishedAt: number
-  steps: WorkflowRunStepState[]
-  error?: string
-}
-
-export interface WorkflowRunResult {
-  runId: string
-  conversationId: string
-  status: WorkflowRunStatus
-  error?: string
-  steps: WorkflowStepResult[]
-}
-
-export type WorkflowEvent =
-  | { type: 'start'; runId: string; workflowId: string; name: string }
-  | { type: 'step'; runId: string; index: number; name: string; status: 'running' | 'done' | 'failed'; detail?: string }
-  | { type: 'done'; runId: string; conversationId: string; status: WorkflowRunStatus }
-  | { type: 'error'; runId: string; message: string }
-
 /** The API exposed on `window.klyro` by the preload bridge. */
 /** A global shortcut, and whether the operating system let this app have it. */
 export interface ShortcutStatus {
@@ -887,6 +816,36 @@ export interface ProviderUsageRow {
   outputTokens: number
   totalTokens: number
   estimatedSpendUsd: number
+}
+
+/**
+ * Auto-update state.
+ *
+ * `unsupported` is not an error: it says this install (a development build, a
+ * .deb, or an airgapped session) cannot be replaced in place, and why.
+ * `ready` means the new version is downloaded and waiting for a restart.
+ */
+export type UpdatePhase =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'downloading'
+  | 'ready'
+  | 'up-to-date'
+  | 'error'
+  | 'unsupported'
+
+export interface UpdateStatus {
+  phase: UpdatePhase
+  currentVersion: string
+  /** The version that is available, downloading or ready. */
+  version?: string
+  /** Download progress, 0–100. */
+  percent?: number
+  /** Why the check could not run, or could not finish. */
+  message?: string
+  /** When the last successful check happened. */
+  checkedAt?: number
 }
 
 export interface KlyroApi {
@@ -923,6 +882,8 @@ export interface KlyroApi {
   hideOverlay(): Promise<void>
   /** Bring the control panel to the front (HUD-first launches start with it hidden). */
   showMainWindow(): Promise<void>
+  /** Copy text through the main process (works even when the HUD is unfocused). */
+  copyText(text: string): Promise<boolean>
   minimizeOverlay(): Promise<void>
   /** Show the quick-ask overlay (the same window the hotkey opens). */
   toggleOverlay(): Promise<void>
@@ -934,8 +895,6 @@ export interface KlyroApi {
   setZeroFocus(enabled: boolean): Promise<boolean>
   /** Emergency panic cloak: immediately hide all windows, abort LLM, clear session. */
   panicKillswitch(): Promise<void>
-  /** Humanizer: inject code as simulated authentic human typing instead of instant clipboard paste. */
-  humanizeType(text: string, options?: { wpm?: number }): Promise<boolean>
   /** Start Ghost Phone companion HUD server for zero on-screen footprint. */
   remoteHudStart(port?: number): Promise<{ url: string; port: number }>
   remoteHudStop(): Promise<void>
@@ -1092,9 +1051,18 @@ export interface KlyroApi {
   securityStatus(): Promise<SecurityStatus>
   dataSummary(): Promise<DataSummary>
   dataClear(scope: DataScope): Promise<DataSummary>
+  /** Write memories, documents and meetings to one JSON bundle the user chooses. */
+  dataExport(): Promise<{ ok: boolean; path?: string; error?: string }>
   sweepStorage(): Promise<DataSummary>
   diagnosticsList(): Promise<CrashReport[]>
   diagnosticsClear(): Promise<void>
+
+  updateStatus(): Promise<UpdateStatus>
+  /** Ask the release page; never downloads or installs by itself. */
+  updateCheck(): Promise<UpdateStatus>
+  updateDownload(): Promise<UpdateStatus>
+  updateInstall(): Promise<void>
+  onUpdateStatus(listener: (status: UpdateStatus) => void): () => void
 
   memoryList(): Promise<MemoryRecord[]>
   memoryAdd(draft: MemoryDraft): Promise<MemoryRecord[]>
@@ -1126,4 +1094,9 @@ export interface KlyroApi {
   calendarGetUpcoming(): Promise<CalendarEvent | null>
   calendarDismiss(id: string): Promise<boolean>
   calendarToggleAutoDetect(enabled: boolean): Promise<boolean>
+
+  /** The transcript buffer the main process keeps, for crash recovery. */
+  meetingTranscriptGet(): Promise<MeetingTranscriptSnapshot>
+  meetingTranscriptAppend(line: string): Promise<number>
+  meetingTranscriptDiscard(): Promise<void>
 }

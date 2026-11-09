@@ -4,6 +4,7 @@ import {
   Broom,
   CheckCircle2,
   Database,
+  Download,
   HardDrive,
   Key,
   Loader2,
@@ -128,6 +129,8 @@ export function PrivacyView(): React.ReactNode {
   const [security, setSecurity] = useState<SecurityStatus | null>(null)
   const [data, setData] = useState<DataSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const [exportNote, setExportNote] = useState<string | null>(null)
 
   /** Each part is loaded on its own: one failure must not empty the page. */
   const load = useCallback(async (): Promise<void> => {
@@ -172,6 +175,21 @@ export function PrivacyView(): React.ReactNode {
 
   async function sweep(): Promise<void> {
     setData(await window.klyro.sweepStorage())
+  }
+
+  async function exportBundle(): Promise<void> {
+    if (exporting) return
+    setExporting(true)
+    setExportNote(null)
+    try {
+      const result = await window.klyro.dataExport()
+      if (result.ok) setExportNote(`Exported to ${result.path}`)
+      else if (result.error !== 'Export cancelled') setExportNote(result.error ?? 'Export failed')
+    } catch (caught) {
+      setExportNote((caught as Error).message)
+    } finally {
+      setExporting(false)
+    }
   }
 
   if (error) {
@@ -313,6 +331,17 @@ export function PrivacyView(): React.ReactNode {
         <Hint style={{ marginTop: 10 }}>
           Saved credentials: {data?.credentials ?? 0}. Credentials are removed on the Models & Agents page.
         </Hint>
+        <div className="row" style={{ gap: 12, marginTop: 12, alignItems: 'center' }}>
+          <button className="btn btn--quiet btn--sm" onClick={() => void exportBundle()} disabled={exporting}>
+            {exporting ? (
+              <Loader2 className="icon icon--xs spin" aria-hidden="true" />
+            ) : (
+              <Download className="icon icon--xs" aria-hidden="true" />
+            )}
+            <span>{exporting ? 'Exporting…' : 'Export a copy of everything'}</span>
+          </button>
+          {exportNote && <Hint>{exportNote}</Hint>}
+        </div>
       </Group>
 
       <Group

@@ -46,12 +46,23 @@ export const anthropic: Provider = {
       },
       { provider: PROVIDER, signal: options.signal }
     )
+    let inputTokens: number | undefined
+    let outputTokens: number | undefined
     try {
       for await (const event of sseJson(res)) {
+        if (event?.type === 'message_start') {
+          const usage = event.message?.usage
+          if (typeof usage?.input_tokens === 'number') inputTokens = usage.input_tokens
+          if (typeof usage?.output_tokens === 'number') outputTokens = usage.output_tokens
+        } else if (event?.type === 'message_delta') {
+          const reported = event.usage?.output_tokens
+          if (typeof reported === 'number') outputTokens = reported
+        }
         if (event?.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
           yield event.delta.text as string
         }
       }
+      options.onUsage?.({ inputTokens, outputTokens })
     } catch (error) {
       throw classifyThrown(error, { provider: PROVIDER, endpoint: hostOf(trimSlash(options.baseUrl)) })
     }

@@ -141,7 +141,7 @@ function findFastFallbackRoute(
   // The airgap shield promises that inference stays on this machine. A silent
   // fallback to a hosted model would break that promise, so only the local
   // runtime is eligible while it is on.
-  const allowHosted = !isAirgapShield()
+  const allowHosted = settings.allowHostedFallback && !isAirgapShield()
 
   // 1. Groq (LPUs, TTFT typically ~200-400ms)
   if (allowHosted && primaryProvider !== 'groq') {
@@ -278,6 +278,10 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
   let text = ''
   const startedAt = Date.now()
   let firstTokenMs: number | null = null
+  /** Exact counts reported by the endpoint, when it reports them. */
+  let reportedUsage: { inputTokens?: number; outputTokens?: number } | null = null
+  /** Read through a call so control-flow analysis does not pin it to `null`. */
+  const reportedTokens = (): { inputTokens?: number; outputTokens?: number } | null => reportedUsage
 
   /**
    * The history: what was asked, and what came back.
@@ -325,6 +329,11 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
       baseUrl: route.baseUrl,
       apiKey: route.apiKey,
       ...(request.useFastModel ? { maxTokens: 400, temperature: 0.3 } : {}),
+      // The adapter reports exact token counts when the stream carries them;
+      // the ledger falls back to its estimate otherwise.
+      onUsage: (reported: { inputTokens?: number; outputTokens?: number }) => {
+        reportedUsage = { ...reportedUsage, ...reported }
+      },
       system: [
         settings.systemPrompt + styleSuffix(settings.responseStyle),
         knowledge.block,
@@ -387,7 +396,7 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
         text = replay
         emit({ type: 'delta', messageId: assistantId, text: replay })
         conversations.updateMessage(conversationId, assistantId, { content: replay })
-        emit({ type: 'done', messageId: assistantId, cached: true, ms: 0, totalMs: 0, model: route.model })
+        emit({ type: 'done', messageId: assistantId, cached: true, ms: 0, totalMs: 0, model: route.model, provider: providerId })
         usage.record(providerId, 'chat', { toolCall: false })
         audit.record('chat.cached', `Replayed a cached answer for "${request.content.slice(0, 80)}"`)
         // A replay is still an answer: it belongs in the history too.
@@ -447,10 +456,10 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
       } else {
         conversations.updateMessage(conversationId, assistantId, { content: text })
         const totalMs = Date.now() - startedAt
-        emit({ type: 'done', messageId: assistantId, ms: firstTokenMs ?? totalMs, totalMs, model: route.model })
+        emit({ type: 'done', messageId: assistantId, ms: firstTokenMs ?? totalMs, totalMs, model: route.model, provider: providerId })
         usage.record(providerId, 'chat', {
-          inputTokens: inputTokensFor(),
-          outputTokens: estimateTokens(text)
+          inputTokens: reportedTokens()?.inputTokens ?? inputTokensFor(),
+          outputTokens: reportedTokens()?.outputTokens ?? estimateTokens(text)
         })
         recordInHistory(text, firstTokenMs ?? totalMs)
         return
@@ -550,11 +559,12 @@ export async function sendChat(request: SendChatRequest): Promise<void> {
       ms: firstTokenMs ?? totalMs,
       totalMs,
       model: activeModel,
+      provider: activeProviderId,
       fallback: fallbackInfo
     })
     usage.record(activeProviderId, 'chat', {
-      inputTokens: inputTokensFor(),
-      outputTokens: estimateTokens(text)
+      inputTokens: reportedTokens()?.inputTokens ?? inputTokensFor(),
+      outputTokens: reportedTokens()?.outputTokens ?? estimateTokens(text)
     })
     recordInHistory(text, firstTokenMs ?? totalMs)
     // Extraction costs a model call, so only run it for substantive exchanges.

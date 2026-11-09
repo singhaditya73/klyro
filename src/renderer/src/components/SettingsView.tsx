@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import type { AppSettings, PermissionState, ProviderStatus } from '@shared/types'
 import { Badge, Group, Hint, PageHeader, SettingRow, StatusDot } from './ui'
+import { UpdateCard } from './UpdateCard'
 import { providerState } from '../lib/providers'
 import type { Route } from '../hooks/useHashRoute'
 
@@ -428,6 +429,26 @@ export function SettingsView({ onNavigate }: { onNavigate: (route: Route) => voi
                 />
               </SettingRow>
               <SettingRow
+                label="Fall back to another provider"
+                hint="Off by default. When the chosen provider is slow or fails, the overlay may answer through another provider. Leaving this off means your question and screen go only to the provider you picked. Local Ollama is always used as a fallback because it runs on this machine."
+              >
+                <input
+                  type="checkbox"
+                  checked={settings.allowHostedFallback}
+                  onChange={(event) => void patch({ allowHostedFallback: event.target.checked })}
+                />
+              </SettingRow>
+              <SettingRow
+                label="Ghost Phone on local network"
+                hint="Off by default. The phone HUD carries live meeting content, so it listens only on this machine until you turn this on. On a public or shared Wi-Fi network, prefer a hotspot you control."
+              >
+                <input
+                  type="checkbox"
+                  checked={settings.remoteHudLan}
+                  onChange={(event) => void patch({ remoteHudLan: event.target.checked })}
+                />
+              </SettingRow>
+              <SettingRow
                 label="Ask for screen permission at launch"
                 hint="Off by default. macOS raises a one-time prompt the first time anything captures the screen; capturing on demand means it appears when you click capture, not when Klyro starts. Turn this on only if you would rather answer it before a call. Windows never asks per capture; on Linux this has no effect."
               >
@@ -732,6 +753,24 @@ export function SettingsView({ onNavigate }: { onNavigate: (route: Route) => voi
 
               <UsageSection />
               <AuditLogSection />
+
+              <Group
+                title="Updates"
+                icon={Download}
+                description="A check asks the release page whether a newer version exists. Nothing is downloaded or installed without a click, and the check is skipped while Airgap Shield is on."
+              >
+                <SettingRow
+                  label="Check for a new version at launch"
+                  hint="Off means only the Check now button asks."
+                >
+                  <input
+                    type="checkbox"
+                    checked={settings.autoUpdateCheck}
+                    onChange={(event) => void patch({ autoUpdateCheck: event.target.checked })}
+                  />
+                </SettingRow>
+                <UpdateCard />
+              </Group>
 
               <Group title="About" icon={HardDrive}>
                 <div className="row" style={{ gap: 12 }}>

@@ -33,9 +33,17 @@ export const IPC = {
   securityStatus: 'security:status',
   dataSummary: 'data:summary',
   dataClear: 'data:clear',
+  dataExport: 'data:export',
   storageSweep: 'storage:sweep',
   diagnosticsList: 'diagnostics:list',
   diagnosticsClear: 'diagnostics:clear',
+
+  /* Auto-update: check, then download, then restart — each an explicit step. */
+  updateStatus: 'update:status',
+  updateCheck: 'update:check',
+  updateDownload: 'update:download',
+  updateInstall: 'update:install',
+  updateChanged: 'update:changed',
 
 
   memoryList: 'memory:list',
@@ -58,6 +66,7 @@ export const IPC = {
 
   windowHideOverlay: 'window:hideOverlay',
   windowShowMain: 'window:showMain',
+  clipboardWrite: 'clipboard:write',
   shortcutsStatus: 'shortcuts:status',
   windowMinimizeOverlay: 'window:minimizeOverlay',
   windowToggleOverlay: 'window:toggleOverlay',
@@ -65,7 +74,6 @@ export const IPC = {
   windowSetGhostMode: 'window:setGhostMode',
   windowSetZeroFocus: 'window:setZeroFocus',
   windowPanicKillswitch: 'window:panicKillswitch',
-  humanizeType: 'humanize:type',
   remoteHudStart: 'remoteHud:start',
   remoteHudStop: 'remoteHud:stop',
   remoteHudStatus: 'remoteHud:status',
@@ -154,7 +162,10 @@ export const IPC = {
   calendarSync: 'calendar:sync',
   calendarGetUpcoming: 'calendar:getUpcoming',
   calendarDismiss: 'calendar:dismiss',
-  calendarToggleAutoDetect: 'calendar:toggleAutoDetect'
+  calendarToggleAutoDetect: 'calendar:toggleAutoDetect',
+  meetingTranscriptGet: 'meeting:transcriptGet',
+  meetingTranscriptAppend: 'meeting:transcriptAppend',
+  meetingTranscriptDiscard: 'meeting:transcriptDiscard'
 } as const
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC]

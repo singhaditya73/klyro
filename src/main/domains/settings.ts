@@ -39,6 +39,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
   screenPreWarm: false,
   overlayDisplay: 'primary',
   overlayAnswerCache: true,
+  // Off by default: a silent switch to another hosted provider would send the
+  // question and screen to an endpoint the user did not choose.
+  allowHostedFallback: false,
+  // Off by default: the companion HUD carries live meeting content, so it
+  // stays on loopback until the user asks for local-network access.
+  remoteHudLan: false,
+  // Checking is a network request to GitHub; it is skipped while Airgap
+  // Shield is on, and the app never downloads or installs by itself.
+  autoUpdateCheck: true,
   // Keep the history until it is deleted. A number of days prunes it.
   retentionDays: 0,
   interviewEphemeralDefault: false,

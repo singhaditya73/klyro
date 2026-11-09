@@ -37,6 +37,11 @@ export interface ChatOptions {
   maxTokens?: number
   temperature?: number
   signal?: AbortSignal
+  /**
+   * Token counts the endpoint reported for this stream, when it reports them.
+   * The ledger prefers these over its own character-based estimate.
+   */
+  onUsage?: (usage: { inputTokens?: number; outputTokens?: number }) => void
 }
 
 export interface TestOptions {

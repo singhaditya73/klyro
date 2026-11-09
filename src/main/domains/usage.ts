@@ -12,7 +12,6 @@ export type UsageKind =
   | 'transcribe'
   | 'agent-step'
   | 'meeting-summary'
-  | 'workflow-step'
   | 'memory-extract'
   | 'tool-proposal'
 

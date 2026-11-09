@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, clipboard, ipcMain } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import { z } from 'zod'
 import { IPC } from '@shared/ipc'
@@ -20,6 +20,9 @@ import { summarizeInterview } from './interview-summary'
 import { exportMeetingNotesMarkdown, generateMeetingCrmNotes } from './meeting-notes'
 import { integrationsDomain } from './integrations'
 import { calendarDomain } from './calendar'
+import { meetingTranscript } from './meeting-transcript'
+import { exportDataBundle } from './data-export'
+import { checkForUpdates, downloadUpdate, installUpdate, updateStatus } from './updater'
 import { prewarmTranscribe, transcribeAudio } from './audio'
 import { ocrExtractText } from './ocr'
 import {
@@ -40,7 +43,6 @@ import {
   snapOverlayToNotch,
   toggleOverlay
 } from './windows'
-import { simulateHumanTyping } from './humanizer'
 import { startRemoteHudServer, stopRemoteHudServer, getRemoteHudUrl, isRemoteHudRunning, broadcastRemoteHud } from './remote-hud'
 import { installAirgapFetchGuard, setAirgapShield, isAirgapShield } from '../providers/request'
 import { conversations } from './conversations'
@@ -287,6 +289,11 @@ export function registerIpcHandlers(): void {
 
   handle(IPC.dataSummary, () => privacy.summary())
   handle(IPC.dataClear, (_event, scope: unknown) => privacy.clear(dataScopeSchema.parse(scope) as DataScope))
+  handle(IPC.dataExport, () => exportDataBundle())
+  handle(IPC.updateStatus, () => updateStatus())
+  handle(IPC.updateCheck, () => checkForUpdates())
+  handle(IPC.updateDownload, () => downloadUpdate())
+  handle(IPC.updateInstall, () => installUpdate())
   handle(IPC.storageSweep, (): DataSummary => ({ ...privacy.summary(), storage: maintenance.sweep() }))
   handle(IPC.diagnosticsList, () => diagnostics.list())
   handle(IPC.diagnosticsClear, () => diagnostics.clear())
@@ -359,6 +366,15 @@ export function registerIpcHandlers(): void {
     showMainWindow()
   })
 
+  // Renderer clipboard writes go through the main process: Chromium refuses
+  // `navigator.clipboard` when the overlay is not focused or when the page
+  // permission handler does not grant clipboard writes, which silently broke
+  // "Copy Link" in the HUD.
+  handle(IPC.clipboardWrite, (_event, text: unknown) => {
+    clipboard.writeText(z.string().max(100_000).parse(text))
+    return true
+  })
+
   handle(IPC.windowMinimizeOverlay, () => {
     minimizeOverlay()
   })
@@ -379,13 +395,10 @@ export function registerIpcHandlers(): void {
     return setOverlayZeroFocus(Boolean(enabled))
   })
 
-  handle(IPC.humanizeType, async (_event, text: unknown, options?: unknown) => {
-    return simulateHumanTyping(String(text || ''), (options as any) || {})
-  })
-
   handle(IPC.remoteHudStart, (_event, port?: unknown) => {
     const p = typeof port === 'number' && port > 1024 && port < 65535 ? port : 5892
-    return startRemoteHudServer(p)
+    // Loopback unless the user opted into local-network access in Settings.
+    return startRemoteHudServer(p, { lan: settingsDomain.get().remoteHudLan })
   })
 
   handle(IPC.remoteHudStop, () => {
@@ -620,6 +633,15 @@ export function registerIpcHandlers(): void {
   })
   handle(IPC.calendarToggleAutoDetect, (_event, enabled: unknown) => {
     return calendarDomain.toggleAutoDetect(z.boolean().parse(enabled))
+  })
+
+  /* Meeting transcript durability */
+  handle(IPC.meetingTranscriptGet, () => meetingTranscript.snapshot())
+  handle(IPC.meetingTranscriptAppend, (_event, line: unknown) => {
+    return meetingTranscript.append(z.string().max(8_000).parse(line))
+  })
+  handle(IPC.meetingTranscriptDiscard, () => {
+    meetingTranscript.discard()
   })
 
   handle(IPC.overlayCatalogue, () => overlayCatalogue())

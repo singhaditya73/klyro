@@ -2,6 +2,66 @@
 
 All notable changes to Klyro are recorded here. Versions follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+The audit batch: every documented feature either works or says why it cannot.
+The false claims were removed, the private paths were tightened, and the app
+gained updates, a durable transcript, real token accounting, and an export.
+
+### Added
+- **Updates.** Klyro asks the GitHub release page once per launch, offers the
+  new version, and downloads only on a click; **Restart now** installs it.
+  AppImage and the Windows installer update in place; a `.deb` links to the
+  releases page because the package manager owns those files. The check is
+  skipped while Airgap Shield is on and can be turned off in Settings.
+- **Durable meeting transcript.** Each heard line is appended in the main
+  process, so a renderer reload mid-meeting no longer erases it. A recap is
+  written automatically when recording stops.
+- **One-click export.** Privacy & Data writes memories, indexed documents and
+  non-ephemeral meeting sessions to a single JSON file with owner-only
+  permissions.
+- **Provenance.** The overlay shows which provider and model answered, and how
+  many memories and documents grounded the answer.
+- **Real token usage.** OpenAI, Anthropic, Gemini and Ollama streams report the
+  counts the endpoint actually billed; the ledger prefers them over estimates.
+- **Settings.** *Allow hosted fallback* (off by default) and *Ghost Phone on
+  local network* (off by default).
+
+### Changed
+- **Calendar engine on `ical.js`.** The hand-written parser and recurrence
+  expander were replaced; `VTIMEZONE` is honoured, exceptions are linked,
+  cancelled instances are suppressed, and recurrence iteration is bounded.
+- **The calendar feed URL is encrypted** in the secret store and migrated from
+  the old plaintext copy on first read. Logs name the host, never the token.
+- **The Ghost Phone HUD binds to loopback** unless LAN access is opted in; CORS
+  is gone and the page is served with a restrictive CSP and no-store headers.
+- **Startup is HUD-first.** The control panel is created on demand, and disk
+  sweeps, pruning, the daemon, OCR and the Antigravity warm-up run after the
+  first frame.
+- **Overlay split.** The meeting banner and the Ghost Phone modal are their own
+  components; the model picker and RSVP reader load lazily.
+
+### Removed
+- **Humanizer / typing simulator** and its IPC, preload and UI surface.
+- Orphan `WorkspaceView`/`Workflow*` types, the `workflow-step` usage kind, and
+  IPC declarations for meetings that had no handler.
+
+### Fixed
+- **Documentation that described a different product.** The README's desktop
+  agent, workflows and Studio coding mode are gone; the feature matrix now
+  lists Meetings & CRM Notes and states that the Rust daemon serves eight of
+  the ten providers (Anthropic and Gemini are TypeScript-only).
+
+### Security
+- A failing provider no longer silently forwards the question and screen to a
+  different hosted provider. Local Ollama fallback is unchanged.
+- The remote HUD required no authentication beyond a URL token and accepted
+  cross-origin reads; both were fixed.
+
+### Verified
+- `npm run typecheck` clean; `npx vitest run` 69 files (68 passed, 1 skipped),
+  445 tests (437 passed, 8 skipped).
+
 ## [0.9.24] — 2026-10-26
 
 The 0.9.23 installers could not start on Windows, and the bundled OCR engine could not load in any packaged build. Both were packaging bugs rather than code bugs; this release fixes them and adds a check that fails the build instead of the app.

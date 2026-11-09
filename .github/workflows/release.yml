@@ -42,6 +42,8 @@ jobs:
           path: |
             release/*.AppImage
             release/*.deb
+            release/*.blockmap
+            release/latest-linux.yml
           if-no-files-found: error
 
   windows:
@@ -67,7 +69,10 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: klyro-windows
-          path: release/*.exe
+          path: |
+            release/*.exe
+            release/*.blockmap
+            release/latest.yml
           if-no-files-found: error
 
   publish:

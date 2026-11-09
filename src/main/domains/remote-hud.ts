@@ -5,6 +5,8 @@ import { logger } from '../logger'
 
 let server: http.Server | null = null
 let port = 5892
+/** Loopback by default; only an explicit opt-in binds the LAN interface. */
+let bindHost = '127.0.0.1'
 /** Per-session secret: the HUD carries live meeting content over plain LAN HTTP. */
 let sessionToken: string | null = null
 const sseClients = new Set<http.ServerResponse>()
@@ -38,8 +40,25 @@ export function getLocalIpAddress(): string {
 }
 
 export function getRemoteHudUrl(): string {
-  const base = `http://${getLocalIpAddress()}:${port}`
+  const host = bindHost === '0.0.0.0' ? getLocalIpAddress() : '127.0.0.1'
+  const base = `http://${host}:${port}`
   return sessionToken ? `${base}/?t=${sessionToken}` : base
+}
+
+/**
+ * The page is self-contained (inline style and script), so it needs no remote
+ * origins. Denying everything else keeps an injected URL from turning the HUD
+ * into a beacon that leaks the transcript.
+ */
+function securityHeaders(): http.OutgoingHttpHeaders {
+  return {
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'no-referrer',
+    'Cache-Control': 'no-store',
+    'Content-Security-Policy':
+      "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'"
+  }
 }
 
 /** Broadcast event to all connected phones / tablets */
@@ -72,9 +91,13 @@ export function broadcastRemoteHud(event: { type: string; [key: string]: any }):
 }
 
 /** Start the local HTTP HUD server. Resolves once the port is actually bound. */
-export function startRemoteHudServer(customPort = 5892): Promise<{ url: string; port: number }> {
+export function startRemoteHudServer(
+  customPort = 5892,
+  options: { lan?: boolean } = {}
+): Promise<{ url: string; port: number }> {
   if (server) return Promise.resolve({ url: getRemoteHudUrl(), port })
   port = customPort
+  bindHost = options.lan ? '0.0.0.0' : '127.0.0.1'
   sessionToken = randomBytes(18).toString('hex')
   // A new session starts blank: the previous meeting's answer and transcript
   // must not appear on a phone that connects to this one.
@@ -89,7 +112,7 @@ export function startRemoteHudServer(customPort = 5892): Promise<{ url: string; 
 
       if (parsed.pathname === '/events') {
         if (!authorized(parsed)) {
-          res.writeHead(403, { 'Content-Type': 'text/plain' })
+          res.writeHead(403, { 'Content-Type': 'text/plain', ...securityHeaders() })
           res.end('Forbidden')
           return
         }
@@ -97,7 +120,7 @@ export function startRemoteHudServer(customPort = 5892): Promise<{ url: string; 
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache, no-transform',
           Connection: 'keep-alive',
-          'Access-Control-Allow-Origin': '*'
+          ...securityHeaders()
         })
         res.write(`data: ${JSON.stringify({ type: 'init', state: currentState })}\n\n`)
         sseClients.add(res)
@@ -107,17 +130,17 @@ export function startRemoteHudServer(customPort = 5892): Promise<{ url: string; 
 
       if (parsed.pathname === '/api/status') {
         if (!authorized(parsed)) {
-          res.writeHead(403, { 'Content-Type': 'application/json' })
+          res.writeHead(403, { 'Content-Type': 'application/json', ...securityHeaders() })
           res.end(JSON.stringify({ ok: false, error: 'Forbidden' }))
           return
         }
-        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.writeHead(200, { 'Content-Type': 'application/json', ...securityHeaders() })
         res.end(JSON.stringify({ ok: true, state: currentState }))
         return
       }
 
       // The page itself holds no data; every data route above requires the token.
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', ...securityHeaders() })
       res.end(renderMobileHtml())
     })
 
@@ -128,9 +151,13 @@ export function startRemoteHudServer(customPort = 5892): Promise<{ url: string; 
       reject(err)
     })
 
-    next.listen(port, '0.0.0.0', () => {
+    next.listen(port, bindHost, () => {
       server = next
-      logger.info(`Ghost Phone Remote HUD live at ${getRemoteHudUrl()}`)
+      // `listen(0)` asks the OS for a free port; record the one it chose.
+      const address = next.address()
+      if (address && typeof address === 'object') port = address.port
+      const scope = bindHost === '0.0.0.0' ? 'local network' : 'loopback only'
+      logger.info(`Ghost Phone Remote HUD live (${scope}) at ${getRemoteHudUrl()}`)
       resolve({ url: getRemoteHudUrl(), port })
     })
   })

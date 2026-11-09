@@ -78,7 +78,9 @@ written to a second file.
 
 ## What is implemented
 
-Every provider Klyro has, in Rust:
+The daemon serves these providers in Rust. Anthropic and Gemini are **not** in
+it: their request shapes differ from OpenAI's, so they are answered by the app's
+TypeScript clients. That costs speed, not correctness — the answer is the same.
 
 | Provider | Transport | Notes |
 | --- | --- | --- |

@@ -1,10 +1,29 @@
 import { desktopCapturer, powerMonitor } from 'electron'
+import ICAL from 'ical.js'
 import type { CalendarEvent, CalendarSyncStatus } from '@shared/types'
 import { JsonStore } from '../store/json-store'
 import { logger } from '../logger'
+import { secrets } from '../security/secrets'
 import { getOverlayWindow } from './windows'
 
+/** Secret-store id for the calendar feed URL, which may carry a private token. */
+const FEED_SECRET_ID = 'calendar.feedUrl'
+
+/** Feed URLs contain private tokens, so logs only ever see the hostname. */
+function feedLabel(url: string): string {
+  try {
+    return new URL(url.replace(/^webcal:\/\//i, 'https://')).hostname || 'calendar feed'
+  } catch {
+    return 'calendar feed'
+  }
+}
+
 interface CalendarStoreData {
+  /**
+   * Legacy, plaintext location for the feed URL. Newly configured feeds live
+   * in the encrypted secret store; this field is kept only as a fallback for
+   * systems without a keychain and is cleared once the URL is encrypted.
+   */
   feedUrl: string | null
   lastSyncAt: string | null
   /** The last sync failure, kept so a later status check still reports it. */
@@ -33,33 +52,6 @@ const DEFAULT_STORE: CalendarStoreData = {
   windowScanConsent: false,
   dismissedIds: []
 }
-
-export interface ParsedCalendarEvent extends CalendarEvent {
-  /** Raw RRULE property, when the event repeats. */
-  rrule?: string
-  /** Instances explicitly removed from the series (EXDATE). */
-  exdates?: string[]
-  /** The original instance start, for a modified occurrence (RECURRENCE-ID). */
-  recurrenceId?: string
-  /** STATUS:CANCELLED, kept long enough to remove it from its series. */
-  cancelled?: boolean
-}
-
-interface RecurrenceRule {
-  freq: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY'
-  interval: number
-  count?: number
-  until?: number
-  byDay: Array<{ ordinal?: number; day: number }>
-  byMonthDay: number[]
-  byMonth: number[]
-  /** Week start, 0 = Sunday. */
-  wkst: number
-}
-
-const DAY_CODES: Record<string, number> = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 }
-const MS_DAY = 24 * 60 * 60 * 1000
-const MAX_RECURRENCE_PERIODS = 20_000
 
 const PUBLIC_EMAIL_DOMAINS = new Set([
   'gmail.com',
@@ -123,17 +115,6 @@ const isAllGeneric = (cand: string): boolean => {
 const MEETING_URL_REGEX =
   /(https?:\/\/(?:meet\.google\.com\/[a-z0-9-]+|[a-z0-9-]+\.zoom\.us\/j\/[0-9]+|teams\.microsoft\.com\/[^\s<>"]+|teams\.live\.com\/[^\s<>"]+|[a-z0-9-]+\.webex\.com\/[^\s<>"]+))/i
 
-/**
- * Unescapes RFC 5545 text strings.
- */
-function unescapeICalText(str: string): string {
-  return str
-    .replace(/\\n/gi, '\n')
-    .replace(/\\,/g, ',')
-    .replace(/\\;/g, ';')
-    .replace(/\\\\/g, '\\')
-    .trim()
-}
 
 /**
  * Parses iCalendar date strings (e.g. 20261031T093000Z, 20261031T093000, 20261031) into an ISO string.
@@ -176,379 +157,181 @@ export function parseICalDate(dateStr: string): string | null {
 }
 
 /**
- * Parses an RFC 5545 RRULE value into the subset Klyro can expand locally.
- * Unsupported frequencies return null, which leaves the base event intact.
+ * Parses RFC 5545 iCalendar data into structured CalendarEvent objects.
+ *
+ * Parsing and recurrence expansion are delegated to ical.js, which implements
+ * the full RRULE grammar (ordinal BYDAY, BYSETPOS, BYMONTHDAY, ...) and the
+ * VTIMEZONE/DST rules the hand-rolled expander used to miss. When a window is
+ * supplied, each series is expanded into the instances that overlap it;
+ * otherwise one base event per series is returned.
  */
-export function parseRecurrenceRule(value: string): RecurrenceRule | null {
-  const parts = new Map<string, string>()
-  for (const piece of value.split(';')) {
-    const index = piece.indexOf('=')
-    if (index === -1) continue
-    parts.set(piece.slice(0, index).toUpperCase(), piece.slice(index + 1))
+export interface ICalParseOptions {
+  /** Start of the occurrence window, in epoch milliseconds. */
+  from?: number
+  /** End of the occurrence window, in epoch milliseconds. */
+  to?: number
+  /** Safety cap for generated instances per series. */
+  maxOccurrences?: number
+}
+
+/** A malformed series must not make one feed hang the sync. */
+const MAX_RECURRENCE_ITERATIONS = 100_000
+
+function toDate(time: ICAL.Time): Date {
+  // All-day values are floating: anchor them to UTC midnight so a date-only
+  // event does not drift with the machine's timezone.
+  if (time.isDate) return new Date(Date.UTC(time.year, time.month - 1, time.day))
+  return time.toJSDate()
+}
+
+function statusOf(event: ICAL.Event | null | undefined): string {
+  if (!event) return ''
+  return String(event.component.getFirstPropertyValue('status') ?? '').toUpperCase()
+}
+
+function attendeesOf(event: ICAL.Event): string[] {
+  const attendees: string[] = []
+  const add = (display: string): void => {
+    if (display && !attendees.includes(display)) attendees.push(display)
   }
-
-  const freq = (parts.get('FREQ') ?? '').toUpperCase()
-  if (freq !== 'DAILY' && freq !== 'WEEKLY' && freq !== 'MONTHLY' && freq !== 'YEARLY') {
-    return null
+  for (const property of event.component.getAllProperties('attendee')) {
+    const email = String(property.getFirstValue() ?? '').replace(/^mailto:/i, '').trim()
+    const name = String(property.getParameter('cn') ?? '').trim()
+    add(name ? (email ? `${name} (${email})` : name) : email)
   }
-
-  const interval = Math.max(1, Number.parseInt(parts.get('INTERVAL') ?? '1', 10) || 1)
-  const countValue = Number.parseInt(parts.get('COUNT') ?? '', 10)
-  const count = Number.isFinite(countValue) && countValue > 0 ? countValue : undefined
-  const until = parts.has('UNTIL') ? parseICalDate(parts.get('UNTIL') ?? '') : null
-
-  const byDay: RecurrenceRule['byDay'] = []
-  for (const token of (parts.get('BYDAY') ?? '').split(',')) {
-    const match = /^([+-]?\d{1,2})?(SU|MO|TU|WE|TH|FR|SA)$/i.exec(token.trim())
-    if (!match) continue
-    const ordinal = match[1] ? Number.parseInt(match[1], 10) : undefined
-    byDay.push({ ...(ordinal === undefined ? {} : { ordinal }), day: DAY_CODES[match[2].toUpperCase()] })
+  const organizer = event.component.getFirstProperty('organizer')
+  if (organizer) {
+    const email = String(organizer.getFirstValue() ?? '').replace(/^mailto:/i, '').trim()
+    const name = String(organizer.getParameter('cn') ?? '').trim()
+    add(name ? (email ? `${name} (${email})` : name) : email)
   }
+  return attendees
+}
 
-  const byMonthDay = (parts.get('BYMONTHDAY') ?? '')
-    .split(',')
-    .map((token) => Number.parseInt(token.trim(), 10))
-    .filter((day) => Number.isFinite(day) && day !== 0 && Math.abs(day) <= 31)
-
-  const byMonth = (parts.get('BYMONTH') ?? '')
-    .split(',')
-    .map((token) => Number.parseInt(token.trim(), 10))
-    .filter((month) => Number.isFinite(month) && month >= 1 && month <= 12)
-
-  const wkst = DAY_CODES[(parts.get('WKST') ?? 'MO').toUpperCase()] ?? 1
+function toCalendarEvent(event: ICAL.Event, start: Date, end: Date, id: string): CalendarEvent {
+  const title = (event.summary || '').trim() || 'Untitled Meeting'
+  const attendees = attendeesOf(event)
+  const description = (event.description || '').trim() || undefined
+  const location = (event.location || '').trim() || undefined
+  const meetingUrl =
+    extractMeetingUrl(description ?? '') ?? extractMeetingUrl(location ?? '') ?? extractMeetingUrl(title)
 
   return {
-    freq,
-    interval,
-    ...(count === undefined ? {} : { count }),
-    ...(until === null ? {} : { until: new Date(until).getTime() }),
-    byDay,
-    byMonthDay,
-    byMonth,
-    wkst
+    id,
+    title,
+    startTime: start.toISOString(),
+    endTime: end.toISOString(),
+    location,
+    meetingUrl,
+    attendees,
+    company: extractCompany(title, attendees),
+    description,
+    source: 'ical'
   }
 }
 
-interface TimeOfDay {
-  hour: number
-  minute: number
-  second: number
-  millisecond: number
-}
-
-function timeOfDay(epoch: number): TimeOfDay {
-  const date = new Date(epoch)
-  return {
-    hour: date.getUTCHours(),
-    minute: date.getUTCMinutes(),
-    second: date.getUTCSeconds(),
-    millisecond: date.getUTCMilliseconds()
+function endOf(event: ICAL.Event, start: Date): Date {
+  try {
+    return toDate(event.endDate)
+  } catch {
+    // A VEVENT with neither DTEND nor DURATION is still a valid meeting.
+    return new Date(start.getTime() + 30 * 60 * 1000)
   }
 }
 
-/** A UTC timestamp, or null when the calendar date does not exist (e.g. Feb 30). */
-function utcTimestamp(
-  year: number,
-  monthIndex: number,
-  day: number,
-  time: TimeOfDay
-): number | null {
-  const date = new Date(
-    Date.UTC(year, monthIndex, day, time.hour, time.minute, time.second, time.millisecond)
-  )
-  if (
-    date.getUTCFullYear() !== year ||
-    date.getUTCMonth() !== monthIndex ||
-    date.getUTCDate() !== day
-  ) {
-    return null
+export function parseICal(icsContent: string, options: ICalParseOptions = {}): CalendarEvent[] {
+  if (!icsContent || !icsContent.includes('BEGIN:VCALENDAR')) return []
+
+  let root: ICAL.Component
+  try {
+    root = new ICAL.Component(ICAL.parse(icsContent))
+  } catch (error) {
+    logger.warn('Could not parse the calendar feed', (error as Error).message)
+    return []
   }
-  return date.getTime()
-}
 
-function daysInMonth(year: number, monthIndex: number): number {
-  return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate()
-}
-
-function startOfWeek(epoch: number, weekStartDay: number): number {
-  const day = new Date(epoch).getUTCDay()
-  return epoch - ((day - weekStartDay + 7) % 7) * MS_DAY
-}
-
-function addMonthsToMonthStart(epoch: number, months: number): number {
-  const date = new Date(epoch)
-  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, 1)
-}
-
-function nthWeekdayOfMonth(
-  year: number,
-  monthIndex: number,
-  weekday: number,
-  ordinal: number
-): number | null {
-  const total = daysInMonth(year, monthIndex)
-  if (ordinal > 0) {
-    const firstWeekday = new Date(Date.UTC(year, monthIndex, 1)).getUTCDay()
-    const day = 1 + ((weekday - firstWeekday + 7) % 7) + (ordinal - 1) * 7
-    return day <= total ? day : null
-  }
-  if (ordinal < 0) {
-    const lastWeekday = new Date(Date.UTC(year, monthIndex, total)).getUTCDay()
-    const day = total - ((lastWeekday - weekday + 7) % 7) + (ordinal + 1) * 7
-    return day >= 1 ? day : null
-  }
-  return null
-}
-
-/** Days in one month selected by BYMONTHDAY / BYDAY, with DTSTART's day as default. */
-function monthlyDays(
-  year: number,
-  monthIndex: number,
-  rule: RecurrenceRule,
-  anchorDay: number
-): number[] {
-  const total = daysInMonth(year, monthIndex)
-  let days: number[] = []
-
-  if (rule.byMonthDay.length > 0) {
-    for (const value of rule.byMonthDay) {
-      const day = value > 0 ? value : total + value + 1
-      if (day >= 1 && day <= total) days.push(day)
+  // Register the feed's own VTIMEZONEs so TZID values resolve, including DST.
+  for (const vtimezone of root.getAllSubcomponents('vtimezone')) {
+    try {
+      const timezone = new ICAL.Timezone(vtimezone)
+      if (timezone.tzid) ICAL.TimezoneService.register(timezone)
+    } catch {
+      // A malformed VTIMEZONE must not discard the rest of the calendar.
     }
-    // BYDAY and BYMONTHDAY together restrict each other.
-    if (rule.byDay.length > 0) {
-      days = days.filter((day) =>
-        rule.byDay.some(
-          (entry) =>
-            entry.ordinal === undefined &&
-            new Date(Date.UTC(year, monthIndex, day)).getUTCDay() === entry.day
-        )
-      )
+  }
+
+  const components = root.getAllSubcomponents('vevent')
+  const from = options.from
+  const to = options.to
+  const expanding = from !== undefined && to !== undefined
+  const maxOccurrences = Math.max(1, options.maxOccurrences ?? 500)
+  const events: CalendarEvent[] = []
+
+  // Some feeds send a cancelled exception without SUMMARY/DTSTART. Record the
+  // UID + original start first so the generated instance is suppressed even
+  // when ical.js cannot link the exception to its master.
+  const cancelledInstances = new Set<string>()
+  for (const component of components) {
+    if (String(component.getFirstPropertyValue('status') ?? '').toUpperCase() !== 'CANCELLED') continue
+    const uid = String(component.getFirstPropertyValue('uid') ?? '')
+    const recurrenceId = component.getFirstPropertyValue('recurrence-id') as ICAL.Time | null
+    if (uid && recurrenceId) cancelledInstances.add(`${uid}@${toDate(recurrenceId).toISOString()}`)
+  }
+
+  for (const component of components) {
+    let event: ICAL.Event
+    try {
+      event = new ICAL.Event(component)
+    } catch {
+      continue
     }
-  } else if (rule.byDay.length > 0) {
-    for (const entry of rule.byDay) {
-      if (entry.ordinal !== undefined) {
-        const day = nthWeekdayOfMonth(year, monthIndex, entry.day, entry.ordinal)
-        if (day !== null) days.push(day)
+
+    // Exceptions are attached to their master by ICAL.Event; emitting them
+    // here as well would duplicate the instance.
+    if (event.isRecurrenceException()) continue
+
+    const baseId = event.uid || `event-${events.length + 1}`
+    if (statusOf(event) === 'CANCELLED') continue
+
+    try {
+      if (!expanding || !event.isRecurring()) {
+        const start = toDate(event.startDate)
+        events.push(toCalendarEvent(event, start, endOf(event, start), baseId))
         continue
       }
-      for (let day = 1; day <= total; day++) {
-        if (new Date(Date.UTC(year, monthIndex, day)).getUTCDay() === entry.day) days.push(day)
+
+      const iterator = event.iterator()
+      let emitted = 0
+      for (let step = 0; step < MAX_RECURRENCE_ITERATIONS; step++) {
+        const next = iterator.next()
+        if (!next) break
+
+        // The id is the series plus the *original* instant, so dismissing or
+        // recording a moved occurrence stays attached to that occurrence.
+        const occurrenceStart = toDate(next)
+        const occurrenceId = `${baseId}@${occurrenceStart.toISOString()}`
+        if (cancelledInstances.has(occurrenceId)) continue
+
+        const details = event.getOccurrenceDetails(next)
+        const start = toDate(details.startDate)
+        if (to !== undefined && start.getTime() > to) break
+        if (statusOf(details.item) === 'CANCELLED') continue
+
+        const end = details.endDate ? toDate(details.endDate) : endOf(details.item ?? event, start)
+        if (from !== undefined && end.getTime() < from) continue
+        if (emitted >= maxOccurrences) break
+
+        events.push(toCalendarEvent(details.item ?? event, start, end, occurrenceId))
+        emitted += 1
       }
-    }
-  } else if (anchorDay >= 1 && anchorDay <= total) {
-    days.push(anchorDay)
-  }
-
-  return days
-}
-
-/** All occurrence starts inside one period (a day, week, month or year). */
-function candidatesInPeriod(
-  cursor: number,
-  rule: RecurrenceRule,
-  seriesStart: number,
-  time: TimeOfDay
-): number[] {
-  const cursorDate = new Date(cursor)
-  const year = cursorDate.getUTCFullYear()
-  const monthIndex = cursorDate.getUTCMonth()
-  const seriesDate = new Date(seriesStart)
-  const anchorDay = seriesDate.getUTCDate()
-
-  if (rule.freq === 'DAILY') {
-    const day = cursorDate.getUTCDate()
-    if (rule.byMonth.length > 0 && !rule.byMonth.includes(monthIndex + 1)) return []
-    if (rule.byMonthDay.length > 0) {
-      const total = daysInMonth(year, monthIndex)
-      const wanted = rule.byMonthDay.map((value) => (value > 0 ? value : total + value + 1))
-      if (!wanted.includes(day)) return []
-    }
-    if (rule.byDay.length > 0 && !rule.byDay.some((entry) => entry.day === cursorDate.getUTCDay())) {
-      return []
-    }
-    const candidate = utcTimestamp(year, monthIndex, day, time)
-    return candidate === null ? [] : [candidate]
-  }
-
-  if (rule.freq === 'WEEKLY') {
-    const entries = rule.byDay.length > 0 ? rule.byDay : [{ day: seriesDate.getUTCDay() }]
-    const candidates: number[] = []
-    for (const entry of entries) {
-      const offset = (entry.day - rule.wkst + 7) % 7
-      const dayEpoch = cursor + offset * MS_DAY
-      const date = new Date(dayEpoch)
-      if (rule.byMonth.length > 0 && !rule.byMonth.includes(date.getUTCMonth() + 1)) continue
-      const candidate = utcTimestamp(
-        date.getUTCFullYear(),
-        date.getUTCMonth(),
-        date.getUTCDate(),
-        time
-      )
-      if (candidate !== null) candidates.push(candidate)
-    }
-    return candidates.sort((a, b) => a - b)
-  }
-
-  if (rule.freq === 'MONTHLY') {
-    // BYMONTH limits a monthly series to the listed months (e.g. a seasonal
-    // review); without this check it would fire every month.
-    if (rule.byMonth.length > 0 && !rule.byMonth.includes(monthIndex + 1)) return []
-    return monthlyDays(year, monthIndex, rule, anchorDay)
-      .map((day) => utcTimestamp(year, monthIndex, day, time))
-      .filter((value): value is number => value !== null)
-      .sort((a, b) => a - b)
-  }
-
-  // YEARLY: the cursor is January 1 of the year being generated.
-  const months = rule.byMonth.length > 0 ? rule.byMonth.map((month) => month - 1) : [seriesDate.getUTCMonth()]
-  const candidates: number[] = []
-  for (const month of months) {
-    for (const day of monthlyDays(year, month, rule, anchorDay)) {
-      const candidate = utcTimestamp(year, month, day, time)
-      if (candidate !== null) candidates.push(candidate)
+    } catch (error) {
+      logger.warn('Could not expand a calendar event', baseId, (error as Error).message)
     }
   }
-  return candidates.sort((a, b) => a - b)
+
+  return events
 }
 
-function initialRecurrenceCursor(freq: RecurrenceRule['freq'], start: number, wkst: number): number {
-  if (freq === 'WEEKLY') return startOfWeek(start, wkst)
-  if (freq === 'MONTHLY') {
-    const date = new Date(start)
-    return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1)
-  }
-  if (freq === 'YEARLY') return Date.UTC(new Date(start).getUTCFullYear(), 0, 1)
-  return start
-}
-
-function nextRecurrenceCursor(cursor: number, rule: RecurrenceRule): number {
-  if (rule.freq === 'DAILY') return cursor + rule.interval * MS_DAY
-  if (rule.freq === 'WEEKLY') return cursor + rule.interval * 7 * MS_DAY
-  if (rule.freq === 'MONTHLY') return addMonthsToMonthStart(cursor, rule.interval)
-  return Date.UTC(new Date(cursor).getUTCFullYear() + rule.interval, 0, 1)
-}
-
-/**
- * Skips whole periods before the requested window. This keeps a daily series
- * that began years ago from walking every day before the first useful date.
- */
-function fastForwardCursor(cursor: number, rule: RecurrenceRule, target: number): number {
-  if (target <= cursor) return cursor
-
-  if (rule.freq === 'DAILY') {
-    const periods = Math.floor((target - cursor) / (rule.interval * MS_DAY))
-    return periods > 0 ? cursor + periods * rule.interval * MS_DAY : cursor
-  }
-  if (rule.freq === 'WEEKLY') {
-    const periods = Math.floor((target - cursor) / (rule.interval * 7 * MS_DAY))
-    return periods > 0 ? cursor + periods * rule.interval * 7 * MS_DAY : cursor
-  }
-  if (rule.freq === 'MONTHLY') {
-    const from = new Date(cursor)
-    const to = new Date(target)
-    const months = (to.getUTCFullYear() - from.getUTCFullYear()) * 12 + (to.getUTCMonth() - from.getUTCMonth())
-    const periods = Math.floor(months / rule.interval)
-    return periods > 0 ? addMonthsToMonthStart(cursor, periods * rule.interval) : cursor
-  }
-  const periods = Math.floor((new Date(target).getUTCFullYear() - new Date(cursor).getUTCFullYear()) / rule.interval)
-  return periods > 0 ? Date.UTC(new Date(cursor).getUTCFullYear() + periods * rule.interval, 0, 1) : cursor
-}
-
-/** A calendar event with the parser's internal recurrence fields removed. */
-function toPublicEvent(event: ParsedCalendarEvent): CalendarEvent {
-  const {
-    rrule: _rrule,
-    exdates: _exdates,
-    recurrenceId: _recurrenceId,
-    cancelled: _cancelled,
-    ...plain
-  } = event
-  return plain
-}
-
-/**
- * Expands one recurring VEVENT into the occurrences that overlap a window.
- * The returned ids include the occurrence start so each instance can be
- * dismissed (or recorded) without hiding the rest of the series.
- */
-export function expandRecurringEvent(
-  event: ParsedCalendarEvent,
-  fromMs: number,
-  toMs: number,
-  maxOccurrences = 500
-): CalendarEvent[] {
-  const rule = event.rrule ? parseRecurrenceRule(event.rrule) : null
-  if (!rule) return [toPublicEvent(event)]
-  if (rule.until !== undefined && rule.until < fromMs - MS_DAY) return []
-
-  const start = new Date(event.startTime).getTime()
-  if (Number.isNaN(start)) return [toPublicEvent(event)]
-  const rawEnd = new Date(event.endTime).getTime()
-  const end = Number.isNaN(rawEnd) ? start + 30 * 60 * 1000 : rawEnd
-  const duration = Math.max(0, end - start)
-  const time = timeOfDay(start)
-  // EXDATE may be a DATE (`20261109`) or a DATE-TIME; compare both forms so a
-  // date-only exclusion still removes a timed occurrence.
-  const excluded = new Set<string>()
-  for (const raw of event.exdates ?? []) {
-    excluded.add(raw)
-    excluded.add(raw.slice(0, 10))
-  }
-
-  let cursor = initialRecurrenceCursor(rule.freq, start, rule.wkst)
-  // COUNT is positional, so a series that counts its instances must start at
-  // the first one. Without COUNT the cursor can jump straight to the window.
-  if (rule.count === undefined) {
-    cursor = fastForwardCursor(cursor, rule, fromMs - duration)
-  }
-
-  const occurrences: CalendarEvent[] = []
-  let emitted = 0
-
-  for (let period = 0; period < MAX_RECURRENCE_PERIODS; period++) {
-    if (cursor > toMs) break
-
-    const candidates = candidatesInPeriod(cursor, rule, start, time)
-    let finished = false
-
-    for (const candidate of candidates) {
-      if (candidate < start) continue
-      if (rule.until !== undefined && candidate > rule.until) {
-        finished = true
-        break
-      }
-      emitted += 1
-      if (rule.count !== undefined && emitted > rule.count) {
-        finished = true
-        break
-      }
-      if (candidate > toMs) {
-        finished = true
-        break
-      }
-      if (candidate + duration < fromMs) continue
-
-      const startIso = new Date(candidate).toISOString()
-      const dateOnly = startIso.slice(0, 10)
-      if (excluded.has(startIso) || excluded.has(dateOnly)) continue
-
-      occurrences.push({
-        ...toPublicEvent(event),
-        id: `${event.id}@${startIso}`,
-        startTime: startIso,
-        endTime: new Date(candidate + duration).toISOString(),
-        source: 'ical'
-      })
-      if (occurrences.length >= maxOccurrences) return occurrences
-    }
-
-    if (finished) break
-    cursor = nextRecurrenceCursor(cursor, rule)
-  }
-
-  return occurrences
-}
 
 /**
  * Extracts external company name from meeting title or attendee list.
@@ -628,216 +411,6 @@ export function extractMeetingUrl(text: string): string | undefined {
   return match ? match[1] : undefined
 }
 
-export interface ICalParseOptions {
-  /** Start of the occurrence window, in epoch milliseconds. */
-  from?: number
-  /** End of the occurrence window, in epoch milliseconds. */
-  to?: number
-  /** Safety cap for generated instances per series. */
-  maxOccurrences?: number
-}
-
-/**
- * Parses RFC 5545 iCalendar data into structured CalendarEvent objects.
- *
- * When a window is supplied, RRULE series are expanded into the instances that
- * overlap it. Without a window the base event of a series is returned once.
- */
-export function parseICal(icsContent: string, options: ICalParseOptions = {}): CalendarEvent[] {
-  if (!icsContent || !icsContent.includes('BEGIN:VCALENDAR')) {
-    return []
-  }
-
-  // Unfold folded lines per RFC 5545 (CRLF or LF followed by a space or tab)
-  const unfolded = icsContent.replace(/\r\n[ \t]/g, '').replace(/\n[ \t]/g, '')
-  const lines = unfolded.split(/\r?\n/)
-
-  const events: ParsedCalendarEvent[] = []
-  /**
-   * Instances replaced by a RECURRENCE-ID event, and instances cancelled by a
-   * STATUS:CANCELLED exception. Both must be suppressed in the parent series.
-   */
-  const overriddenInstances = new Set<string>()
-  const cancelledInstances = new Set<string>()
-  let inEvent = false
-  let currentEvent: Partial<ParsedCalendarEvent> & { rawAttendees: string[] } = {
-    rawAttendees: []
-  }
-
-  for (const line of lines) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
-
-    if (trimmed === 'BEGIN:VEVENT') {
-      inEvent = true
-      currentEvent = { rawAttendees: [] }
-      continue
-    }
-
-    if (trimmed === 'END:VEVENT') {
-      inEvent = false
-      if (currentEvent.cancelled) {
-        // A cancelled exception still needs its UID and RECURRENCE-ID; some
-        // feeds omit SUMMARY/DTSTART on it, so this runs before the full check.
-        if (currentEvent.id && currentEvent.recurrenceId) {
-          cancelledInstances.add(`${currentEvent.id}@${currentEvent.recurrenceId}`)
-        }
-      } else if (currentEvent.id && currentEvent.title && currentEvent.startTime) {
-        const eventId = currentEvent.id
-        // A RECURRENCE-ID event is a single instance, so it gets an
-        // occurrence-scoped id: dismissing it must not dismiss the series.
-        const occurrenceKey = currentEvent.recurrenceId
-          ? `${eventId}@${currentEvent.recurrenceId}`
-          : null
-        if (occurrenceKey) overriddenInstances.add(occurrenceKey)
-
-        const attendees = currentEvent.rawAttendees || []
-        const summary = currentEvent.title || 'Untitled Meeting'
-        const company = currentEvent.company || extractCompany(summary, attendees)
-        const endTime =
-          currentEvent.endTime ||
-          new Date(new Date(currentEvent.startTime).getTime() + 30 * 60 * 1000).toISOString()
-
-        events.push({
-          id: occurrenceKey ?? eventId,
-          title: summary,
-          startTime: currentEvent.startTime,
-          endTime,
-          location: currentEvent.location,
-          meetingUrl: currentEvent.meetingUrl,
-          attendees,
-          company,
-          description: currentEvent.description,
-          source: 'ical',
-          ...(currentEvent.rrule ? { rrule: currentEvent.rrule } : {}),
-          ...(currentEvent.exdates?.length ? { exdates: currentEvent.exdates } : {}),
-          ...(currentEvent.recurrenceId ? { recurrenceId: currentEvent.recurrenceId } : {})
-        })
-      }
-      continue
-    }
-
-    if (!inEvent) continue
-
-    const colonIndex = trimmed.indexOf(':')
-    if (colonIndex === -1) continue
-
-    const propHeader = trimmed.slice(0, colonIndex)
-    const propValue = trimmed.slice(colonIndex + 1)
-    const propName = propHeader.split(';')[0].toUpperCase()
-
-    switch (propName) {
-      case 'UID':
-        currentEvent.id = propValue.trim()
-        break
-      case 'SUMMARY':
-        currentEvent.title = unescapeICalText(propValue)
-        break
-      case 'DESCRIPTION': {
-        const desc = unescapeICalText(propValue)
-        currentEvent.description = desc
-        if (!currentEvent.meetingUrl) {
-          currentEvent.meetingUrl = extractMeetingUrl(desc)
-        }
-        break
-      }
-      case 'LOCATION': {
-        const loc = unescapeICalText(propValue)
-        currentEvent.location = loc
-        if (!currentEvent.meetingUrl) {
-          currentEvent.meetingUrl = extractMeetingUrl(loc)
-        }
-        break
-      }
-      case 'DTSTART':
-        currentEvent.startTime = parseICalDate(propValue) || undefined
-        break
-      case 'DTEND':
-        currentEvent.endTime = parseICalDate(propValue) || undefined
-        break
-      case 'RRULE':
-        currentEvent.rrule = propValue.trim()
-        break
-      case 'EXDATE': {
-        const dates = propValue
-          .split(',')
-          .map((value) => parseICalDate(value))
-          .filter((value): value is string => value !== null)
-        if (dates.length > 0) {
-          currentEvent.exdates = [...(currentEvent.exdates ?? []), ...dates]
-        }
-        break
-      }
-      case 'RECURRENCE-ID':
-        currentEvent.recurrenceId = parseICalDate(propValue) || undefined
-        break
-      case 'ATTENDEE': {
-        // e.g. ATTENDEE;CN=Alice Smith:mailto:alice@example.com
-        const cnMatch = /CN="?([^;":]+)"?/i.exec(propHeader)
-        const emailMatch = /mailto:([^;:\s]+)/i.exec(propValue)
-        const name = cnMatch ? cnMatch[1].trim() : ''
-        const email = emailMatch ? emailMatch[1].trim() : propValue.trim()
-        const display = name ? (email ? `${name} (${email})` : name) : email
-        if (display) {
-          currentEvent.rawAttendees.push(display)
-        }
-        break
-      }
-      case 'ORGANIZER': {
-        const cnMatch = /CN="?([^;":]+)"?/i.exec(propHeader)
-        const emailMatch = /mailto:([^;:\s]+)/i.exec(propValue)
-        const orgName = cnMatch ? cnMatch[1].trim() : ''
-        const orgEmail = emailMatch ? emailMatch[1].trim() : propValue.trim()
-        const display = orgName ? (orgEmail ? `${orgName} (${orgEmail})` : orgName) : orgEmail
-        if (display && !currentEvent.rawAttendees.includes(display)) {
-          currentEvent.rawAttendees.push(display)
-        }
-        break
-      }
-      case 'STATUS':
-        if (propValue.toUpperCase() === 'CANCELLED') {
-          // Do not drop the event here: if it carries a RECURRENCE-ID it is a
-          // cancelled exception that must also suppress the generated instance.
-          currentEvent.cancelled = true
-        }
-        break
-    }
-  }
-
-  // Check meeting URL in summary if still missing
-  for (const ev of events) {
-    if (!ev.meetingUrl) {
-      ev.meetingUrl = extractMeetingUrl(ev.title)
-    }
-  }
-
-  const expandable = options.from !== undefined && options.to !== undefined
-  if (!expandable) {
-    return events.map(toPublicEvent)
-  }
-
-  const from = options.from as number
-  const to = options.to as number
-  const maxOccurrences = Math.max(1, options.maxOccurrences ?? 500)
-
-  const expanded: CalendarEvent[] = []
-  for (const event of events) {
-    if (!event.rrule) {
-      expanded.push(toPublicEvent(event))
-      continue
-    }
-    for (const occurrence of expandRecurringEvent(event, from, to, maxOccurrences)) {
-      // A modified or cancelled exception replaces the generated instance.
-      if (overriddenInstances.has(occurrence.id) || cancelledInstances.has(occurrence.id)) {
-        continue
-      }
-      expanded.push(occurrence)
-    }
-  }
-
-  return expanded
-}
-
 /**
  * Checks a window title to determine if it represents an active meeting (Zoom, Meet, Teams, Webex).
  */
@@ -907,6 +480,8 @@ export class CalendarDomain {
   /** Window enumeration is expensive and may trigger OS capture prompts; rate-limit it. */
   private lastWindowScanAt = 0
   private lastDetectedWindow: CalendarEvent | null = null
+  /** Legacy plaintext feed URLs are migrated once, not on every status poll. */
+  private feedMigrationAttempted = false
 
   private getStore(): JsonStore<CalendarStoreData> {
     if (!this.store) {
@@ -915,10 +490,46 @@ export class CalendarDomain {
     return this.store
   }
 
+  /**
+   * Resolves the feed URL, preferring the encrypted secret store.
+   *
+   * The URL often embeds a private calendar token (Google/Outlook ICS links),
+   * so it should never sit in `calendar.json` when the OS keychain is
+   * available. Older installs keep a plaintext copy until the first read,
+   * which migrates it and then erases the plaintext field.
+   */
+  private readFeedUrl(): string | null {
+    const encrypted = secrets.get(FEED_SECRET_ID)
+    if (encrypted) {
+      if (this.getStore().get().feedUrl) {
+        this.getStore().update((draft) => {
+          draft.feedUrl = null
+        })
+      }
+      return encrypted
+    }
+
+    const plaintext = this.getStore().get().feedUrl
+    if (!plaintext || this.feedMigrationAttempted) return plaintext
+    this.feedMigrationAttempted = true
+    try {
+      secrets.set(FEED_SECRET_ID, plaintext)
+      this.getStore().update((draft) => {
+        draft.feedUrl = null
+      })
+      logger.info('Moved the calendar feed URL into the encrypted secret store')
+    } catch {
+      // No OS keychain: keep the local copy so sync still works. The security
+      // panel reports plaintext storage separately.
+      logger.warn('Calendar feed URL stays in the local store: no OS keychain available')
+    }
+    return plaintext
+  }
+
   getStatus(): CalendarSyncStatus {
     const data = this.getStore().get()
     return {
-      feedUrl: data.feedUrl,
+      feedUrl: this.readFeedUrl(),
       lastSyncAt: data.lastSyncAt,
       eventCount: data.events.length,
       // A stale `true` from the old default must not look enabled: the scan
@@ -930,18 +541,36 @@ export class CalendarDomain {
 
   async setFeedUrl(url: string | null): Promise<CalendarSyncStatus> {
     const cleanUrl = url ? url.trim() : null
-    this.getStore().update((draft) => {
-      draft.feedUrl = cleanUrl
-      if (!cleanUrl) {
-        // Disconnecting must also forget what the old feed told us, or the
-        // overlay keeps prompting for meetings from an account the user removed.
+
+    if (!cleanUrl) {
+      // Disconnecting must also forget what the old feed told us, or the
+      // overlay keeps prompting for meetings from an account the user removed.
+      this.getStore().update((draft) => {
+        draft.feedUrl = null
         draft.events = []
         draft.lastSyncAt = null
         draft.lastError = null
         draft.dismissedIds = []
-      }
+      })
+      secrets.delete(FEED_SECRET_ID)
+      return this.getStatus()
+    }
+
+    let encrypted = false
+    try {
+      secrets.set(FEED_SECRET_ID, cleanUrl)
+      encrypted = true
+    } catch {
+      // Without a keychain the URL has to stay in the local store; sync still
+      // works and the honest fallback is reported by the security panel.
+      logger.warn('Could not encrypt the calendar feed URL; storing it locally instead')
+    }
+
+    this.getStore().update((draft) => {
+      // A stored secret is the only copy; never duplicate it in plaintext.
+      draft.feedUrl = encrypted ? null : cleanUrl
     })
-    if (!cleanUrl) return this.getStatus()
+
     const result = await this.sync()
     return { ...this.getStatus(), error: result.error ?? null }
   }
@@ -960,7 +589,7 @@ export class CalendarDomain {
    * Fetches the calendar feed and updates cached events.
    */
   async sync(customFeedUrl?: string): Promise<{ success: boolean; eventCount: number; error?: string }> {
-    const targetUrl = customFeedUrl ?? this.getStore().get().feedUrl
+    const targetUrl = customFeedUrl ?? this.readFeedUrl()
     if (!targetUrl) {
       return { success: false, eventCount: 0, error: 'No iCal feed URL configured' }
     }
@@ -1007,7 +636,7 @@ export class CalendarDomain {
       return { success: true, eventCount: filtered.length }
     } catch (err) {
       const errorMsg = (err as Error).message || 'Failed to sync calendar feed'
-      logger.error('Failed to sync calendar feed', targetUrl, errorMsg)
+      logger.error('Failed to sync calendar feed', feedLabel(targetUrl), errorMsg)
       this.getStore().update((draft) => {
         draft.lastError = errorMsg
       })

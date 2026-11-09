@@ -40,6 +40,7 @@ interface KlyroApi {
   checkPermissions(): Promise<any>
   hideOverlay(): Promise<void>
   showMainWindow(): Promise<void>
+  copyText(text: string): Promise<boolean>
   minimizeOverlay(): Promise<void>
   /** Show the quick-ask overlay (the same window the hotkey opens). */
   toggleOverlay(): Promise<void>
@@ -47,7 +48,6 @@ interface KlyroApi {
   setGhostMode(enabled: boolean): Promise<boolean>
   setZeroFocus(enabled: boolean): Promise<boolean>
   panicKillswitch(): Promise<void>
-  humanizeType(text: string, options?: { wpm?: number }): Promise<boolean>
   remoteHudStart(port?: number): Promise<{ url: string; port: number }>
   remoteHudStop(): Promise<void>
   remoteHudStatus(): Promise<{ running: boolean; url: string }>
@@ -65,6 +65,12 @@ interface KlyroApi {
   securityStatus(): Promise<any>
   dataSummary(): Promise<any>
   dataClear(scope: string): Promise<any>
+  dataExport(): Promise<{ ok: boolean; path?: string; error?: string }>
+  updateStatus(): Promise<any>
+  updateCheck(): Promise<any>
+  updateDownload(): Promise<any>
+  updateInstall(): Promise<void>
+  onUpdateStatus(listener: (status: any) => void): () => void
   sweepStorage(): Promise<any>
   diagnosticsList(): Promise<any[]>
   diagnosticsClear(): Promise<void>
@@ -101,17 +107,15 @@ interface KlyroApi {
   githubIssues(ownerRepo: string): Promise<any[]>
   githubCreateIssue(ownerRepo: string, title: string, body: string): Promise<any>
 
-  /* Workflows */
+  /* Meetings */
 
-  meetingList(): Promise<any[]>
-  meetingStartRecording(): Promise<void>
-  meetingStopRecording(): Promise<void>
-  meetingSave(req: any): Promise<any[]>
-  meetingSummarize(id: string): Promise<any[]>
-  meetingDelete(id: string): Promise<any[]>
-  meetingTranscriptGet(): Promise<any>
-  meetingTranscriptAppend(text: string): Promise<any>
-  meetingTranscriptGap(): Promise<any>
+  meetingTranscriptGet(): Promise<{
+    lines: string[]
+    startedAt: number | null
+    updatedAt: number | null
+    resumable: boolean
+  }>
+  meetingTranscriptAppend(line: string): Promise<number>
   meetingTranscriptDiscard(): Promise<void>
 
   mcpServers(): Promise<any[]>
@@ -244,13 +248,6 @@ interface KlyroApi {
     platform: string
     supported: boolean
   }>
-
-  workflowList(): Promise<any[]>
-  workflowRun(id: string, input: string): Promise<any>
-  workflowCancel(runId: string): Promise<void>
-  workflowDelete(id: string): Promise<any[]>
-  workflowRuns(): Promise<any[]>
-  onWorkflowEvent(listener: (event: any) => void): () => void
 
   calendarGetStatus(): Promise<any>
   calendarSetFeedUrl(url: string | null): Promise<any>

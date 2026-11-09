@@ -178,6 +178,9 @@ export function openAICompatibleFor(providerId: ProviderId = 'openai'): Provider
             body: JSON.stringify({
               model: options.model,
               stream: true,
+              // OpenAI-compatible endpoints report exact token counts only when
+              // the caller opts in; the ledger prefers them to its estimate.
+              stream_options: { include_usage: true },
               temperature: options.temperature ?? 0.7,
               ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
               messages: [
@@ -194,6 +197,13 @@ export function openAICompatibleFor(providerId: ProviderId = 'openai'): Provider
       }
       try {
         for await (const event of sseJson(res)) {
+          const usage = event?.usage
+          if (usage) {
+            options.onUsage?.({
+              inputTokens: typeof usage.prompt_tokens === 'number' ? usage.prompt_tokens : undefined,
+              outputTokens: typeof usage.completion_tokens === 'number' ? usage.completion_tokens : undefined
+            })
+          }
           const delta = event?.choices?.[0]?.delta?.content
           if (typeof delta === 'string' && delta.length > 0) yield delta
         }

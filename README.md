@@ -30,10 +30,10 @@ src/
   main/            Electron main process (Node)
     knowledge/     Pure retrieval: tokenising, chunking, BM25, similarity,
                    code-file rules and template rendering
-    domains/       Feature domains: windows, settings, chat, screen,
-                   shortcuts, tray, permissions, conversations, automation, agent,
-                   memory, documents, context, project, code, meetings, workflows,
-                   integrations/
+    domains/       Feature domains: windows, overlay, settings, chat, screens,
+                   shortcuts, tray, permissions, conversations, memory, documents,
+                   context, calendar, meetings, interviews, integrations, MCP,
+                   remote HUD, privacy, usage and storage maintenance
     providers/     Model provider abstraction (OpenAI-compatible, Anthropic,
                    Gemini, Ollama/local)
     store/         Atomic JSON persistence
@@ -88,26 +88,13 @@ paste your API key (stored encrypted locally), and pick a model:
 - **Google Gemini**
 - **Local** (Ollama at `http://localhost:11434`) — no cloud key required
 
-### Desktop agent
+### Local coding agents
 
-Klyro can carry out multi-step tasks on your computer: it captions the current
-screen, asks a vision-capable model for the single next action, executes it, and
-re-observes. Open the **Agent** panel, describe a goal, and press *Run task*.
-
-State-changing actions (clicks, typing, Enter or modified keys) pause for
-**Approve / Decline** by default; the run can be stopped at any time and every
-completed task is saved to your local history.
-
-Driving the mouse and keyboard needs a system input backend. Klyro detects what
-is available and shows the command to install one:
-
-| Platform | Backend |
-| --- | --- |
-| Linux (X11 / XWayland) | `xdotool` |
-| Linux (native Wayland) | `ydotool` (+ `ydotoold`) |
-| Linux (typing only) | `wtype` |
-| macOS | `osascript` + `cliclick` (mouse), Accessibility permission |
-| Windows | built in (PowerShell) |
+Klyro can use coding agents you already have — **OpenCode**, **Claude Code**,
+**Codex** and **Antigravity** — through their own sign-in. Each one appears in
+**Models & agents** with the state it reports, and the overlay's model chip can
+switch to it without leaving the current question. Klyro does not drive the
+mouse or keyboard on your behalf.
 
 ## Memory & knowledge
 
@@ -128,21 +115,28 @@ stored locally, never uploaded except as part of the prompt you send.
   leaving Klyro. *Test connection* runs a live credential check and shows the
   result without ever exposing the token.
 
-## Studio
+## Meetings & interviews
 
-**Coding mode** — index a project folder once and Klyro answers code questions
-with your own files as reference. Paste a snippet or diff and pick *Explain*,
-*Find bugs*, *Write tests*, *Refactor*, or *Document*.
+**Meetings** — record from the microphone or the meeting's own audio; the
+transcript is written and timestamped as you go, saved locally, and mirrored to
+the Ghost Phone HUD. *Summarize* produces a short summary plus extracted action
+items, and a recap is written automatically when recording stops.
 
-**Meetings** — record from the microphone; the transcript is written and
-timestamped as you go and saved locally. *Summarize* produces a short summary plus
-extracted action items.
+**Interviews** — every question and answer is kept in a session you can revisit,
+with a summary, notes, bookmarks and an optional CRM/MEDDPIC breakdown.
 
-**Workflows** — multi-step sequences that run inside a real chat, so follow-ups
-work normally. Steps are prompts (`{{input}}` / `{{prev}}`) or GitHub fetches, and
-each step feeds the next. Four are built in: *Standup from GitHub issues*,
-*Explain an area of the codebase*, *Turn notes into action items*, and *Review a
-diff*.
+## Updates
+
+Klyro checks the GitHub release page once per launch, fifteen seconds after the
+HUD so the check never delays an answer. It tells you what it found; it
+downloads only when you click **Download** and installs only when you click
+**Restart now**. A downloaded version also installs on the next quit.
+
+The AppImage and the Windows installer update in place. A `.deb` does not — the
+package manager owns those files — so that build points at the releases page
+instead of pretending it can replace itself. The check is skipped while Airgap
+Shield is on, because it is a request to GitHub, and it can be turned off in
+Settings → Usage & Diagnostics.
 
 ## Accessibility
 

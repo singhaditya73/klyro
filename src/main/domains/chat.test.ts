@@ -179,8 +179,9 @@ describe('sendChat', () => {
     expect(lastMessage(conversation.id).content).toMatch(/rate limiting/)
   })
 
-  it('falls back to Groq when primary provider fails in fast model mode', async () => {
+  it('falls back to Groq when primary provider fails in fast model mode and hosted fallback is allowed', async () => {
     h.groqKey = 'gsk-test-groq-key'
+    h.settings.allowHostedFallback = true
     h.settings.providers.groq = { baseUrl: 'https://api.groq.com/openai/v1', model: 'openai/gpt-oss-120b' }
 
     // Primary fails
@@ -207,6 +208,28 @@ describe('sendChat', () => {
       to: 'groq',
       reason: 'provider_error'
     })
+  })
+
+  it('never sends the question to another hosted provider unless the user allowed it', async () => {
+    // This is the privacy promise: picking OpenAI means OpenAI sees the
+    // question. A slow or failing OpenAI must not silently forward it to Groq.
+    h.groqKey = 'gsk-test-groq-key'
+    h.settings.providers.groq = { baseUrl: 'https://api.groq.com/openai/v1', model: 'openai/gpt-oss-120b' }
+    h.chat = function () {
+      return (async function* () {
+        throw new Error('primary 429 rate limit')
+      })()
+    }
+    h.fallbackChat = async function* () {
+      yield 'this must not be reached'
+    }
+
+    const conversation = conversations.create()
+    await sendChat({ conversationId: conversation.id, content: 'fast question', useFastModel: true })
+
+    expect(lastMessage(conversation.id).content).toContain('primary 429 rate limit')
+    expect(lastMessage(conversation.id).content).not.toContain('this must not be reached')
+    expect(h.events.find((event) => event.payload.type === 'done')?.payload.fallback).toBeUndefined()
   })
 
   it('never falls back to a hosted provider while the airgap shield is on', async () => {

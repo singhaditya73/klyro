@@ -1,6 +1,19 @@
 appId: com.klyro.app
 productName: Klyro
 copyright: Copyright © 2026 Aditya Singh
+# Where `electron-updater` looks for a newer release. The GitHub provider reads
+# the public releases of this repository; no token ships inside the app.
+# electron-builder writes latest.yml / latest-linux.yml next to the installers,
+# which is what the updater compares against, and the release workflow uploads
+# those files with the installers.
+#
+# macOS is not a release target yet. If it becomes one, in-place updates need
+# the app to be signed and notarised and the target must include a `zip` (the
+# DMG cannot be replaced in place).
+publish:
+  provider: github
+  owner: singhaditya73
+  repo: klyro
 directories:
   buildResources: build
   output: release

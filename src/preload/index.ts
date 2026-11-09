@@ -8,7 +8,8 @@ import type {
   KlyroApi,
   MemoryDraft,
   ProviderId,
-  SendChatRequest
+  SendChatRequest,
+  UpdateStatus
 } from '@shared/types'
 
 const api: KlyroApi = {
@@ -63,13 +64,13 @@ const api: KlyroApi = {
    checkPermissions: () => ipcRenderer.invoke(IPC.permissionsCheck),
   hideOverlay: () => ipcRenderer.invoke(IPC.windowHideOverlay),
   showMainWindow: () => ipcRenderer.invoke(IPC.windowShowMain),
+  copyText: (text: string) => ipcRenderer.invoke(IPC.clipboardWrite, text),
   minimizeOverlay: () => ipcRenderer.invoke(IPC.windowMinimizeOverlay),
   toggleOverlay: () => ipcRenderer.invoke(IPC.windowToggleOverlay),
   snapToNotch: () => ipcRenderer.invoke(IPC.windowSnapToNotch),
   setGhostMode: (enabled: boolean) => ipcRenderer.invoke(IPC.windowSetGhostMode, enabled),
   setZeroFocus: (enabled: boolean) => ipcRenderer.invoke(IPC.windowSetZeroFocus, enabled),
   panicKillswitch: () => ipcRenderer.invoke(IPC.windowPanicKillswitch),
-  humanizeType: (text: string, options?: { wpm?: number }) => ipcRenderer.invoke(IPC.humanizeType, text, options),
   remoteHudStart: (port?: number) => ipcRenderer.invoke(IPC.remoteHudStart, port),
   remoteHudStop: () => ipcRenderer.invoke(IPC.remoteHudStop),
   remoteHudStatus: () => ipcRenderer.invoke(IPC.remoteHudStatus),
@@ -159,9 +160,22 @@ const api: KlyroApi = {
   securityStatus: () => ipcRenderer.invoke(IPC.securityStatus),
   dataSummary: () => ipcRenderer.invoke(IPC.dataSummary),
   dataClear: (scope: DataScope) => ipcRenderer.invoke(IPC.dataClear, scope),
+  dataExport: () => ipcRenderer.invoke(IPC.dataExport),
   sweepStorage: () => ipcRenderer.invoke(IPC.storageSweep),
   diagnosticsList: () => ipcRenderer.invoke(IPC.diagnosticsList),
   diagnosticsClear: () => ipcRenderer.invoke(IPC.diagnosticsClear),
+
+  updateStatus: () => ipcRenderer.invoke(IPC.updateStatus),
+  updateCheck: () => ipcRenderer.invoke(IPC.updateCheck),
+  updateDownload: () => ipcRenderer.invoke(IPC.updateDownload),
+  updateInstall: () => ipcRenderer.invoke(IPC.updateInstall),
+  onUpdateStatus: (listener: (status: UpdateStatus) => void) => {
+    const wrapped = (_event: unknown, status: UpdateStatus): void => listener(status)
+    ipcRenderer.on(IPC.updateChanged, wrapped)
+    return () => {
+      ipcRenderer.off(IPC.updateChanged, wrapped)
+    }
+  },
 
 
   memoryList: () => ipcRenderer.invoke(IPC.memoryList),
@@ -195,7 +209,10 @@ const api: KlyroApi = {
   calendarSync: (feedUrl?: string) => ipcRenderer.invoke(IPC.calendarSync, feedUrl),
   calendarGetUpcoming: () => ipcRenderer.invoke(IPC.calendarGetUpcoming),
   calendarDismiss: (id: string) => ipcRenderer.invoke(IPC.calendarDismiss, id),
-  calendarToggleAutoDetect: (enabled: boolean) => ipcRenderer.invoke(IPC.calendarToggleAutoDetect, enabled)
+  calendarToggleAutoDetect: (enabled: boolean) => ipcRenderer.invoke(IPC.calendarToggleAutoDetect, enabled),
+  meetingTranscriptGet: () => ipcRenderer.invoke(IPC.meetingTranscriptGet),
+  meetingTranscriptAppend: (line: string) => ipcRenderer.invoke(IPC.meetingTranscriptAppend, line),
+  meetingTranscriptDiscard: () => ipcRenderer.invoke(IPC.meetingTranscriptDiscard)
 }
 
 contextBridge.exposeInMainWorld('klyro', api)

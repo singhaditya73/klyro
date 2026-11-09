@@ -55,7 +55,13 @@ export const ollama: Provider = {
         }
         const content = json?.message?.content
         if (typeof content === 'string' && content.length > 0) yield content
-        if (json?.done) return
+        if (json?.done) {
+          options.onUsage?.({
+            inputTokens: typeof json.prompt_eval_count === 'number' ? json.prompt_eval_count : undefined,
+            outputTokens: typeof json.eval_count === 'number' ? json.eval_count : undefined
+          })
+          return
+        }
       }
     } catch (error) {
       throw classifyThrown(error, { provider: PROVIDER, endpoint: hostOf(trimSlash(options.baseUrl)) })

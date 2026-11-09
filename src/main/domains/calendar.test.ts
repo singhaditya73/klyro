@@ -1,14 +1,30 @@
 import { describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
-const { userData } = vi.hoisted(() => {
+const { userData, safeStorageState } = vi.hoisted(() => {
   const { mkdtempSync } = require('node:fs') as typeof import('node:fs')
   const { tmpdir } = require('node:os') as typeof import('node:os')
   const { join } = require('node:path') as typeof import('node:path')
-  return { userData: mkdtempSync(join(tmpdir(), 'klyro-calendar-test-')) }
+  return {
+    userData: mkdtempSync(join(tmpdir(), 'klyro-calendar-test-')),
+    // Flipped by the encryption test to exercise the keychain path.
+    safeStorageState: { encryptionAvailable: false }
+  }
 })
 
 vi.mock('electron', () => ({
   app: { getPath: () => userData },
+  // No OS keychain by default in tests: the store falls back to its documented
+  // plaintext-refusal path unless the user opted in.
+  safeStorage: {
+    isEncryptionAvailable: () => safeStorageState.encryptionAvailable,
+    encryptString: (value: string) => Buffer.from(`enc:${value}`),
+    decryptString: (value: Buffer) => {
+      const text = value.toString()
+      return text.startsWith('enc:') ? text.slice(4) : text
+    }
+  },
   desktopCapturer: {
     getSources: vi.fn().mockResolvedValue([])
   },
@@ -23,8 +39,7 @@ import {
   extractCompany,
   extractMeetingUrl,
   parseICal,
-  parseICalDate,
-  parseRecurrenceRule
+  parseICalDate
 } from './calendar'
 
 function singleEvent(uid: string, start: string, end: string, extra = ''): string {
@@ -233,14 +248,35 @@ END:VCALENDAR`
     }
   })
 
-  it('parses the recurrence-rule subset it claims to support', () => {
-    const rule = parseRecurrenceRule('FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE;COUNT=10;WKST=SU')
-    expect(rule).toMatchObject({ freq: 'WEEKLY', interval: 2, count: 10, wkst: 0 })
-    expect(rule?.byDay).toEqual([
-      { day: 1 },
-      { day: 3 }
-    ])
-    expect(parseRecurrenceRule('FREQ=SECONDLY;COUNT=2')).toBeNull()
+  it('keeps a private feed URL in the encrypted secret store, not on disk', async () => {
+    safeStorageState.encryptionAvailable = true
+    const originalFetch = globalThis.fetch
+    const domain = new CalendarDomain()
+    const feedUrl = 'https://calendar.example.com/private-TOKEN-123/basic.ics'
+    // The sync window is relative to now, so the event must be recent.
+    const day = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10).replace(/-/g, '')
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => singleEvent('secret-feed', `${day}T090000Z`, `${day}T093000Z`)
+    } as unknown as Response)
+    try {
+      await domain.setFeedUrl(feedUrl)
+
+      // The token must not survive in the calendar store...
+      const onDisk = readFileSync(join(userData, 'calendar.json'), 'utf8')
+      expect(onDisk).not.toContain('TOKEN-123')
+      expect(onDisk).not.toContain(feedUrl)
+      // ...but the UI must still be able to show which feed is connected.
+      expect(domain.getStatus().feedUrl).toBe(feedUrl)
+      expect(domain.getStatus().eventCount).toBe(1)
+    } finally {
+      await domain.setFeedUrl(null)
+      globalThis.fetch = originalFetch
+      safeStorageState.encryptionAvailable = false
+    }
+
+    // Disconnecting forgets the secret too, so reconnecting starts clean.
+    expect(domain.getStatus().feedUrl).toBeNull()
   })
 
   it('expands a weekly RRULE into only the occurrences inside the window', () => {
@@ -260,6 +296,52 @@ END:VCALENDAR`
     // Each occurrence gets its own id so dismissing one does not hide the series.
     expect(events[1].id).toBe('weekly-count@2026-11-09T09:00:00.000Z')
     expect(events[1].endTime).toBe('2026-11-09T09:30:00.000Z')
+  })
+
+  it('applies the feed VTIMEZONE across a DST change', () => {
+    // 09:00 in New York is 13:00Z during EDT and 14:00Z after the 2026-11-01
+    // fall-back. The hand-rolled engine used to keep both at the same offset.
+    const ics = `BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VTIMEZONE
+TZID:America/New_York
+BEGIN:DAYLIGHT
+TZOFFSETFROM:-0500
+TZOFFSETTO:-0400
+TZNAME:EDT
+DTSTART:19700308T020000
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:-0400
+TZOFFSETTO:-0500
+TZNAME:EST
+DTSTART:19701101T020000
+RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:dst-series
+DTSTART;TZID=America/New_York:20261026T090000
+DTEND;TZID=America/New_York:20261026T093000
+SUMMARY:Weekly Standup
+RRULE:FREQ=WEEKLY;COUNT=2
+END:VEVENT
+END:VCALENDAR`
+
+    const events = parseICal(ics, {
+      from: Date.parse('2026-10-20T00:00:00Z'),
+      to: Date.parse('2026-11-10T00:00:00Z')
+    })
+    expect(events.map((event) => event.startTime)).toEqual([
+      '2026-10-26T13:00:00.000Z',
+      '2026-11-02T14:00:00.000Z'
+    ])
+    // Duration is preserved across the boundary as wall-clock 30 minutes.
+    expect(events.map((event) => event.endTime)).toEqual([
+      '2026-10-26T13:30:00.000Z',
+      '2026-11-02T14:30:00.000Z'
+    ])
   })
 
   it('honours EXDATE and COUNT positionally', () => {

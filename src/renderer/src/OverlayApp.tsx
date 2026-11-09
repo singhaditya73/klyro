@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   Copy,
   Check,
@@ -22,14 +22,10 @@ import {
   FileText,
   ShieldAlert,
   Zap,
-  Calendar,
   Compass,
   Ghost,
-  Smartphone,
-  Keyboard,
-  LayoutDashboard
+  Smartphone
 } from 'lucide-react'
-import { RsvpReader } from './components/RsvpReader'
 import {
   createSilenceWatcher,
   createLevelWatcher,
@@ -51,13 +47,47 @@ import {
 import { createDualAudioStream } from './lib/audio-mixer'
 import { diarizer } from './lib/diarization'
 import type { Attachment, CalendarEvent } from '@shared/types'
-import { ModelPicker, type PickerGroup } from './components/ModelPicker'
+import type { PickerGroup } from './components/ModelPicker'
+import { GhostPhoneModal } from './components/overlay/GhostPhoneModal'
+import { MeetingBanner } from './components/overlay/MeetingBanner'
 import { recentModels, rememberModel } from './lib/recent'
 import { knownModelNames, rememberModelNames } from './lib/modelNames'
 import { StatusDot } from './components/ui'
 import KlyroMark from './assets/logo/klyro-mark.svg'
 
+// The reader and the model picker are only needed after the user interacts
+// (alt+R, or opening the model chip), so they load on demand instead of
+// delaying the HUD's first paint.
+const RsvpReader = lazy(() =>
+  import('./components/RsvpReader').then((module) => ({ default: module.RsvpReader }))
+)
+const ModelPicker = lazy(() =>
+  import('./components/ModelPicker').then((module) => ({ default: module.ModelPicker }))
+)
+
 type AssistMode = 'idle' | 'recording' | 'listening'
+
+/**
+ * Copy through the main process first: Chromium refuses
+ * `navigator.clipboard` when the overlay is unfocused (or when the page
+ * permission handler withholds clipboard writes), which made the HUD's
+ * "Copy Link" button do nothing.
+ */
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (window.klyro.copyText) {
+      return (await window.klyro.copyText(text)) !== false
+    }
+  } catch {
+    // Fall through to the web API.
+  }
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    return false
+  }
+}
 
 /** How small the recorded slices are: the finer, the sooner a question ends. */
 const SLICE_MS = 250
@@ -70,9 +100,14 @@ export interface SessionTiming {
   ms: number
   totalMs: number
   model?: string
+  /** The provider that actually answered; a fallback may differ from start. */
+  provider?: string
   cached?: boolean
   e2eMs?: number
   budgetMet?: boolean
+  /** Local knowledge the answer was grounded in. */
+  memories?: number
+  documents?: number
   fallback?: { from: string; to: string; reason: string }
 }
 
@@ -128,6 +163,9 @@ export default function OverlayApp() {
     timing: SessionTiming | null
     e2eMs?: number
     budgetMet?: boolean
+    provider?: string
+    memories?: number
+    documents?: number
   }>({
     question: '',
     answer: '',
@@ -159,6 +197,8 @@ export default function OverlayApp() {
   const [interviewId, setInterviewId] = useState<string | null>(null)
   const interviewRef = useRef<string | null>(null)
   interviewRef.current = interviewId
+  /** True when the current session promised never to touch the disk. */
+  const ephemeralSessionRef = useRef(false)
   const [lastFinishedInterviewId, setLastFinishedInterviewId] = useState<string | null>(null)
   const [showScratchpad, setShowScratchpad] = useState(false)
   const [scratchpadText, setScratchpadText] = useState('')
@@ -172,8 +212,8 @@ export default function OverlayApp() {
   const [zeroFocus, setZeroFocus] = useState(false)
   const [showRsvp, setShowRsvp] = useState(false)
   const [showRemoteHudModal, setShowRemoteHudModal] = useState(false)
+  const [linkCopied, setLinkCopied] = useState(false)
   const [remoteHudUrl, setRemoteHudUrl] = useState<string | null>(null)
-  const [humanizing, setHumanizing] = useState(false)
   const lastEscPressRef = useRef(0)
   const [mode, setMode] = useState<AssistMode>('idle')
   const [transcript, setTranscript] = useState<string[]>([])
@@ -414,12 +454,18 @@ export default function OverlayApp() {
         tokenBufferRef.current = ''
         setAnswer('')
         currentTurnRef.current.answer = ''
+        currentTurnRef.current.provider = event.provider
+        currentTurnRef.current.memories = undefined
+        currentTurnRef.current.documents = undefined
         talkRef.current.answering = true
         firstTokenReceivedRef.current = false
         setStreamingE2e(null)
         // The conversation mode has its own status line; a typed question does
         // not need one.
         if (talkRef.current.timer !== null) setTalkState('thinking')
+      } else if (event.type === 'context') {
+        currentTurnRef.current.memories = event.memories
+        currentTurnRef.current.documents = event.documents
       } else if (event.type === 'delta') {
         if (!firstTokenReceivedRef.current) {
           firstTokenReceivedRef.current = true
@@ -459,9 +505,12 @@ export default function OverlayApp() {
             ms: event.ms ?? 0,
             totalMs: event.totalMs ?? 0,
             model: event.model,
+            provider: event.provider ?? currentTurnRef.current.provider,
             cached: event.cached,
             e2eMs: currentTurnRef.current.e2eMs,
             budgetMet: currentTurnRef.current.budgetMet,
+            memories: currentTurnRef.current.memories,
+            documents: currentTurnRef.current.documents,
             fallback: event.fallback
           }
           currentTurnRef.current.timing = timingObj
@@ -489,6 +538,17 @@ export default function OverlayApp() {
     void window.klyro.remoteHudStatus?.().then((res) => {
       if (res?.running && res.url) setRemoteHudUrl(res.url)
     })
+    // The main process writes each transcript line as it is heard, so a
+    // renderer reload or crash does not throw away the part of the meeting
+    // that already happened.
+    void window.klyro.meetingTranscriptGet?.()
+      .then((snapshot) => {
+        if (snapshot?.resumable && snapshot.lines.length > 0) {
+          setTranscript(snapshot.lines.slice(-8))
+          setAssistNote('Restored the transcript from before the reload.')
+        }
+      })
+      .catch(() => undefined)
     const offReset = window.klyro.onEmergencyReset?.(() => {
       // Panic is a full stop, not just a hidden window: release the mic and
       // forget the session so nothing keeps recording behind the curtain.
@@ -501,6 +561,7 @@ export default function OverlayApp() {
       setAnswer('')
       setQuestion('')
       setTranscript([])
+      void window.klyro.meetingTranscriptDiscard?.().catch(() => undefined)
       setTiming(null)
       setErrorText(null)
       setDecoyMode(false)
@@ -1016,6 +1077,7 @@ export default function OverlayApp() {
       if (!interviewRef.current) {
         const session = await window.klyro.interviewsStart({})
         setInterviewId(session.id)
+        ephemeralSessionRef.current = session.ephemeral === true
       }
       await openStream()
       recorderRef.current?.start()
@@ -1063,6 +1125,7 @@ export default function OverlayApp() {
       const role = meetingContext?.title || ''
       const session = await window.klyro.interviewsStart({ company, role })
       setInterviewId(session.id)
+      ephemeralSessionRef.current = session.ephemeral === true
 
       if (meetingContext) {
         const attendeesStr = meetingContext.attendees?.length
@@ -1087,6 +1150,8 @@ export default function OverlayApp() {
       modeRef.current = 'listening'
       setMode('listening')
       setTranscript([])
+      // A new listening session replaces the previous working buffer.
+      void window.klyro.meetingTranscriptDiscard?.().catch(() => undefined)
       setAnswer('')
       talkTicksRef.current = 0
       totalTicksRef.current = 0
@@ -1193,6 +1258,12 @@ export default function OverlayApp() {
       const taggedLine = `[${assignment.label}]: ${text}`
       const next = [...transcript.slice(-7), taggedLine]
       setTranscript(next)
+      // Write the line down in the main process as it is heard: a renderer
+      // reload mid-meeting must not erase the transcript. An ephemeral session
+      // promised not to touch the disk, so it is kept in memory only.
+      if (!ephemeralSessionRef.current) {
+        void window.klyro.meetingTranscriptAppend?.(taggedLine).catch(() => undefined)
+      }
       // Mirror the live transcript to the phone HUD, not just the answer.
       void window.klyro.remoteHudTranscript?.(taggedLine)?.catch(() => undefined)
 
@@ -1240,6 +1311,19 @@ export default function OverlayApp() {
     assemblerRef.current = null
     chainRef.current = Promise.resolve()
     void window.klyro.setRecordingSticky(false)
+    // Post-meeting recap: the transcript is already saved, so write the
+    // summary now instead of making the user ask for it afterwards. It runs
+    // after the recording is released and never blocks the UI. An ephemeral
+    // session is excluded: sending its transcript to a provider after the
+    // fact would defeat the promise that it was not written down.
+    if (finishedId && transcript.length > 0 && !ephemeralSessionRef.current) {
+      void window.klyro
+        .interviewsSummarize(finishedId)
+        .then((result) => {
+          if (result) setAssistNote('Meeting recap saved to this session.')
+        })
+        .catch(() => undefined)
+    }
   }
 
   /** Ask the question in the box. */
@@ -1317,11 +1401,10 @@ export default function OverlayApp() {
   /** Copy the answer to the clipboard. */
   async function copyAnswer(): Promise<void> {
     if (!answer) return
-    try {
-      await navigator.clipboard.writeText(answer)
+    if (await copyToClipboard(answer)) {
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1500)
-    } catch {
+    } else {
       setAssistNote('The clipboard is not available here.')
     }
   }
@@ -1410,10 +1493,19 @@ export default function OverlayApp() {
         <div className="overlay__drag-grip" title="Drag to move anywhere on screen" aria-hidden="true">
           <GripVertical className="icon icon--xs" />
         </div>
-        <img src={KlyroMark} alt="" className="overlay__mark" aria-hidden="true" />
-        <span className="overlay__brand">Klyro</span>
+        <button
+          type="button"
+          className="overlay__home"
+          onClick={() => void window.klyro.showMainWindow?.()}
+          title="Open the Klyro control panel"
+          aria-label="Open the Klyro control panel"
+        >
+          <img src={KlyroMark} alt="" className="overlay__mark" aria-hidden="true" />
+          <span className="overlay__brand">Klyro</span>
+        </button>
         {overlayProvider && (
-          <ModelPicker
+          <Suspense fallback={null}>
+            <ModelPicker
             groups={catalogue}
             value={overlayModel}
             variant="chip"
@@ -1452,6 +1544,7 @@ export default function OverlayApp() {
               })()
             }}
           />
+          </Suspense>
         )}
         {vision === 'yes' && (
           <span className="overlay__state" title="This model can read the screen you share with it.">
@@ -1481,16 +1574,6 @@ export default function OverlayApp() {
             {privateMode.enabled ? <EyeOff className="icon icon--sm" aria-hidden="true" /> : <Eye className="icon icon--sm" aria-hidden="true" />}
           </button>
         )}
-        <button
-          type="button"
-          className="btn btn--icon btn--icon-sm btn--ghost"
-          onClick={() => void window.klyro.showMainWindow?.()}
-          title="Open the Klyro control panel"
-          aria-label="Open control panel"
-        >
-          <LayoutDashboard className="icon icon--sm" aria-hidden="true" />
-        </button>
-
         <button
           type="button"
           className={`btn btn--icon btn--icon-sm ${prompterMode ? 'btn--accent' : 'btn--ghost'}`}
@@ -1539,6 +1622,7 @@ export default function OverlayApp() {
                 if (res?.url) setRemoteHudUrl(res.url)
               }
               setShowRemoteHudModal(!showRemoteHudModal)
+              setLinkCopied(false)
             } catch (error) {
               setAssistNote(`Ghost Phone could not start: ${(error as Error).message}`)
             }
@@ -1598,95 +1682,32 @@ export default function OverlayApp() {
       </header>
 
       {showRemoteHudModal && remoteHudUrl && (
-        <div className="overlay__hud-modal">
-          <div className="overlay__hud-modal-head">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Smartphone className="icon icon--xs" style={{ color: 'var(--accent)' }} />
-              <strong>Ghost Phone Remote Mirror</strong>
-            </div>
-            <button
-              type="button"
-              className="btn btn--icon btn--icon-xs btn--ghost"
-              onClick={() => setShowRemoteHudModal(false)}
-            >
-              <X className="icon icon--xs" />
-            </button>
-          </div>
-          <p className="overlay__hud-modal-desc">
-            Open this on your phone or tablet propped below your screen for <strong>zero laptop windows</strong>:
-          </p>
-          <div className="overlay__hud-modal-link">
-            <code>{remoteHudUrl}</code>
-            <button
-              type="button"
-              className="btn btn--quiet btn--xs"
-              onClick={() => void navigator.clipboard.writeText(remoteHudUrl)}
-            >
-              Copy Link
-            </button>
-          </div>
-          <div className="overlay__hud-modal-actions">
-            <button
-              type="button"
-              className="btn btn--primary btn--xs"
-              onClick={() => {
-                setShowRemoteHudModal(false)
-                void window.klyro.hideOverlay?.()
-              }}
-              title="Hide overlay now. Live answers continue streaming to your phone."
-            >
-              Hide Laptop Screen (Pure Phone Mode)
-            </button>
-          </div>
-        </div>
+        <GhostPhoneModal
+          url={remoteHudUrl}
+          copied={linkCopied}
+          onClose={() => setShowRemoteHudModal(false)}
+          onCopy={async () => {
+            const ok = await copyToClipboard(remoteHudUrl)
+            setLinkCopied(ok)
+            if (ok) {
+              window.setTimeout(() => setLinkCopied(false), 2000)
+            } else {
+              setAssistNote('Could not copy the link. Select the address and copy it manually.')
+            }
+          }}
+          onHide={() => {
+            setShowRemoteHudModal(false)
+            void window.klyro.hideOverlay?.()
+          }}
+        />
       )}
 
       {upcomingMeeting && mode === 'idle' && (
-        <div className="overlay__meeting-banner" role="status">
-          <div className="overlay__meeting-banner-main">
-            <div className="overlay__meeting-banner-icon">
-              <Calendar className="icon icon--xs" />
-            </div>
-            <div className="overlay__meeting-banner-details">
-              <div className="overlay__meeting-banner-title">
-                {upcomingMeeting.title}
-                {upcomingMeeting.company ? (
-                  <span className="overlay__meeting-banner-company"> · {upcomingMeeting.company}</span>
-                ) : null}
-              </div>
-              <div className="overlay__meeting-banner-sub">
-                <span className="overlay__meeting-banner-status">
-                  {upcomingMeeting.statusText || 'Starting now'}
-                </span>
-                {upcomingMeeting.attendees && upcomingMeeting.attendees.length > 0 ? (
-                  <span className="overlay__meeting-banner-participants">
-                    {' '}· {upcomingMeeting.attendees.length} participant{upcomingMeeting.attendees.length > 1 ? 's' : ''}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          </div>
-          <div className="overlay__meeting-banner-actions">
-            <button
-              type="button"
-              className="btn btn--primary btn--xs overlay__meeting-banner-start"
-              onClick={() => void startMeetingCoPilot(upcomingMeeting)}
-              title="1-click start dual recording and pre-fill meeting details"
-            >
-              <Zap className="icon icon--xs" />
-              <span>Start in-call co-pilot</span>
-            </button>
-            <button
-              type="button"
-              className="btn btn--icon btn--icon-xs btn--ghost"
-              onClick={() => void dismissUpcomingMeeting(upcomingMeeting.id)}
-              title="Dismiss prompt"
-              aria-label="Dismiss"
-            >
-              <X className="icon icon--xs" />
-            </button>
-          </div>
-        </div>
+        <MeetingBanner
+          meeting={upcomingMeeting}
+          onStart={(meeting) => void startMeetingCoPilot(meeting)}
+          onDismiss={(id) => void dismissUpcomingMeeting(id)}
+        />
       )}
 
       <div className="overlay__composer">
@@ -2058,7 +2079,7 @@ export default function OverlayApp() {
                     type="button"
                     className="btn btn--quiet btn--xs"
                     onClick={async () => {
-                      await navigator.clipboard.writeText(turn.answer)
+                      await copyToClipboard(turn.answer)
                       setCopiedHistoryId(turn.id)
                       window.setTimeout(() => setCopiedHistoryId(null), 1500)
                     }}
@@ -2088,7 +2109,9 @@ export default function OverlayApp() {
               <div className="overlay__turn-assistant">
                 <div className={`overlay__answer${assistNote && !hasAnswer ? ' overlay__answer--error' : ''}`}>
                   {showRsvp && hasAnswer ? (
-                    <RsvpReader text={answer} onClose={() => setShowRsvp(false)} />
+                    <Suspense fallback={null}>
+                      <RsvpReader text={answer} onClose={() => setShowRsvp(false)} />
+                    </Suspense>
                   ) : hasAnswer ? (
                     <div className="overlay__answer-text" ref={answerTextRef}>
                       <RenderAnswerWithCitations text={answer} />
@@ -2135,7 +2158,23 @@ export default function OverlayApp() {
                           ⚡ {timing.fallback.to}
                         </span>
                       )}
-                      {timing.model && <span className="overlay__model-tag">{timing.model}</span>}
+                      {timing.model && (
+                        <span
+                          className="overlay__model-tag"
+                          title={`Answered by ${timing.provider ?? 'the selected provider'} using ${timing.model}${timing.fallback ? ` (fell back from ${timing.fallback.from})` : ''}`}
+                        >
+                          {timing.provider ? `${timing.provider} · ` : ''}
+                          {timing.model}
+                        </span>
+                      )}
+                      {(timing.memories || timing.documents) && (
+                        <span
+                          className="overlay__timing-badge"
+                          title={`Grounded in local context: ${timing.memories ?? 0} memor${timing.memories === 1 ? 'y' : 'ies'} and ${timing.documents ?? 0} document${timing.documents === 1 ? '' : 's'}. Nothing from these was sent anywhere except in the prompt to the provider that answered.`}
+                        >
+                          {timing.memories ?? 0} mem · {timing.documents ?? 0} docs
+                        </span>
+                      )}
                       {timing.cached ? (
                         <span>same question, same screen</span>
                       ) : timing.totalMs > 0 ? (
@@ -2158,25 +2197,6 @@ export default function OverlayApp() {
                         <button className="btn btn--quiet btn--xs" onClick={() => void copyAnswer()} title="Copy the answer">
                           {copied ? <Check className="icon icon--xs" aria-hidden="true" /> : <Copy className="icon icon--xs" aria-hidden="true" />}
                           <span>{copied ? 'Copied' : 'Copy'}</span>
-                        </button>
-                        <button
-                          className={`btn btn--quiet btn--xs ${humanizing ? 'btn--accent' : ''}`}
-                          onClick={async () => {
-                            if (humanizing || !answer) return
-                            try {
-                              setHumanizing(true)
-                              await window.klyro.humanizeType?.(answer)
-                            } catch {
-                              setAssistNote('Humanizer keystroke simulation failed')
-                            } finally {
-                              setHumanizing(false)
-                            }
-                          }}
-                          disabled={humanizing}
-                          title="Humanizer Stealth Keystroke Injector (Simulates human typing with biological cadence, bypassing anti-paste interview portals)"
-                        >
-                          <Keyboard className="icon icon--xs" aria-hidden="true" />
-                          <span>{humanizing ? 'Typing…' : 'Humanize Type'}</span>
                         </button>
                         <button
                           className="btn btn--quiet btn--xs"

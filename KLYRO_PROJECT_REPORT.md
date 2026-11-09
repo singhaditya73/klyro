@@ -21,6 +21,14 @@
 > - **“Not implemented”** means documentation claims it, but no working code path exists.
 > - Product claims are separated from verified behaviour throughout.
 
+> **Update after this audit (working tree, post-0.9.24):** the Humanizer/typing
+> simulator, the orphan `Workflow*`/`WorkspaceView` types, the false README
+> sections (desktop agent, workflows, Studio coding mode), and the
+> “every provider is in the daemon” claim were removed or corrected. The
+> calendar engine now uses `ical.js`, and Anthropic/Gemini are documented as
+> TypeScript-only. Statements in this report that describe those items as
+> present are historical findings, not current behaviour.
+
 ---
 
 ## 1. Executive summary

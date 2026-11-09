@@ -22,17 +22,20 @@ export async function summarizeInterview(session: InterviewSession): Promise<{ s
     lines.push(`Q: ${question.text}`)
     if (question.answer.trim()) lines.push(`A: ${question.answer.trim()}`)
   }
-  if (lines.length === 0) return null
+  const transcriptLines = (session.transcript ?? []).filter((line) => line.trim()).slice(-200)
+  if (lines.length === 0 && transcriptLines.length === 0) return null
 
+  const hasQA = lines.length > 0
   const prompt = [
-    'These are the questions asked in an interview, and the answers that were given.',
+    hasQA
+      ? 'These are the questions asked in an interview, and the answers that were given.'
+      : 'This is the transcript of a meeting. The user did not ask Klyro any questions during it.',
     '',
-    lines.join('\n'),
-    '',
-    'Write the interview summary the candidate would want to keep:',
-    '1. A short paragraph on how the interview went.',
-    '2. The questions that came up, grouped by theme.',
-    '3. What to prepare better next time.',
+    ...(hasQA ? [lines.join('\n'), ''] : []),
+    ...(transcriptLines.length > 0 ? ['Transcript:', transcriptLines.join('\n'), ''] : []),
+    hasQA
+      ? 'Write the interview summary the candidate would want to keep:\n1. A short paragraph on how the interview went.\n2. The questions that came up, grouped by theme.\n3. What to prepare better next time.'
+      : 'Write the recap the attendee would want to keep:\n1. A short paragraph on what the meeting covered.\n2. Decisions that were made.\n3. Action items and who owns each one, when the transcript says.\n4. What is still open or unclear.',
     '',
     'Be concrete and plain. No headings longer than a few words.'
   ].join('\n')

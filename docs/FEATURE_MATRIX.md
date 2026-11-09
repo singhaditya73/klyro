@@ -63,11 +63,12 @@ Status legend: **✅ done** · **🟡 partial** · **⬜ planned**
 
 | Feature | Status | Notes |
 | --- | --- | --- |
-| Provider abstraction | ✅ | Ten providers, one contract. |
+| Provider abstraction | ✅ | Ten providers, one contract. The Rust daemon serves eight of them; Anthropic and Gemini are answered by the TypeScript clients. |
 | Pictures reach the model | ✅ | OpenCode (a file whose uri is the image — verified live: the model read a test picture and answered "Red"), Claude Code (stdin), Codex (`--image`), and the hosted providers. Antigravity's model call is a prompt and a model id with nowhere to put an image, so it says so plainly instead of answering as if the screen were blank. |
-| The Rust daemon | ✅ | **0.9.9 → 0.9.12:** `klyro-core` owns the hot path — it starts in 2.3 ms and lives in 4.3 MB, where the Electron app is 851 MB across ten processes. It speaks a small JSON-line protocol over loopback with a token, and the app hands it the provider configuration (keys in memory; the daemon never touches the encrypted file). **Every provider is in it** — the OpenAI-shaped family, Ollama, and the local agents: **OpenCode** (its session API), **Claude Code** and **Codex** (their CLIs), **Antigravity** (Connect-RPC). When the daemon is not there, the app answers with the same clients, so a missing daemon costs speed, not the answer. Since 0.9.17 the daemon reports the app's version, and a daemon left over from another build is replaced on launch so a Rust fix reaches the app that ships it. |
+| The Rust daemon | ✅ | **0.9.9 → 0.9.12:** `klyro-core` owns the hot path — it starts in 2.3 ms and lives in 4.3 MB, where the Electron app is 851 MB across ten processes. It speaks a small JSON-line protocol over loopback with a token, and the app hands it the provider configuration (keys in memory; the daemon never touches the encrypted file). **It serves eight of the ten providers** — the OpenAI-shaped family (OpenAI, Groq, OpenAI-compatible), Ollama, and the local agents: **OpenCode** (its session API), **Claude Code** and **Codex** (their CLIs), **Antigravity** (Connect-RPC). **Anthropic and Gemini are not in it**: their APIs are not OpenAI-shaped, so those two are answered by the app's TypeScript clients. When the daemon is not there, the app answers with the same clients, so a missing daemon costs speed, not the answer. Since 0.9.17 the daemon reports the app's version, and a daemon left over from another build is replaced on launch so a Rust fix reaches the app that ships it. |
 | Error handling | ✅ | Failures are surfaced per message with advice; a stalled stream fails after 90 s instead of hanging; a local server that is not running is reported as that, not as a broken internet. |
 | Latency | ✅ | The overlay reports time-to-first-token under every answer, and the answer cache makes a repeat instant. |
+| Updates | ✅ | **0.9.25:** the app checks the GitHub release page once per launch (fifteen seconds after the HUD, so it never delays a first answer), tells you what it found, and downloads only when you click. **Restart now** installs it; a downloaded build also installs on the next quit. AppImage and the Windows installer update in place — a `.deb` does not, because the package manager owns those files, so it links to the releases page instead. The check is skipped while Airgap Shield is on, and it can be turned off entirely. Nothing starts, downloads or installs without a click. |
 
 ## Part 5 — Deliberately not here
 
@@ -76,7 +77,5 @@ Status legend: **✅ done** · **🟡 partial** · **⬜ planned**
 | The chat workspace | ⬜ | A conversation app is a different product; the overlay has its own input and history. |
 | The desktop agent | ⬜ | Nothing in "answer my question now" needs a mouse and keyboard, and it is a large attack surface on a machine that is holding a meeting. |
 | Workflows | ⬜ | A batch feature for a workspace. |
-| The Meetings/Studio surface | ⬜ | Record-then-act-afterwards is not instant assistance. |
-| The GitHub integration | ⬜ | Filing issues is a workspace action. |
-| The MCP client | ⬜ | A tool protocol for agents that act on code — it moves to the IDE product. |
+| An MCP tool client | ⬜ | Klyro stores MCP server definitions and shows their state, but it does not launch servers or call their tools. A tool protocol for agents that act on code belongs to the IDE product. |
 | An editor | ⬜ | That is the second product: a Rust IDE where the model is yours to choose and each task goes to the cheapest model that can do it. |

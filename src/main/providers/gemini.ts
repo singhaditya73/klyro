@@ -48,6 +48,15 @@ export const gemini: Provider = {
     )
     try {
       for await (const event of sseJson(res)) {
+        const metadata = event?.usageMetadata
+        if (metadata) {
+          options.onUsage?.({
+            inputTokens:
+              typeof metadata.promptTokenCount === 'number' ? metadata.promptTokenCount : undefined,
+            outputTokens:
+              typeof metadata.candidatesTokenCount === 'number' ? metadata.candidatesTokenCount : undefined
+          })
+        }
         const parts = event?.candidates?.[0]?.content?.parts ?? []
         for (const part of parts) {
           if (typeof part?.text === 'string' && part.text.length > 0) yield part.text

@@ -21,6 +21,7 @@ import { localAgentLauncher } from './domains/local-agent-launcher'
 import { antigravity } from './domains/antigravity'
 import { daemon } from './domains/daemon'
 import { prewarmOcr } from './domains/ocr'
+import { startUpdater } from './domains/updater'
 import { installAirgapFetchGuard, setAirgapShield } from './providers/request'
 
 app.setName('Klyro')
@@ -149,15 +150,6 @@ if (!gotLock) {
     // diagnostics), not just the provider adapter path.
     installAirgapFetchGuard()
     setAirgapShield(settingsDomain.get().airgap === true)
-    // Remove leftovers from a previous run before anything writes again.
-    maintenance.sweep()
-    // A retention policy is only a policy if it is applied: what is older than
-    // the user's window is gone before any of it is ever shown.
-    interviews.prune()
-    conversations.prune()
-    audit.prune()
-    // The answer cache promises fifteen minutes; make the file say the same.
-    answerCache.sweep()
     applyContentSecurityPolicy()
     applyPermissionPolicy()
     applyDisplayMediaPolicy()
@@ -167,7 +159,10 @@ if (!gotLock) {
     // control panel one click away — its own button, the tray, and the
     // "launch Klyro again" path all open it.
     const showPanelAtLaunch = settingsDomain.get().onboardingComplete !== true
-    createMainWindow({ show: showPanelAtLaunch })
+    // HUD-first launches do not pay for the control panel: it is created the
+    // first time something asks for it (the logo button, the tray, a second
+    // launch). Onboarding still gets its window immediately.
+    if (showPanelAtLaunch) createMainWindow({ show: true })
     const overlay = createOverlayWindow()
     applyTrayVisibility()
     registerShortcuts()
@@ -188,20 +183,44 @@ if (!gotLock) {
     if (settingsDomain.get().screenPreWarm && process.platform === 'darwin') {
       void warmupScreenPermission()
     }
-    // If the user has connected Antigravity, start its agent service now so
-    // the first question does not wait for it. It fails quietly: the service
-    // is started again on demand.
-    void antigravity.warmUp()
-    // The daemon owns the hot path. It starts in milliseconds and lives in a
-    // few megabytes, so the overlay's answer does not wait on a browser
-    // runtime. If it is not built, the app carries on without it.
-    void daemon.start()
-    prewarmOcr()
+
+    // Everything below is background work: disk sweeps, retention pruning, the
+    // daemon, OCR and the Antigravity service. None of it is needed to paint
+    // the HUD, and each one costs startup time or RAM, so let the first frame
+    // land first. Failures stay local to their step.
+    const startBackgroundWork = (): void => {
+      // Remove leftovers from a previous run before anything writes again.
+      maintenance.sweep()
+      // A retention policy is only a policy if it is applied: what is older
+      // than the user's window is gone before any of it is ever shown.
+      interviews.prune()
+      conversations.prune()
+      audit.prune()
+      // The answer cache promises fifteen minutes; make the file say the same.
+      answerCache.sweep()
+      // If the user has connected Antigravity, start its agent service now so
+      // the first question does not wait for it. It fails quietly: the service
+      // is started again on demand.
+      void antigravity.warmUp()
+      // The daemon owns the hot path. It starts in milliseconds and lives in a
+      // few megabytes. If it is not built, the app carries on without it, and
+      // the TypeScript clients answer until it is ready.
+      void daemon.start()
+      prewarmOcr()
+      // A quiet check for a newer release, fifteen seconds from now. It never
+      // downloads without a click, and it is skipped on an airgapped machine.
+      startUpdater()
+    }
+    const backgroundTimer = setTimeout(startBackgroundWork, 1200)
+    backgroundTimer.unref()
+
     startIdleMemoryCompaction()
     logger.info(`Klyro ${app.getVersion()} ready on ${process.platform}`)
 
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
+      // The dock icon opens the control panel, whether or not the overlay is
+      // already on screen.
+      showMainWindow()
     })
   })
 
