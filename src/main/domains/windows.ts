@@ -16,7 +16,6 @@ const OVERLAY_ANIMATION_MS = 150
 
 let mainWindow: BrowserWindow | null = null
 let overlayWindow: BrowserWindow | null = null
-let overlayStickyRecording = false
 /** The height the overlay's content asked for, so showing it is the right size. */
 let overlayContentHeight = 0
 /** The user's custom dragged position on screen. Null = default top center. */
@@ -189,15 +188,10 @@ export function createOverlayWindow(): BrowserWindow {
     }
   })
 
-  overlayWindow.on('blur', () => {
-    // If the user has dragged the overlay somewhere on screen (userOverlayPos),
-    // or manually resized it (userOverlayWidth), or is recording / in private mode,
-    // it stays pinned on screen and does NOT vanish on click outside.
-    // When in default top-center popup mode without recording, it can auto-dismiss.
-    if (!overlayStickyRecording && !overlayPrivateModeActive() && !userOverlayPos && !userOverlayWidth) {
-      void hideOverlayAnimated()
-    }
-  })
+  // The overlay remains persistent on screen when clicking outside, allowing the user
+  // to freely work across their desktop, IDE, or meeting notes while referencing answers.
+  // Minimization and dismissal are handled explicitly via the overlay header buttons,
+  // global hotkey, or Escape.
   attachNavigationGuards(overlayWindow)
   loadRoute(overlayWindow, 'overlay')
   overlayWindow.on('closed', () => {
@@ -258,9 +252,9 @@ export function applyOverlayOpacity(): number {
   return clamped
 }
 
-/** Meeting-assist recording keeps the overlay alive across focus changes. */
-export function setOverlayStickyRecording(sticky: boolean): void {
-  overlayStickyRecording = sticky === true
+/** Kept for IPC compatibility; the overlay is now persistently on-screen by default. */
+export function setOverlayStickyRecording(_sticky: boolean): void {
+  // No-op: overlay remains intact on screen across focus changes by default
 }
 
 let overlayGhostMode = false

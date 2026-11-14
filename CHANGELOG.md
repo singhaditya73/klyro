@@ -2,6 +2,17 @@
 
 All notable changes to Klyro are recorded here. Versions follow [SemVer](https://semver.org/).
 
+## [0.9.29] — 2026-11-14
+
+Persistent on-screen overlay HUD: eliminated unexpected auto-dismiss on outside clicks, allowing seamless multi-tasking across IDEs, browsers, and meeting applications.
+
+### Fixed
+- **Overlay on-screen persistence.** Removed blur-event auto-dismissal when clicking
+  outside the overlay window. Users can freely click, type, and navigate between code
+  editors, browser tabs, and desktop tools while keeping the overlay HUD intact and
+  visible. Minimization and closing are cleanly handled via the dedicated overlay header
+  buttons (`-`, `×`), the global hotkey (`Ctrl+Shift+Space`), or `Escape`.
+
 ## [0.9.28] — 2026-11-14
 
 Design system overhaul: high-end acrylic glass HUD, linear-style titanium cards, harmonized obsidian slate surfaces, and complete eradication of purple color tones.
