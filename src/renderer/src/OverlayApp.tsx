@@ -23,9 +23,9 @@ import {
   ShieldAlert,
   Zap,
   Calendar,
-  Compass,
   Ghost,
-  Smartphone
+  Smartphone,
+  Target
 } from 'lucide-react'
 import {
   createSilenceWatcher,
@@ -1748,40 +1748,20 @@ export default function OverlayApp() {
         )}
         <button
           type="button"
-          className={`btn btn--icon btn--icon-sm ${prompterMode ? 'btn--accent' : 'btn--ghost'}`}
+          className={`btn btn--icon btn--icon-sm ${zeroFocus ? 'btn--accent' : 'btn--ghost'}`}
           onClick={async () => {
-            const next = !prompterMode
-            setPrompterMode(next)
-            if (next) await window.klyro.snapToNotch?.()
+            const next = !zeroFocus
+            setZeroFocus(next)
+            await window.klyro.setZeroFocus?.(next)
           }}
-          title={prompterMode ? 'Exit Notch Teleprompter' : 'Snap under webcam (Direct Eye Contact Teleprompter) · Alt+P'}
-          aria-label="Notch Teleprompter"
+          title={
+            zeroFocus
+              ? 'Zero-Focus ACTIVE: Overlay never steals focus from your browser or IDE (Click to disable)'
+              : 'Zero-Focus Mode: Never steal focus from your active window (HackerRank & proctoring safe)'
+          }
+          aria-label={zeroFocus ? 'Disable Zero-Focus' : 'Enable Zero-Focus'}
         >
-          <Compass className="icon icon--sm" aria-hidden="true" />
-        </button>
-
-        <button
-          type="button"
-          className={`btn btn--icon btn--icon-sm ${ghostMode ? 'btn--accent' : 'btn--ghost'}`}
-          onClick={async () => {
-            const next = !ghostMode
-            setGhostMode(next)
-            await window.klyro.setGhostMode?.(next)
-          }}
-          title={ghostMode ? 'Exit Ghost Mode' : 'Ghost Click-Through Mode (Transparent + Mouse Passthrough) · Ctrl+Shift+G'}
-          aria-label="Ghost Mode"
-        >
-          <Ghost className="icon icon--sm" aria-hidden="true" />
-        </button>
-
-        <button
-          type="button"
-          className="btn btn--icon btn--icon-sm btn--ghost"
-          onClick={() => setDecoyMode(true)}
-          title="Emergency Decoy Camouflage (Notepad skin) · Alt+D"
-          aria-label="Decoy Mode"
-        >
-          <FileText className="icon icon--sm" aria-hidden="true" />
+          <Target className="icon icon--sm" aria-hidden="true" />
         </button>
 
         <button
@@ -1808,20 +1788,6 @@ export default function OverlayApp() {
           aria-label="Ghost Phone HUD"
         >
           <Smartphone className="icon icon--sm" aria-hidden="true" />
-        </button>
-
-        <button
-          type="button"
-          className={`btn btn--icon btn--icon-sm ${zeroFocus ? 'btn--accent' : 'btn--ghost'}`}
-          onClick={async () => {
-            const next = !zeroFocus
-            setZeroFocus(next)
-            await window.klyro.setZeroFocus?.(next)
-          }}
-          title={zeroFocus ? 'Disable Zero-Focus (Overlay never steals focus)' : 'Zero-Focus Window (WS_EX_NOACTIVATE / stealth invisible focus)'}
-          aria-label="Zero Focus"
-        >
-          <ShieldAlert className="icon icon--sm" aria-hidden="true" />
         </button>
 
         {hasAnswer && (

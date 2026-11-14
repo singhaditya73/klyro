@@ -296,9 +296,12 @@ export function setOverlayZeroFocus(zeroFocus: boolean): boolean {
   if (overlayWindow && !overlayWindow.isDestroyed()) {
     try {
       overlayWindow.setFocusable(!zeroFocus)
+      if (zeroFocus) {
+        overlayWindow.blur()
+      }
       overlayWindow.webContents.send('overlay:zeroFocusChanged', zeroFocus)
-    } catch {
-      // Ignored
+    } catch (error) {
+      logger.warn('Failed to set zero focus', error)
     }
   }
   return overlayZeroFocus
@@ -491,8 +494,10 @@ function showOverlayAnimated(win: BrowserWindow): void {
     // Some Linux compositors refuse opacity changes; the overlay still shows.
   }
   if (overlayZeroFocus) {
+    win.setFocusable(false)
     win.showInactive()
   } else {
+    win.setFocusable(true)
     win.show()
     win.focus()
   }
