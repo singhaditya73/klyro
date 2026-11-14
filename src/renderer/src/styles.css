@@ -3472,3 +3472,333 @@ button.pill:hover { background: rgba(255, 255, 255, 0.08); color: var(--text-pri
   border: 1.5px solid var(--accent);
   flex-shrink: 0;
 }
+
+/* ==========================================================================
+   Autonomous GTM Staging Deck Modal
+   ========================================================================== */
+.gtm-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.76);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.gtm-modal-dialog {
+  max-width: 880px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-overlay, #151619);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.65);
+  overflow: hidden;
+}
+
+.gtm-modal-header {
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  background: var(--surface-base);
+}
+
+.gtm-modal-icon-badge {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.gtm-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.gtm-modal-subtitle {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  margin: 3px 0 0;
+}
+
+.gtm-dispatch-success-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 24px 0;
+  padding: 12px 16px;
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.28);
+  border-radius: 8px;
+}
+
+.gtm-modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.gtm-card {
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  background: var(--surface-sunken);
+  transition: all 150ms ease;
+}
+
+.gtm-card--active {
+  border-color: var(--border-default);
+}
+
+.gtm-card--muted {
+  opacity: 0.5;
+}
+
+.gtm-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 11px 15px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.gtm-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+  font-weight: 550;
+  font-size: 13.5px;
+  color: var(--text-primary);
+}
+
+.gtm-card-heading {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.gtm-card-content {
+  padding: 14px 16px;
+}
+
+.gtm-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.gtm-form-field--full {
+  grid-column: 1 / -1;
+}
+
+.gtm-form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gtm-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gtm-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.gtm-preview-row {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.gtm-preview-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gtm-preview-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.gtm-preview-val {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.gtm-preview-textarea {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  background: var(--surface-input);
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.gtm-tickets-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gtm-ticket-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 11px;
+  border-radius: 6px;
+  background: var(--surface-input);
+  border: 1px solid var(--border-subtle);
+}
+
+.gtm-ticket-title {
+  font-size: 12.5px;
+  color: var(--text-primary);
+}
+
+.gtm-modal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 24px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-base);
+}
+
+/* ==========================================================================
+   Overlay In-Call Battlecard HUD
+   ========================================================================== */
+.overlay__battlecard {
+  background: rgba(22, 23, 27, 0.94);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  border-radius: 8px;
+  padding: 9px 12px;
+  margin-bottom: 8px;
+  backdrop-filter: blur(10px);
+  animation: fadeIn 200ms ease;
+}
+
+.overlay__battlecard-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.overlay__battlecard-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #eab308;
+  letter-spacing: -0.01em;
+}
+
+.overlay__battlecard-points {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.overlay__battlecard-point {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.overlay__battlecard-point::before {
+  content: '•';
+  color: #eab308;
+  font-weight: bold;
+}
+
+.overlay__battlecard-trap {
+  margin-top: 7px;
+  padding: 6px 9px;
+  background: rgba(234, 179, 8, 0.08);
+  border-left: 2px solid #eab308;
+  border-radius: 4px;
+  font-size: 11.5px;
+  color: #fef08a;
+  line-height: 1.45;
+}
+
+/* ==========================================================================
+   Pre-Call Account & Attendee Intelligence Card
+   ========================================================================== */
+.intel-hero {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--surface-sunken);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.intel-hero-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.intel-attendee-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.intel-attendee-card {
+  padding: 10px 12px;
+  background: var(--surface-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.intel-discovery-box {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--surface-input);
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+}
+

@@ -31,6 +31,8 @@ import {
   Zap
 } from 'lucide-react'
 import { Badge, EmptyState, Group, PageHeader } from './ui'
+import { GtmDispatchModal } from './GtmDispatchModal'
+import { buildAccountIntelligence } from '../lib/intelligence'
 import type { MeetingActionItem, MeetingCrmNotes, MeetingType } from '@shared/types'
 
 /**
@@ -160,6 +162,17 @@ export function InterviewsView(): React.ReactNode {
   const [newActionText, setNewActionText] = useState('')
   const [confirmClearAll, setConfirmClearAll] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showGtmModal, setShowGtmModal] = useState(false)
+  const [showIntelCard, setShowIntelCard] = useState(true)
+
+  const accountIntel = useMemo(() => {
+    if (!open?.company) return null
+    return buildAccountIntelligence({
+      company: open.company,
+      meetingTitle: open.crmNotes?.title,
+      pastSessions: sessions ? sessions.map((s) => ({ startedAt: s.startedAt, company: s.company })) : []
+    })
+  }, [open?.company, open?.crmNotes?.title, sessions])
 
   // Global Action Items Hub state
   const [globalActions, setGlobalActions] = useState<GlobalActionItem[]>([])
@@ -1094,6 +1107,16 @@ export function InterviewsView(): React.ReactNode {
                         {/* Quick export & share toolbar (Slack, Notion, CRM, Markdown, Direct Push) */}
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                           <button
+                            className="btn btn--primary btn--sm"
+                            onClick={() => setShowGtmModal(true)}
+                            title="Open 1-Click Autonomous GTM Staging Deck for human review before syncing"
+                            style={{ background: 'var(--accent)', color: '#ffffff', fontWeight: 600 }}
+                          >
+                            <Zap className="icon icon--xs" style={{ color: '#ffffff' }} />
+                            <span>🚀 1-Click GTM Dispatch</span>
+                          </button>
+
+                          <button
                             className="btn btn--quiet btn--sm"
                             onClick={() => void copySlackRecap(open.crmNotes!)}
                             title="Format for Slack or Microsoft Teams"
@@ -1285,6 +1308,96 @@ export function InterviewsView(): React.ReactNode {
                                 <span className="crm-talk-chip-hint">(Ideal: 55–65% active listening)</span>
                               </div>
                             </div>
+                          </div>
+                        )}
+
+                        {/* Pre-Call Account & Attendee Intelligence Card */}
+                        {accountIntel && (
+                          <div className="intel-hero">
+                            <div className="intel-hero-header">
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div
+                                  style={{
+                                    padding: '6px 8px',
+                                    borderRadius: 6,
+                                    background: 'var(--surface-raised)',
+                                    border: '1px solid var(--border-subtle)'
+                                  }}
+                                >
+                                  <Target className="icon icon--xs" style={{ color: 'var(--accent)' }} />
+                                </div>
+                                <div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                    <span style={{ fontWeight: 600, fontSize: 13.5 }}>
+                                      Account Intelligence: {accountIntel.company}
+                                    </span>
+                                    <Badge tone="idle">{accountIntel.industryEstimate}</Badge>
+                                    {accountIntel.domain && <Badge tone="accent">{accountIntel.domain}</Badge>}
+                                  </div>
+                                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                                    Synthesized stakeholder persona clues, tech stack signals, and historical memory.
+                                  </div>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                className="btn btn--quiet btn--xs"
+                                onClick={() => setShowIntelCard(!showIntelCard)}
+                              >
+                                <span>{showIntelCard ? 'Hide Intel' : 'Show Intel'}</span>
+                              </button>
+                            </div>
+
+                            {showIntelCard && (
+                              <div>
+                                {accountIntel.historicalContext && (
+                                  <div
+                                    style={{
+                                      padding: '8px 12px',
+                                      background: 'rgba(34, 197, 94, 0.08)',
+                                      border: '1px solid rgba(34, 197, 94, 0.22)',
+                                      borderRadius: 6,
+                                      marginBottom: 10
+                                    }}
+                                  >
+                                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--status-ok)' }}>
+                                      🏛️ Account History:
+                                    </span>
+                                    <span style={{ fontSize: 12, color: 'var(--text-primary)', marginLeft: 6 }}>
+                                      {accountIntel.historicalContext.pastSessionCount} prior session(s) logged (Last met: {accountIntel.historicalContext.lastMetDate}). Key past decisions: {accountIntel.historicalContext.keyDecisions.join('; ') || 'Ongoing platform evaluation'}.
+                                    </span>
+                                  </div>
+                                )}
+
+                                <div className="intel-discovery-box">
+                                  <div
+                                    style={{
+                                      fontSize: 11,
+                                      fontWeight: 600,
+                                      color: 'var(--text-muted)',
+                                      textTransform: 'uppercase',
+                                      letterSpacing: '0.03em',
+                                      marginBottom: 4
+                                    }}
+                                  >
+                                    🎯 Suggested Discovery Questions
+                                  </div>
+                                  <ul
+                                    style={{
+                                      margin: 0,
+                                      paddingLeft: 18,
+                                      fontSize: 12,
+                                      color: 'var(--text-secondary)',
+                                      lineHeight: 1.55
+                                    }}
+                                  >
+                                    {accountIntel.suggestedDiscoveryQuestions.map((q, i) => (
+                                      <li key={i}>{q}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
 
@@ -1678,6 +1791,15 @@ export function InterviewsView(): React.ReactNode {
             )}
           </div>
         </div>
+      )}
+      {showGtmModal && open && open.crmNotes && (
+        <GtmDispatchModal
+          isOpen={showGtmModal}
+          onClose={() => setShowGtmModal(false)}
+          company={open.company}
+          role={open.role}
+          crmNotes={open.crmNotes}
+        />
       )}
     </>
   )

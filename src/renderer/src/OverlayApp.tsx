@@ -57,6 +57,7 @@ import {
 import { createDualAudioStream } from './lib/audio-mixer'
 import { diarizer } from './lib/diarization'
 import { detectLiveActionItem, type DetectedActionItem } from './lib/commitments'
+import { detectBattlecard, type DetectedBattlecardMatch } from './lib/battlecards'
 import ReactMarkdown from 'react-markdown'
 import { parseAgendaItems, checkAgendaProgress, type AgendaItem } from './lib/agenda'
 import type { Attachment, CalendarEvent } from '@shared/types'
@@ -299,6 +300,8 @@ export default function OverlayApp() {
   const [upcomingMeeting, setUpcomingMeeting] = useState<CalendarEvent | null>(null)
   const [liveAction, setLiveAction] = useState<DetectedActionItem | null>(null)
   const actionTimeoutRef = useRef<number | null>(null)
+  const [activeBattlecard, setActiveBattlecard] = useState<DetectedBattlecardMatch | null>(null)
+  const battlecardTimeoutRef = useRef<number | null>(null)
   const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([])
   const agendaItemsRef = useRef<AgendaItem[]>([])
   const [showAgenda, setShowAgenda] = useState(false)
@@ -652,6 +655,10 @@ export default function OverlayApp() {
           setShowRemoteHudModal(false)
           return
         }
+        if (activeBattlecard) {
+          setActiveBattlecard(null)
+          return
+        }
         if (decoyMode) {
           setDecoyMode(false)
           return
@@ -961,6 +968,16 @@ export default function OverlayApp() {
   /** Answer a spoken question, with the screen attached when user captured one. */
   const askSpoken = useCallback(async (spoken: string): Promise<void> => {
     if (!spoken.trim()) return
+
+    const card = detectBattlecard(spoken)
+    if (card) {
+      setActiveBattlecard(card)
+      if (battlecardTimeoutRef.current !== null) {
+        window.clearTimeout(battlecardTimeoutRef.current)
+      }
+      battlecardTimeoutRef.current = window.setTimeout(() => setActiveBattlecard(null), 25000)
+    }
+
     archiveCurrentTurnIfAny()
     currentTurnRef.current = { question: spoken, answer: '', timing: null }
     setAnswer('')
@@ -1416,6 +1433,16 @@ export default function OverlayApp() {
           window.clearTimeout(actionTimeoutRef.current)
         }
         actionTimeoutRef.current = window.setTimeout(() => setLiveAction(null), 12000)
+      }
+
+      // Live competitor & objection battlecard detection
+      const detectedCard = detectBattlecard(text)
+      if (detectedCard) {
+        setActiveBattlecard(detectedCard)
+        if (battlecardTimeoutRef.current !== null) {
+          window.clearTimeout(battlecardTimeoutRef.current)
+        }
+        battlecardTimeoutRef.current = window.setTimeout(() => setActiveBattlecard(null), 25000)
       }
 
       // Live agenda progress check
@@ -2085,6 +2112,38 @@ export default function OverlayApp() {
               <Mic className="icon icon--xs" aria-hidden="true" />
               <span>Audio: {talkRatioPct}%</span>
             </span>
+          )}
+        </div>
+      )}
+
+      {activeBattlecard && (
+        <div className="overlay__battlecard" role="region" aria-label="Live Battlecard">
+          <div className="overlay__battlecard-head">
+            <span className="overlay__battlecard-badge">
+              <ShieldAlert className="icon icon--xs" style={{ color: '#eab308' }} />
+              <span>🛡️ {activeBattlecard.battlecard.title.toUpperCase()}</span>
+            </span>
+            <button
+              type="button"
+              className="btn btn--icon btn--xs btn--quiet"
+              onClick={() => setActiveBattlecard(null)}
+              title="Dismiss Battlecard (Esc)"
+              aria-label="Dismiss Battlecard"
+            >
+              <X className="icon icon--xs" />
+            </button>
+          </div>
+          <ul className="overlay__battlecard-points">
+            {activeBattlecard.battlecard.keyPoints.map((point, idx) => (
+              <li key={idx} className="overlay__battlecard-point">
+                {point}
+              </li>
+            ))}
+          </ul>
+          {activeBattlecard.battlecard.trapQuestion && (
+            <div className="overlay__battlecard-trap">
+              <strong>Trap Question:</strong> {activeBattlecard.battlecard.trapQuestion}
+            </div>
           )}
         </div>
       )}
