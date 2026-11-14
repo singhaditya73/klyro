@@ -2,6 +2,34 @@
 
 All notable changes to Klyro are recorded here. Versions follow [SemVer](https://semver.org/).
 
+## [0.9.26] — 2026-11-14
+
+Hardened pairing for the Ghost Phone HUD, quiet recording presence, and measured
+dual-mode capture exclusion.
+
+### Added
+- **Ghost Phone pairing security.** The companion HUD server keeps every secret
+  out of the URL: pairing uses a dynamic QR code or a rate-limited six-digit
+  one-time code that expires after ten minutes. Data and SSE streams require a
+  random bearer token issued only on valid pairing.
+- **Code rotation.** The overlay can generate a fresh pairing code without
+  restarting the server, keeping existing connected devices paired.
+- **Quiet presence.** Starting a meeting recording immediately clears dock and
+  taskbar badges, cancels window attention/flash requests, and mutes Klyro's own
+  audio playback to prevent notification leaks into microphones or system-audio
+  loopback loops.
+- **Dual-path capture verification.** The privacy probe measures both
+  whole-display capture exclusion and single-window capture (`getSources({ types: ['window'] })`)
+  via pixel luminance variance, reporting platform-specific facts and hardware
+  limits honestly.
+
+### Changed
+- **Privacy & Data UI.** Displays separate status rows for whole-screen and
+  single-window capture exclusion with badges, measured metrics, and platform
+  guidance.
+- **Ghost Phone modal.** Redesigned with inline QR code, spaced six-digit code,
+  expiry countdown, and one-click code rotation.
+
 ## [0.9.25] — 2026-11-09
 
 The audit batch: every documented feature either works or says why it cannot.

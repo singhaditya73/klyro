@@ -3039,3 +3039,30 @@ button.pill:hover { background: var(--surface-hover); color: var(--text-primary)
   background: var(--accent, var(--text-primary));
   transition: width var(--transition-fast);
 }
+
+/* Ghost Phone pairing: the QR and the six digits are the only way in. */
+.overlay__pairing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+.overlay__pairing-qr {
+  width: 148px;
+  height: 148px;
+  border-radius: 10px;
+  background: #fff;
+  image-rendering: pixelated;
+}
+.overlay__pairing-code {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.overlay__pairing-digits {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 24px;
+  letter-spacing: 6px;
+  font-weight: 700;
+}

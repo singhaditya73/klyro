@@ -848,6 +848,19 @@ export interface UpdateStatus {
   checkedAt?: number
 }
 
+/**
+ * What the capture probe measured: a whole-display share, a single-window
+ * share, and the platform facts the measurement cannot change.
+ */
+export interface CaptureProbe {
+  excluded: boolean
+  changedRatio: number
+  platform: string
+  supported: boolean
+  window: { supported: boolean; excluded: boolean; variance: number } | null
+  notes: string[]
+}
+
 export interface KlyroApi {
   getAppInfo(): Promise<AppInfo>
   /** Stop Klyro. Needed when the tray icon is turned off. */
@@ -896,9 +909,11 @@ export interface KlyroApi {
   /** Emergency panic cloak: immediately hide all windows, abort LLM, clear session. */
   panicKillswitch(): Promise<void>
   /** Start Ghost Phone companion HUD server for zero on-screen footprint. */
-  remoteHudStart(port?: number): Promise<{ url: string; port: number }>
+  remoteHudStart(port?: number): Promise<{ url: string; port: number; pairingCode: string; expiresAt: number }>
   remoteHudStop(): Promise<void>
-  remoteHudStatus(): Promise<{ running: boolean; url: string }>
+  remoteHudStatus(): Promise<{ running: boolean; url: string; pairingCode?: string; expiresAt?: number }>
+  /** Rotate the six-digit code without restarting the HUD server. */
+  remoteHudPairing(): Promise<{ code: string; expiresAt: number }>
   /** Push one live transcript line to the Ghost Phone companion HUD. */
   remoteHudTranscript(line: string): Promise<void>
   /** Force all transcription and inference to stay purely local on 127.0.0.1. */
@@ -1037,6 +1052,8 @@ export interface KlyroApi {
     changedRatio: number
     platform: string
     supported: boolean
+    window: { supported: boolean; excluded: boolean; variance: number } | null
+    notes: string[]
   }>
 
   /** Connected displays, for the "which screen holds the overlay" setting. */

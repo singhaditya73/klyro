@@ -1,6 +1,6 @@
 {
   "name": "klyro",
-  "version": "0.9.25",
+  "version": "0.9.26",
   "description": "Klyro — Your AI. Your entire computer. Understand. Remember. Act.",
   "homepage": "https://github.com/singhaditya73/klyro#readme",
   "repository": {
@@ -45,6 +45,7 @@
     "framer-motion": "^14.6.0",
     "ical.js": "^2.2.1",
     "lucide-react": "^1.59.0",
+    "qrcode": "^1.5.4",
     "rapidocr-node": "^0.3.4",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
@@ -56,6 +57,7 @@
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.8",
     "@types/node": "^26.6.5",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",

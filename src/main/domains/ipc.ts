@@ -23,6 +23,7 @@ import { calendarDomain } from './calendar'
 import { meetingTranscript } from './meeting-transcript'
 import { exportDataBundle } from './data-export'
 import { checkForUpdates, downloadUpdate, installUpdate, updateStatus } from './updater'
+import { setQuietPresence } from './presence'
 import { prewarmTranscribe, transcribeAudio } from './audio'
 import { ocrExtractText } from './ocr'
 import {
@@ -43,7 +44,7 @@ import {
   snapOverlayToNotch,
   toggleOverlay
 } from './windows'
-import { startRemoteHudServer, stopRemoteHudServer, getRemoteHudUrl, isRemoteHudRunning, broadcastRemoteHud } from './remote-hud'
+import { startRemoteHudServer, stopRemoteHudServer, getRemoteHudUrl, getRemoteHudPairing, rotatePairingCode, isRemoteHudRunning, broadcastRemoteHud } from './remote-hud'
 import { installAirgapFetchGuard, setAirgapShield, isAirgapShield } from '../providers/request'
 import { conversations } from './conversations'
 import { overlayCatalogue } from './overlay-models'
@@ -343,6 +344,8 @@ export function registerIpcHandlers(): void {
 
   handle(IPC.overlaySetRecordingSticky, (_event, sticky: unknown) => {
     setOverlayStickyRecording(sticky === true)
+    // Recording is the moment the app must stop drawing attention to itself.
+    setQuietPresence(sticky === true)
   })
 
   // The overlay asks for the height its content needs; the window follows.
@@ -406,10 +409,21 @@ export function registerIpcHandlers(): void {
     return { ok: true }
   })
 
-  handle(IPC.remoteHudStatus, () => ({
-    running: isRemoteHudRunning(),
-    url: getRemoteHudUrl()
-  }))
+  handle(IPC.remoteHudStatus, () => {
+    const pairing = isRemoteHudRunning() ? getRemoteHudPairing() : null
+    return {
+      running: isRemoteHudRunning(),
+      url: getRemoteHudUrl(),
+      ...(pairing ? { pairingCode: pairing.code, expiresAt: pairing.expiresAt } : {})
+    }
+  })
+
+  // A second phone, or a code that was seen by someone else: rotate without
+  // restarting the server, so the connected device keeps its own token.
+  handle(IPC.remoteHudPairing, () => {
+    if (!isRemoteHudRunning()) return null
+    return rotatePairingCode()
+  })
 
   handle(IPC.remoteHudTranscript, (_event, line: unknown) => {
     if (typeof line === 'string' && line.trim()) {

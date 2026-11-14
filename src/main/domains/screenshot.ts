@@ -99,10 +99,19 @@ export async function probeOverlayVisibility(): Promise<{
   changedRatio: number
   platform: NodeJS.Platform
   supported: boolean
+  window: { supported: boolean; excluded: boolean; variance: number } | null
+  notes: string[]
 }> {
   const overlay = getOverlayWindow()
   if (!overlay || overlay.isDestroyed()) {
-    return { excluded: false, changedRatio: 1, platform: process.platform, supported: false }
+    return {
+      excluded: false,
+      changedRatio: 1,
+      platform: process.platform,
+      supported: false,
+      window: null,
+      notes: ['Open the quick-ask overlay once, then run the check again.']
+    }
   }
   const wasVisible = overlay.isVisible()
   const bounds = overlay.getBounds()
@@ -110,6 +119,9 @@ export async function probeOverlayVisibility(): Promise<{
     overlay.showInactive()
     await new Promise((resolve) => setTimeout(resolve, 320))
     const withOverlay = await captureRawDisplay()
+    // The window-capture path is what "share a single window" uses; it is a
+    // different API from the display capture above, so it is measured too.
+    const windowProbe = await probeWindowCapture(overlay).catch(() => null)
 
     overlay.hide()
     await new Promise((resolve) => setTimeout(resolve, 320))
@@ -123,7 +135,14 @@ export async function probeOverlayVisibility(): Promise<{
     const x1 = Math.min(withOverlay.width, Math.ceil((bounds.x + bounds.width) * scaleX))
     const y1 = Math.min(withOverlay.height, Math.ceil((bounds.y + bounds.height) * scaleY))
     if (x1 <= x0 || y1 <= y0) {
-      return { excluded: false, changedRatio: 1, platform: process.platform, supported: false }
+      return {
+        excluded: false,
+        changedRatio: 1,
+        platform: process.platform,
+        supported: false,
+        window: windowProbe,
+        notes: ['The overlay is outside the primary display.']
+      }
     }
 
     let changed = 0
@@ -145,11 +164,78 @@ export async function probeOverlayVisibility(): Promise<{
     // A little noise is normal (a blinking caret in the region); a real
     // overlay changes a large part of its own area.
     const excluded = changedRatio < 0.02
-    return { excluded, changedRatio, platform: process.platform, supported: true }
+    return {
+      excluded,
+      changedRatio,
+      platform: process.platform,
+      supported: true,
+      window: windowProbe,
+      notes: probeNotes()
+    }
   } finally {
     if (!wasVisible) overlay.hide()
     else overlay.showInactive()
   }
+}
+
+/** Brightness variance; a blank (excluded) capture is nearly uniform. */
+function pixelVariance(bitmap: Buffer): number {
+  if (bitmap.length < 4) return 0
+  let count = 0
+  let sum = 0
+  let sumSquares = 0
+  for (let index = 0; index + 2 < bitmap.length; index += 4) {
+    const luminance =
+      0.2126 * bitmap[index] + 0.7152 * bitmap[index + 1] + 0.0722 * bitmap[index + 2]
+    sum += luminance
+    sumSquares += luminance * luminance
+    count += 1
+  }
+  if (count === 0) return 0
+  const mean = sum / count
+  return Math.max(0, sumSquares / count - mean * mean)
+}
+
+/**
+ * Measure the single-window capture path. Klyro's own window is the target:
+ * if the OS excludes it, the thumbnail the capturer returns is blank, and its
+ * pixel variance is ~0. A listed, painted window has text and borders.
+ */
+async function probeWindowCapture(
+  overlay: BrowserWindow
+): Promise<{ supported: boolean; excluded: boolean; variance: number }> {
+  if (process.platform === 'linux') return { supported: false, excluded: false, variance: 0 }
+  const sources = await desktopCapturer.getSources({
+    types: ['window'],
+    thumbnailSize: { width: 360, height: 220 },
+    fetchWindowIcons: false
+  })
+  const id = overlay.getMediaSourceId()
+  const source = sources.find((entry) => entry.id === id) ?? sources.find((entry) => isOwnWindow(entry.name))
+  if (!source) {
+    // The compositor refused to even list it: nothing to capture.
+    return { supported: true, excluded: true, variance: 0 }
+  }
+  const variance = pixelVariance(source.thumbnail.toBitmap())
+  return { supported: true, excluded: variance < 4, variance: Number(variance.toFixed(2)) }
+}
+
+/** Platform facts the probe cannot change but the user must know. */
+function probeNotes(): string[] {
+  if (process.platform === 'win32') {
+    return [
+      'Windows 10 2004 and later remove the window from captures entirely; older builds show a black rectangle instead.',
+      'A capture started immediately after the overlay appears can still contain it — wait a moment before sharing.',
+      'A camera pointed at the screen, or an external capture card in the display cable, sees the real screen.'
+    ]
+  }
+  if (process.platform === 'darwin') {
+    return [
+      'macOS 15+ apps that use ScreenCaptureKit can still capture the window; the older capture APIs cannot.',
+      'A camera pointed at the screen, or an external capture card, sees the real screen.'
+    ]
+  }
+  return ['Linux has no window-level capture exclusion. Use a second display, or a phone HUD.']
 }
 
 /**

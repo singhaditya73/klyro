@@ -214,6 +214,8 @@ export default function OverlayApp() {
   const [showRemoteHudModal, setShowRemoteHudModal] = useState(false)
   const [linkCopied, setLinkCopied] = useState(false)
   const [remoteHudUrl, setRemoteHudUrl] = useState<string | null>(null)
+  /** Six-digit, one-device pairing code; the address alone carries no secret. */
+  const [remoteHudPairing, setRemoteHudPairing] = useState<{ code: string; expiresAt: number } | null>(null)
   const lastEscPressRef = useRef(0)
   const [mode, setMode] = useState<AssistMode>('idle')
   const [transcript, setTranscript] = useState<string[]>([])
@@ -536,7 +538,12 @@ export default function OverlayApp() {
 
   useEffect(() => {
     void window.klyro.remoteHudStatus?.().then((res) => {
-      if (res?.running && res.url) setRemoteHudUrl(res.url)
+      if (res?.running && res.url) {
+        setRemoteHudUrl(res.url)
+        if (res.pairingCode && res.expiresAt) {
+          setRemoteHudPairing({ code: res.pairingCode, expiresAt: res.expiresAt })
+        }
+      }
     })
     // The main process writes each transcript line as it is heard, so a
     // renderer reload or crash does not throw away the part of the meeting
@@ -571,6 +578,7 @@ export default function OverlayApp() {
       setShowRsvp(false)
       setShowRemoteHudModal(false)
       setRemoteHudUrl(null)
+      setRemoteHudPairing(null)
     })
     const offGhost = window.klyro.onGhostModeChanged?.((ghost) => {
       setGhostMode(ghost)
@@ -1619,7 +1627,12 @@ export default function OverlayApp() {
             try {
               if (!remoteHudUrl) {
                 const res = await window.klyro.remoteHudStart?.()
-                if (res?.url) setRemoteHudUrl(res.url)
+                if (res?.url) {
+                  setRemoteHudUrl(res.url)
+                  if (res.pairingCode) {
+                    setRemoteHudPairing({ code: res.pairingCode, expiresAt: res.expiresAt })
+                  }
+                }
               }
               setShowRemoteHudModal(!showRemoteHudModal)
               setLinkCopied(false)
@@ -1684,6 +1697,8 @@ export default function OverlayApp() {
       {showRemoteHudModal && remoteHudUrl && (
         <GhostPhoneModal
           url={remoteHudUrl}
+          pairingCode={remoteHudPairing?.code ?? null}
+          expiresAt={remoteHudPairing?.expiresAt ?? null}
           copied={linkCopied}
           onClose={() => setShowRemoteHudModal(false)}
           onCopy={async () => {
@@ -1694,6 +1709,11 @@ export default function OverlayApp() {
             } else {
               setAssistNote('Could not copy the link. Select the address and copy it manually.')
             }
+          }}
+          onNewCode={() => {
+            void window.klyro.remoteHudPairing?.().then((next) => {
+              if (next) setRemoteHudPairing(next)
+            })
           }}
           onHide={() => {
             setShowRemoteHudModal(false)

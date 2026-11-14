@@ -74,6 +74,7 @@ const api: KlyroApi = {
   remoteHudStart: (port?: number) => ipcRenderer.invoke(IPC.remoteHudStart, port),
   remoteHudStop: () => ipcRenderer.invoke(IPC.remoteHudStop),
   remoteHudStatus: () => ipcRenderer.invoke(IPC.remoteHudStatus),
+  remoteHudPairing: () => ipcRenderer.invoke(IPC.remoteHudPairing),
   remoteHudTranscript: (line: string) => ipcRenderer.invoke(IPC.remoteHudTranscript, line),
   setAirgap: (enabled: boolean) => ipcRenderer.invoke(IPC.networkSetAirgap, enabled),
   onEmergencyReset: (listener: () => void) => {

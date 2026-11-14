@@ -32,29 +32,37 @@ describe('the Ghost Phone modal', () => {
   it('warns when the address is loopback-only and reflects the copy state', () => {
     const html = renderToStaticMarkup(
       <GhostPhoneModal
-        url="http://127.0.0.1:5892/?t=abc"
+        url="http://127.0.0.1:5892"
+        pairingCode="123456"
+        expiresAt={Date.now() + 9 * 60_000}
         copied
         onClose={() => undefined}
         onCopy={() => undefined}
         onHide={() => undefined}
+        onNewCode={() => undefined}
       />
     )
     expect(html).toContain('Copied')
+    expect(html).toContain('123456')
     expect(html).toContain('only works on this computer')
     expect(html).toContain('Hide Laptop Screen')
+    expect(html).toContain('New code')
   })
 
   it('does not warn when the address is reachable from a phone', () => {
     const html = renderToStaticMarkup(
       <GhostPhoneModal
-        url="http://192.168.1.20:5892/?t=abc"
+        url="http://192.168.1.20:5892"
         copied={false}
         onClose={() => undefined}
         onCopy={() => undefined}
         onHide={() => undefined}
+        onNewCode={() => undefined}
       />
     )
     expect(html).not.toContain('only works on this computer')
     expect(html).toContain('Copy Link')
+    // No code shown means a device is already paired; the address is harmless.
+    expect(html).toContain('Show a new code')
   })
 })

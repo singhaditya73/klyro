@@ -48,9 +48,10 @@ interface KlyroApi {
   setGhostMode(enabled: boolean): Promise<boolean>
   setZeroFocus(enabled: boolean): Promise<boolean>
   panicKillswitch(): Promise<void>
-  remoteHudStart(port?: number): Promise<{ url: string; port: number }>
+  remoteHudStart(port?: number): Promise<{ url: string; port: number; pairingCode: string; expiresAt: number }>
   remoteHudStop(): Promise<void>
-  remoteHudStatus(): Promise<{ running: boolean; url: string }>
+  remoteHudStatus(): Promise<{ running: boolean; url: string; pairingCode?: string; expiresAt?: number }>
+  remoteHudPairing(): Promise<{ code: string; expiresAt: number } | null>
   remoteHudTranscript?(line: string): Promise<void>
   setAirgap(enabled: boolean): Promise<boolean>
   onEmergencyReset?(listener: () => void): () => void
@@ -247,6 +248,8 @@ interface KlyroApi {
     changedRatio: number
     platform: string
     supported: boolean
+    window: { supported: boolean; excluded: boolean; variance: number } | null
+    notes: string[]
   }>
 
   calendarGetStatus(): Promise<any>

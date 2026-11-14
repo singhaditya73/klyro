@@ -32,6 +32,8 @@ function PrivacyCheckSection(): React.ReactNode {
     changedRatio: number
     platform: string
     supported: boolean
+    window: { supported: boolean; excluded: boolean; variance: number } | null
+    notes: string[]
   } | null>(null)
   const [running, setRunning] = useState(false)
 
@@ -40,11 +42,34 @@ function PrivacyCheckSection(): React.ReactNode {
     try {
       setResult(await window.klyro.privacyProbeOverlay())
     } catch {
-      setResult({ excluded: false, changedRatio: 1, platform: 'unknown', supported: false })
+      setResult({
+        excluded: false,
+        changedRatio: 1,
+        platform: 'unknown',
+        supported: false,
+        window: null,
+        notes: []
+      })
     } finally {
       setRunning(false)
     }
   }
+
+  const row = (label: string, state: 'ok' | 'warn' | 'skip', detail: string): React.ReactNode => (
+    <div className="list__row">
+      <StatusDot
+        state={state === 'ok' ? 'ok' : state === 'warn' ? 'warn' : 'idle'}
+        title={state === 'ok' ? 'Excluded' : state === 'warn' ? 'Visible' : 'Not supported'}
+      />
+      <div className="list__main">
+        <div className="list__title">{label}</div>
+        <div className="list__meta">{detail}</div>
+      </div>
+      <Badge tone={state === 'ok' ? 'accent' : state === 'warn' ? 'error' : 'neutral'}>
+        {state === 'ok' ? 'Excluded' : state === 'warn' ? 'Visible' : 'N/A'}
+      </Badge>
+    </div>
+  )
 
   return (
     <Group
@@ -62,45 +87,74 @@ function PrivacyCheckSection(): React.ReactNode {
           <span>{running ? 'Checking…' : 'Measure it now'}</span>
         </button>
         <Hint>
-          Captures the screen twice — once with the overlay up, once without — and compares the pixels.
+          Measures both capture paths: a whole-screen share and a single-window share. Zoom, Teams, Meet and OBS use the
+          same operating-system paths, so these two rows are the honest answer for them too.
         </Hint>
       </div>
 
       {result && (
-        <div className={`notice ${result.excluded ? 'notice--success' : 'notice--warning'}`} style={{ marginTop: 12 }}>
-          {result.excluded ? (
-            <CheckCircle2 className="icon icon--sm notice__icon" aria-hidden="true" />
-          ) : (
-            <AlertCircle className="icon icon--sm notice__icon" aria-hidden="true" />
-          )}
-          <div className="notice__body">
+        <>
+          <div className={`notice ${result.excluded ? 'notice--success' : 'notice--warning'}`} style={{ marginTop: 12 }}>
             {result.excluded ? (
-              <>
-                <strong>Verified: the overlay is excluded from screen captures on this machine.</strong>
-                <div className="hint" style={{ marginTop: 2 }}>
-                  Only {Math.round(result.changedRatio * 100)}% of the overlay&rsquo;s area changed between the two
-                  captures — that is screen noise, not the overlay. A full-screen share will not show it.
-                </div>
-              </>
-            ) : result.supported ? (
-              <>
-                <strong>Not excluded on this platform.</strong>
-                <div className="hint" style={{ marginTop: 2 }}>
-                  {Math.round(result.changedRatio * 100)}% of the overlay&rsquo;s area is present in the capture, so a
-                  full-screen share would show it. Windows and macOS can exclude a window from captures; Linux/X11 has
-                  no such API.
-                </div>
-              </>
+              <CheckCircle2 className="icon icon--sm notice__icon" aria-hidden="true" />
             ) : (
-              <>
-                <strong>Could not run the check.</strong>
-                <div className="hint" style={{ marginTop: 2 }}>
-                  The overlay window was not available yet. Open the quick-ask overlay once, then run the check again.
-                </div>
-              </>
+              <AlertCircle className="icon icon--sm notice__icon" aria-hidden="true" />
+            )}
+            <div className="notice__body">
+              {result.excluded ? (
+                <>
+                  <strong>Verified: the overlay is excluded from whole-screen captures on this machine.</strong>
+                  <div className="hint" style={{ marginTop: 2 }}>
+                    Only {Math.round(result.changedRatio * 100)}% of the overlay&rsquo;s area changed between the two
+                    captures — that is screen noise, not the overlay.
+                  </div>
+                </>
+              ) : result.supported ? (
+                <>
+                  <strong>Not excluded on this platform.</strong>
+                  <div className="hint" style={{ marginTop: 2 }}>
+                    {Math.round(result.changedRatio * 100)}% of the overlay&rsquo;s area is present in the capture, so a
+                    full-screen share would show it.
+                  </div>
+                </>
+              ) : (
+                <>
+                  <strong>Could not run the check.</strong>
+                  <div className="hint" style={{ marginTop: 2 }}>
+                    The overlay window was not available yet. Open the quick-ask overlay once, then run the check again.
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="list" style={{ marginTop: 12 }}>
+            {row(
+              'Whole-screen share',
+              result.supported ? (result.excluded ? 'ok' : 'warn') : 'skip',
+              result.supported
+                ? `${Math.round(result.changedRatio * 100)}% of the overlay's area appears in a display capture`
+                : 'No display capture was available to compare'
+            )}
+            {row(
+              'Single-window share',
+              result.window === null ? 'skip' : result.window.supported ? (result.window.excluded ? 'ok' : 'warn') : 'skip',
+              result.window === null
+                ? 'Not measured in this run'
+                : result.window.supported
+                  ? `Window thumbnail variance ${result.window.variance} (a blank capture is near 0)`
+                  : 'This platform does not exclude a window from window capture'
             )}
           </div>
-        </div>
+
+          {result.notes.length > 0 && (
+            <ul className="hint" style={{ marginTop: 10, paddingLeft: 18 }}>
+              {result.notes.map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </Group>
   )

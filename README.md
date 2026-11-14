@@ -121,6 +121,12 @@ stored locally, never uploaded except as part of the prompt you send.
 transcript is written and timestamped as you go, saved locally, and mirrored to
 the Ghost Phone HUD. *Summarize* produces a short summary plus extracted action
 items, and a recap is written automatically when recording stops.
+- **Quiet presence** — during active recording, Klyro automatically silences its
+  own audio output, clears dock and taskbar notification badges, and suppresses
+  window attention flashes to prevent audio or visual leaks into meeting streams.
+- **Ghost Phone HUD** — stream live transcripts and answers to your phone or
+  tablet for a zero on-screen footprint. Secured via local QR code or one-time
+  six-digit pairing code with bearer token authentication (no secrets in URLs).
 
 **Interviews** — every question and answer is kept in a session you can revisit,
 with a summary, notes, bookmarks and an optional CRM/MEDDPIC breakdown.
@@ -154,6 +160,11 @@ IPC, API keys and integration tokens encrypted at rest, and a strict production 
 A window may only ever display Klyro's own renderer: navigation elsewhere is
 refused, web links open in your browser, webviews cannot attach, and the permission
 policy grants microphone capture to Klyro's origin and nothing else.
+
+Screen capture protection uses native OS window exclusion (`WDA_EXCLUDEFROMCAPTURE`
+on Windows and window-sharing exclusion on macOS). The built-in Privacy Check
+measures both whole-display and single-window capture paths via pixel-by-pixel
+comparison to verify exclusion rather than assuming it.
 
 ## License
 

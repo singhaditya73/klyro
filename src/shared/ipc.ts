@@ -77,6 +77,7 @@ export const IPC = {
   remoteHudStart: 'remoteHud:start',
   remoteHudStop: 'remoteHud:stop',
   remoteHudStatus: 'remoteHud:status',
+  remoteHudPairing: 'remoteHud:pairing',
   remoteHudTranscript: 'remoteHud:transcript',
   networkSetAirgap: 'network:setAirgap',
   /** The overlay asks for the height its content needs. */
