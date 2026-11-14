@@ -2,6 +2,24 @@
 
 All notable changes to Klyro are recorded here. Versions follow [SemVer](https://semver.org/).
 
+## [0.9.28] — 2026-11-14
+
+Design system overhaul: high-end acrylic glass HUD, linear-style titanium cards, harmonized obsidian slate surfaces, and complete eradication of purple color tones.
+
+### Changed
+- **Overlay HUD acrylic glass aesthetic.** Re-architected overlay styling with multi-layer
+  frosted acrylic glassmorphism (`backdrop-filter: blur(28px) saturate(190%) contrast(105%)`),
+  specular top rim lighting, and ambient floating elevation drop shadows.
+- **Obsidian Titanium Slate action surfaces.** Replaced saturated electric blue blocks on
+  primary CTA buttons (`Quick ask`, `Open Klyro`) with refined Obsidian Slate surfaces
+  (`linear-gradient(180deg, #222838 0%, #151924 100%)`), subtle micro-bevel top lighting,
+  hairline borders, and gentle sky-blue accent icons (`#38bdf8`).
+- **Complete eradication of purple/indigo.** Replaced all purple gradients and accents
+  with high-contrast Linear-style Electric Cobalt (`#3b82f6`), titanium neutral glass,
+  and obsidian graphite surfaces across thinking indicators, action pulses, and talk meters.
+- **App shell modern elevation.** Enhanced sidebar navigation pills, elevated group cards,
+  and customized minimalist 6px scrollbars for a cohesive desktop application design.
+
 ## [0.9.27] — 2026-11-14
 
 Streaming action-item commitment pulse, live calendar agenda tracking, and 1-click
