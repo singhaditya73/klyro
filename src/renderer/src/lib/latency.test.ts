@@ -22,7 +22,7 @@ import {
 /** The budgets, in milliseconds. */
 export const LATENCY_BUDGETS = {
   /** From the last word to the question being ready for the model. */
-  questionToModel: 1500,
+  questionToModel: MEETING_QUESTION_SILENCE_MS + 500,
   /** A long pause in the room must not be charged to the answer. */
   pauseOverhead: MEETING_QUESTION_SILENCE_MS + 200,
   /** A question that is interrupted is dropped without a transcription. */
@@ -120,7 +120,7 @@ describe('the answer arrives in time', () => {
     const stoppedAt = loop.time.now
     let heard: Blob | null = null
     // The overlay polls while the room is quiet.
-    for (let elapsed = 0; elapsed < 1200 && !heard; elapsed += POLL_MS) {
+    for (let elapsed = 0; elapsed < MEETING_QUESTION_SILENCE_MS + 500 && !heard; elapsed += POLL_MS) {
       loop.time.advance(POLL_MS)
       heard = loop.poll()
     }

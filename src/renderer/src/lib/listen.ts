@@ -62,7 +62,7 @@ export function isNoAnswer(text: string): boolean {
  * ---------------------------------------------------------------------- */
 
 /** The quiet after the last word that ends a question. */
-export const MEETING_QUESTION_SILENCE_MS = 700
+export const MEETING_QUESTION_SILENCE_MS = 1500
 /** Audio kept before the first word, so the question is not clipped. */
 export const MEETING_PREROLL_MS = 400
 /** A question shorter than this is a cough or a "yeah". */
@@ -335,7 +335,7 @@ export function chunkHasSpeech(lastVoicedAt: number, now: number, chunkMs: numbe
 /** The level above which the microphone is treated as speech. */
 export const VOICE_SPEECH_THRESHOLD = 0.014
 /** Silence after the last voiced sample that ends an utterance. */
-export const VOICE_SILENCE_MS = 750
+export const VOICE_SILENCE_MS = 1600
 /** An utterance shorter than this is a cough, a click or a keyboard. */
 export const VOICE_MIN_UTTERANCE_MS = 450
 
