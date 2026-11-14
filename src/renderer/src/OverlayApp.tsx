@@ -42,6 +42,8 @@ import {
   utteranceEnded,
   utteranceWorthAsking,
   decodeAudioToPcm16kBuffer,
+  resampleTo16k,
+  pcm16kToWav,
   HARDWARE_AUDIO_CONSTRAINTS,
   type SilenceWatcher
 } from './lib/listen'
@@ -865,33 +867,31 @@ export default function OverlayApp() {
 
   const talkRef = useRef<{
     stream: MediaStream | null
-    recorder: MediaRecorder | null
     analyser: AnalyserNode | null
     context: AudioContext | null
+    processor: ScriptProcessorNode | null
     buffer: Uint8Array<ArrayBuffer> | null
-    chunks: Blob[]
-    mark: number
+    rollingPcm: Float32Array[]
+    utterancePcm: Float32Array[]
     speaking: boolean
     lastVoiceAt: number
     startedAt: number
     timer: number | null
     answering: boolean
-    lastPartialAt: number
     partialBusy: boolean
   }>({
     stream: null,
-    recorder: null,
     analyser: null,
     context: null,
+    processor: null,
     buffer: null,
-    chunks: [],
-    mark: 0,
+    rollingPcm: [],
+    utterancePcm: [],
     speaking: false,
     lastVoiceAt: 0,
     startedAt: 0,
     timer: null,
     answering: false,
-    lastPartialAt: 0,
     partialBusy: false
   })
 
@@ -938,20 +938,33 @@ export default function OverlayApp() {
   const flushUtterance = useCallback(async (): Promise<void> => {
     const talk = talkRef.current
     const duration = Date.now() - talk.startedAt
-    const pieces = talk.chunks.slice(talk.mark)
-    talk.chunks.length = 0
-    talk.mark = 0
     talk.speaking = false
     setPartialText('')
-    if (!utteranceWorthAsking(duration) || pieces.length === 0) {
+
+    const pcmBlocks = talk.utterancePcm
+    talk.utterancePcm = []
+
+    if (!utteranceWorthAsking(duration) || pcmBlocks.length === 0) {
       setTalkState('listening')
       return
     }
-    const blob = new Blob(pieces, { type: talk.recorder?.mimeType || 'audio/webm' })
+
     try {
-      const buffer = await blob.arrayBuffer()
-      const pcmBuffer = await decodeAudioToPcm16kBuffer(blob).catch(() => null)
-      const result = await window.klyro.transcribe(buffer, blob.type, pcmBuffer || undefined)
+      let totalSamples = 0
+      for (const block of pcmBlocks) totalSamples += block.length
+      const mergedPcm = new Float32Array(totalSamples)
+      let offset = 0
+      for (const block of pcmBlocks) {
+        mergedPcm.set(block, offset)
+        offset += block.length
+      }
+
+      const inputSampleRate = talk.context?.sampleRate || 48000
+      const pcm16k = resampleTo16k(mergedPcm, inputSampleRate)
+      const wavBuffer = pcm16kToWav(pcm16k)
+      const pcmBuffer = pcm16k.slice().buffer as ArrayBuffer
+
+      const result = await window.klyro.transcribe(wavBuffer, 'audio/wav', pcmBuffer)
       const spoken = result.text.trim()
       if (!spoken) {
         setTalkState('listening')
@@ -972,17 +985,18 @@ export default function OverlayApp() {
     const talk = talkRef.current
     if (talk.timer !== null) window.clearInterval(talk.timer)
     talk.timer = null
-    talk.recorder?.state === 'recording' && talk.recorder.stop()
-    talk.recorder = null
+    try {
+      talk.processor?.disconnect()
+    } catch {}
+    talk.processor = null
     talk.stream?.getTracks().forEach((track) => track.stop())
     talk.stream = null
     void talk.context?.close().catch(() => undefined)
     talk.context = null
     talk.analyser = null
-    talk.chunks = []
+    talk.rollingPcm = []
+    talk.utterancePcm = []
     talk.speaking = false
-    talk.lastPartialAt = 0
-    talk.partialBusy = false
     setPartialText('')
     setTalkState('idle')
     setLevel(0)
@@ -994,33 +1008,43 @@ export default function OverlayApp() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: HARDWARE_AUDIO_CONSTRAINTS })
       const talk = talkRef.current
       talk.stream = stream
+      talk.rollingPcm = []
+      talk.utterancePcm = []
+      talk.speaking = false
 
-      // Level watcher for speech detection.
-      const AudioCtor = window.AudioContext
-      if (AudioCtor) {
-        const context = new AudioCtor()
-        const analyser = context.createAnalyser()
-        analyser.fftSize = 2048
-        context.createMediaStreamSource(stream).connect(analyser)
-        talk.context = context
-        talk.analyser = analyser
-        talk.buffer = new Uint8Array(new ArrayBuffer(analyser.fftSize))
-      }
+      const AudioCtor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+      if (!AudioCtor) throw new Error('Web Audio API not supported')
 
-      // Continuous recorder: chunks are sliced per utterance by the mark.
-      const mimeType = pickRecordMimeType()
-      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
-      talk.recorder = recorder
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          talk.chunks.push(event.data)
-          // In-memory rolling circular buffer: keep max 16 idle slices (~4s) before speech starts
-          if (!talk.speaking && talk.chunks.length > 16) {
-            talk.chunks.shift()
-          }
+      const context = new AudioCtor()
+      const analyser = context.createAnalyser()
+      analyser.fftSize = 2048
+      const source = context.createMediaStreamSource(stream)
+      source.connect(analyser)
+
+      // ScriptProcessorNode buffers raw 16kHz Float32 PCM directly with zero container/header corruption!
+      const processor = context.createScriptProcessor(2048, 1, 1)
+      source.connect(processor)
+      const muteGain = context.createGain()
+      muteGain.gain.value = 0
+      processor.connect(muteGain)
+      muteGain.connect(context.destination)
+
+      processor.onaudioprocess = (event) => {
+        const input = event.inputBuffer.getChannelData(0)
+        const copy = new Float32Array(input)
+        if (!talk.speaking) {
+          talk.rollingPcm.push(copy)
+          // Keep last 4 blocks (~0.4s) of preroll so the beginning of speech is never truncated
+          if (talk.rollingPcm.length > 4) talk.rollingPcm.shift()
+        } else {
+          talk.utterancePcm.push(copy)
         }
       }
-      recorder.start(250)
+
+      talk.context = context
+      talk.analyser = analyser
+      talk.processor = processor
+      talk.buffer = new Uint8Array(new ArrayBuffer(analyser.fftSize))
 
       setTalkState('listening')
       talk.timer = window.setInterval(() => {
@@ -1031,38 +1055,14 @@ export default function OverlayApp() {
         const now = Date.now()
         if (isSpeech(rms)) {
           if (!talk.speaking) {
-            // An utterance starts: remember where the audio begins with preroll.
             talk.speaking = true
             talk.startedAt = now
-            talk.mark = Math.max(0, talk.chunks.length - 2)
-            talk.lastPartialAt = now
+            // Copy preroll blocks so initial speech onset is preserved
+            talk.utterancePcm = [...talk.rollingPcm]
             setTalkState('hearing')
-            // Smart speculative pre-warming: wake model on voice detection
             void window.klyro.prewarmTranscribe?.()
           }
           talk.lastVoiceAt = now
-
-          // Partial Streaming Whisper: interim transcription while speaker is talking
-          if (!talk.partialBusy && now - talk.lastPartialAt > 750) {
-            const livePieces = talk.chunks.slice(talk.mark)
-            if (livePieces.length >= 2) {
-              talk.partialBusy = true
-              talk.lastPartialAt = now
-              const liveBlob = new Blob(livePieces, { type: talk.recorder?.mimeType || 'audio/webm' })
-              decodeAudioToPcm16kBuffer(liveBlob)
-                .then(async (pcm) => {
-                  const arr = await liveBlob.arrayBuffer()
-                  const res = await window.klyro.transcribe(arr, liveBlob.type, pcm)
-                  if (res?.text && talk.speaking) {
-                    setPartialText(res.text.trim())
-                  }
-                })
-                .catch(() => undefined)
-                .finally(() => {
-                  talk.partialBusy = false
-                })
-            }
-          }
           return
         }
         if (talk.speaking) {
@@ -1081,7 +1081,7 @@ export default function OverlayApp() {
       setAssistNote(`Microphone unavailable: ${(error as Error).message}`)
       stopTalking()
     }
-  }, [flushUtterance, stopTalking])
+  }, [stopTalking])
 
   async function transcribeBlob(blob: Blob): Promise<string> {
     const buffer = await blob.arrayBuffer()

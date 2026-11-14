@@ -443,3 +443,58 @@ export async function decodeAudioToPcm16kBase64(blob: Blob): Promise<string> {
   }
   return btoa(binary)
 }
+
+/** Resample Float32 PCM samples from inputSampleRate to 16000Hz via linear interpolation. */
+export function resampleTo16k(input: Float32Array, inputSampleRate: number): Float32Array {
+  if (inputSampleRate === 16000) return input
+  const ratio = inputSampleRate / 16000
+  const outputLength = Math.max(1, Math.round(input.length / ratio))
+  const output = new Float32Array(outputLength)
+  for (let i = 0; i < outputLength; i++) {
+    const srcIndex = i * ratio
+    const indexFloor = Math.floor(srcIndex)
+    const frac = srcIndex - indexFloor
+    const s0 = input[indexFloor] ?? 0
+    const s1 = input[indexFloor + 1] ?? s0
+    output[i] = s0 + frac * (s1 - s0)
+  }
+  return output
+}
+
+/** Convert 16kHz mono Float32 PCM samples into a standard 16-bit PCM WAV ArrayBuffer. */
+export function pcm16kToWav(pcm16kFloat32: Float32Array): ArrayBuffer {
+  const numChannels = 1
+  const sampleRate = 16000
+  const bytesPerSample = 2 // 16-bit PCM
+  const dataSize = pcm16kFloat32.length * bytesPerSample
+  const buffer = new ArrayBuffer(44 + dataSize)
+  const view = new DataView(buffer)
+
+  // "RIFF" chunk descriptor
+  view.setUint32(0, 0x52494646, false) // 'RIFF'
+  view.setUint32(4, 36 + dataSize, true)
+  view.setUint32(8, 0x57415645, false) // 'WAVE'
+
+  // "fmt " sub-chunk
+  view.setUint32(12, 0x666d7420, false) // 'fmt '
+  view.setUint32(16, 16, true) // subchunk1 size (16 for PCM)
+  view.setUint16(20, 1, true) // audio format (1 = PCM)
+  view.setUint16(22, numChannels, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * numChannels * bytesPerSample, true) // byte rate
+  view.setUint16(32, numChannels * bytesPerSample, true) // block align
+  view.setUint16(34, 16, true) // bits per sample
+
+  // "data" sub-chunk
+  view.setUint32(36, 0x64617461, false) // 'data'
+  view.setUint32(40, dataSize, true)
+
+  // Write 16-bit integer PCM
+  let offset = 44
+  for (let i = 0; i < pcm16kFloat32.length; i++, offset += 2) {
+    const s = Math.max(-1, Math.min(1, pcm16kFloat32[i]))
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true)
+  }
+
+  return buffer
+}
