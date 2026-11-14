@@ -1009,6 +1009,7 @@ export interface KlyroApi {
   interviewsSummarize(id: string): Promise<{ summary: string; model: string } | null>
   interviewsGenerateCrmNotes(input: { id: string; meetingType?: string }): Promise<MeetingCrmNotes | null>
   interviewsExportMarkdown(id: string): Promise<string>
+  interviewsPushNotes(input: { id: string; target: 'slack' | 'crm' | 'notion' | 'linear' }): Promise<{ ok: boolean; url?: string; error?: string }>
 
   /** The models a provider can serve — so the user can pick one. */
   providerModels(providerId: ProviderId): Promise<{
@@ -1098,6 +1099,8 @@ export interface KlyroApi {
   integrationsUpdate(patch: Partial<DirectIntegrations>): Promise<DirectIntegrations>
   integrationsSendSlack(input: { message: string; webhookUrl?: string }): Promise<{ ok: boolean; error?: string }>
   integrationsSendCrm(input: { payload: Record<string, unknown>; webhookUrl?: string }): Promise<{ ok: boolean; error?: string }>
+  integrationsSendLinear(input: { issue: { title: string; description: string; teamId?: string }; apiKey?: string }): Promise<{ ok: boolean; issueUrl?: string; error?: string }>
+  integrationsSendNotion(input: { page: { title: string; markdown: string; parentPageId?: string }; token?: string }): Promise<{ ok: boolean; pageUrl?: string; error?: string }>
 
   mcpServers(): Promise<MCPServerState[]>
   mcpAddServer(input: { name: string; command: string; args?: string[]; env?: Record<string, string>; description?: string }): Promise<MCPServerState>

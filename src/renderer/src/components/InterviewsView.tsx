@@ -152,6 +152,10 @@ export function InterviewsView(): React.ReactNode {
   const [pushSlackMsg, setPushSlackMsg] = useState<string | null>(null)
   const [pushingCrm, setPushingCrm] = useState(false)
   const [pushCrmMsg, setPushCrmMsg] = useState<string | null>(null)
+  const [pushingNotion, setPushingNotion] = useState(false)
+  const [pushNotionMsg, setPushNotionMsg] = useState<string | null>(null)
+  const [pushingLinear, setPushingLinear] = useState(false)
+  const [pushLinearMsg, setPushLinearMsg] = useState<string | null>(null)
   const [noteDraft, setNoteDraft] = useState<Record<string, string>>({})
   const [newActionText, setNewActionText] = useState('')
   const [confirmClearAll, setConfirmClearAll] = useState(false)
@@ -478,6 +482,50 @@ export function InterviewsView(): React.ReactNode {
       }
     },
     []
+  )
+
+  const pushNotion = useCallback(
+    async (): Promise<void> => {
+      if (!open) return
+      setPushingNotion(true)
+      setPushNotionMsg(null)
+      try {
+        const res = await window.klyro.interviewsPushNotes?.({ id: open.id, target: 'notion' })
+        if (res?.ok) {
+          setPushNotionMsg('Created Page!')
+        } else {
+          setPushNotionMsg(res?.error || 'Failed')
+        }
+      } catch (err) {
+        setPushNotionMsg((err as Error).message)
+      } finally {
+        setPushingNotion(false)
+        setTimeout(() => setPushNotionMsg(null), 3500)
+      }
+    },
+    [open]
+  )
+
+  const pushLinear = useCallback(
+    async (): Promise<void> => {
+      if (!open) return
+      setPushingLinear(true)
+      setPushLinearMsg(null)
+      try {
+        const res = await window.klyro.interviewsPushNotes?.({ id: open.id, target: 'linear' })
+        if (res?.ok) {
+          setPushLinearMsg('Created Issue!')
+        } else {
+          setPushLinearMsg(res?.error || 'Failed')
+        }
+      } catch (err) {
+        setPushLinearMsg((err as Error).message)
+      } finally {
+        setPushingLinear(false)
+        setTimeout(() => setPushLinearMsg(null), 3500)
+      }
+    },
+    [open]
   )
 
   const summarize = useCallback(
@@ -1129,6 +1177,40 @@ export function InterviewsView(): React.ReactNode {
                               <Briefcase className="icon icon--xs" style={{ color: 'var(--status-ok)' }} />
                             )}
                             <span>{pushCrmMsg || 'Push to CRM'}</span>
+                          </button>
+
+                          <button
+                            className="btn btn--quiet btn--sm"
+                            onClick={() => void pushNotion()}
+                            disabled={pushingNotion}
+                            title="Create page in Notion workspace"
+                            style={{ color: pushNotionMsg === 'Created Page!' ? 'var(--status-ok)' : undefined }}
+                          >
+                            {pushingNotion ? (
+                              <Loader2 className="icon icon--xs spin" />
+                            ) : pushNotionMsg === 'Created Page!' ? (
+                              <Check className="icon icon--xs" style={{ color: 'var(--status-ok)' }} />
+                            ) : (
+                              <FileText className="icon icon--xs" style={{ color: 'var(--accent)' }} />
+                            )}
+                            <span>{pushNotionMsg || 'Push to Notion'}</span>
+                          </button>
+
+                          <button
+                            className="btn btn--quiet btn--sm"
+                            onClick={() => void pushLinear()}
+                            disabled={pushingLinear}
+                            title="Create issue in Linear team"
+                            style={{ color: pushLinearMsg === 'Created Issue!' ? 'var(--status-ok)' : undefined }}
+                          >
+                            {pushingLinear ? (
+                              <Loader2 className="icon icon--xs spin" />
+                            ) : pushLinearMsg === 'Created Issue!' ? (
+                              <Check className="icon icon--xs" style={{ color: 'var(--status-ok)' }} />
+                            ) : (
+                              <Zap className="icon icon--xs" style={{ color: 'var(--accent)' }} />
+                            )}
+                            <span>{pushLinearMsg || 'Push to Linear'}</span>
                           </button>
 
                           {open.crmNotes.model && (

@@ -101,6 +101,8 @@ export const IPC = {
   integrationsUpdate: 'integrations:update',
   integrationsSendSlack: 'integrations:sendSlack',
   integrationsSendCrm: 'integrations:sendCrm',
+  integrationsSendLinear: 'integrations:sendLinear',
+  integrationsSendNotion: 'integrations:sendNotion',
 
   /* Post-meeting action agent + output ledger */
 
@@ -140,6 +142,7 @@ export const IPC = {
   interviewsSummarize: 'interviews:summarize',
   interviewsGenerateCrmNotes: 'interviews:generateCrmNotes',
   interviewsExportMarkdown: 'interviews:exportMarkdown',
+  interviewsPushNotes: 'interviews:pushNotes',
 
   /* Import MCP servers from tools the user already runs */
 

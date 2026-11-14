@@ -129,6 +129,8 @@ interface KlyroApi {
   integrationsUpdate(patch: any): Promise<any>
   integrationsSendSlack(input: { message: string; webhookUrl?: string }): Promise<{ ok: boolean; error?: string }>
   integrationsSendCrm(input: { payload: Record<string, unknown>; webhookUrl?: string }): Promise<{ ok: boolean; error?: string }>
+  integrationsSendLinear?(input: { issue: { title: string; description: string; teamId?: string }; apiKey?: string }): Promise<{ ok: boolean; issueUrl?: string; error?: string }>
+  integrationsSendNotion?(input: { page: { title: string; markdown: string; parentPageId?: string }; token?: string }): Promise<{ ok: boolean; pageUrl?: string; error?: string }>
 
   meetingProposeActions(meetingId: string): Promise<{ meetingTitle: string; proposals: any[] }>
   meetingExecuteActions(input: { meetingId: string; proposals: any[] }): Promise<any[]>
@@ -197,6 +199,7 @@ interface KlyroApi {
   interviewsSummarize(id: string): Promise<{ summary: string; model: string } | null>
   interviewsGenerateCrmNotes(input: { id: string; meetingType?: string }): Promise<any>
   interviewsExportMarkdown(id: string): Promise<string>
+  interviewsPushNotes?(input: { id: string; target: 'slack' | 'crm' | 'notion' | 'linear' }): Promise<{ ok: boolean; url?: string; error?: string }>
   overlayCatalogue(): Promise<Array<{
     id: string
     label: string

@@ -2,6 +2,28 @@
 
 All notable changes to Klyro are recorded here. Versions follow [SemVer](https://semver.org/).
 
+## [0.9.27] — 2026-11-14
+
+Streaming action-item commitment pulse, live calendar agenda tracking, and 1-click
+direct export to Notion and Linear.
+
+### Added
+- **Streaming commitment & action-item detector.** Scans spoken utterances in
+  real time for first-person promises ("I will send over", "I'll follow up"),
+  delegated asks ("Could you please check"), and collaborative agreements.
+  Categorizes commitments into technical, commercial, follow-up, or decision types
+  with deadline extraction.
+- **Action-Item Pulse.** A transient real-time HUD badge in the overlay notifies
+  you the moment an action item is detected during conversation, with 1-click
+  **Add to Notes** and dismiss actions.
+- **Calendar agenda & topic progress tracker.** Automatically extracts discussion
+  topics and numbered/bulleted agenda items from calendar invites and descriptions.
+  Continuously matches transcript keywords against agenda topics to show real-time
+  discussion coverage (`Agenda: X/Y`) with an interactive popover checklist.
+- **1-click push to Notion & Linear.** Export synthesized meeting notes, action
+  items, decisions, and follow-ups directly to Notion pages (structured blocks)
+  and Linear issues via authenticated APIs using tokens stored in the OS keychain.
+
 ## [0.9.26] — 2026-11-14
 
 Hardened pairing for the Ghost Phone HUD, quiet recording presence, and measured

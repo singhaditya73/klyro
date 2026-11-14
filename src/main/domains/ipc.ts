@@ -585,6 +585,21 @@ export function registerIpcHandlers(): void {
     if (!session) return ''
     return exportMeetingNotesMarkdown(session)
   })
+  handle(IPC.interviewsPushNotes, async (_event, input: unknown) => {
+    const parsed = z
+      .object({
+        id: z.string().min(1).max(80),
+        target: z.enum(['slack', 'crm', 'notion', 'linear'])
+      })
+      .parse(input)
+    const session = interviews.get(parsed.id)
+    if (!session) return { ok: false, error: 'Session not found' }
+    if (!session.crmNotes) {
+      return { ok: false, error: 'Meeting notes not generated yet. Click "Generate Notes" first.' }
+    }
+    const meetingTitle = `${session.company || 'Meeting'} - ${session.role || 'Notes'}`
+    return integrationsDomain.pushMeetingNotes(session.crmNotes, parsed.target, meetingTitle)
+  })
 
   /* Direct integrations & MCP */
   handle(IPC.integrationsGet, () => integrationsDomain.getIntegrations())
@@ -609,6 +624,32 @@ export function registerIpcHandlers(): void {
   handle(IPC.integrationsSendCrm, (_event, input: unknown) => {
     const parsed = z.object({ payload: z.record(z.string(), z.unknown()), webhookUrl: z.string().optional() }).parse(input)
     return integrationsDomain.sendCrm(parsed.payload, parsed.webhookUrl)
+  })
+  handle(IPC.integrationsSendLinear, (_event, input: unknown) => {
+    const parsed = z
+      .object({
+        issue: z.object({
+          title: z.string().min(1),
+          description: z.string().min(1),
+          teamId: z.string().optional()
+        }),
+        apiKey: z.string().optional()
+      })
+      .parse(input)
+    return integrationsDomain.sendLinear(parsed.issue, parsed.apiKey)
+  })
+  handle(IPC.integrationsSendNotion, (_event, input: unknown) => {
+    const parsed = z
+      .object({
+        page: z.object({
+          title: z.string().min(1),
+          markdown: z.string().min(1),
+          parentPageId: z.string().optional()
+        }),
+        token: z.string().optional()
+      })
+      .parse(input)
+    return integrationsDomain.sendNotion(parsed.page, parsed.token)
   })
 
   handle(IPC.mcpServers, () => integrationsDomain.listServers())

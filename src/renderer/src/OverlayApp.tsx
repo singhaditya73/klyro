@@ -22,6 +22,7 @@ import {
   FileText,
   ShieldAlert,
   Zap,
+  Calendar,
   Compass,
   Ghost,
   Smartphone
@@ -46,6 +47,8 @@ import {
 } from './lib/listen'
 import { createDualAudioStream } from './lib/audio-mixer'
 import { diarizer } from './lib/diarization'
+import { detectLiveActionItem, type DetectedActionItem } from './lib/commitments'
+import { parseAgendaItems, checkAgendaProgress, type AgendaItem } from './lib/agenda'
 import type { Attachment, CalendarEvent } from '@shared/types'
 import type { PickerGroup } from './components/ModelPicker'
 import { GhostPhoneModal } from './components/overlay/GhostPhoneModal'
@@ -257,6 +260,11 @@ export default function OverlayApp() {
   const [timing, setTiming] = useState<SessionTiming | null>(null)
   const [copied, setCopied] = useState(false)
   const [upcomingMeeting, setUpcomingMeeting] = useState<CalendarEvent | null>(null)
+  const [liveAction, setLiveAction] = useState<DetectedActionItem | null>(null)
+  const actionTimeoutRef = useRef<number | null>(null)
+  const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([])
+  const agendaItemsRef = useRef<AgendaItem[]>([])
+  const [showAgenda, setShowAgenda] = useState(false)
   const utteranceEndedAtRef = useRef<number | null>(null)
   const firstTokenReceivedRef = useRef(false)
   const [streamingE2e, setStreamingE2e] = useState<number | null>(null)
@@ -1127,6 +1135,7 @@ export default function OverlayApp() {
     company?: string
     attendees?: string[]
     meetingUrl?: string
+    description?: string
   }): Promise<void> {
     try {
       const company = meetingContext?.company || ''
@@ -1152,6 +1161,14 @@ export default function OverlayApp() {
       diarizer.reset()
       if (meetingContext?.attendees) {
         diarizer.setAttendees(meetingContext.attendees)
+      }
+      if (meetingContext?.description || meetingContext?.title) {
+        const parsed = parseAgendaItems(meetingContext.description, meetingContext.title)
+        setAgendaItems(parsed)
+        agendaItemsRef.current = parsed
+      } else {
+        setAgendaItems([])
+        agendaItemsRef.current = []
       }
 
       await openStream()
@@ -1226,7 +1243,8 @@ export default function OverlayApp() {
         title: meeting.title,
         company: meeting.company,
         attendees: meeting.attendees,
-        meetingUrl: meeting.meetingUrl
+        meetingUrl: meeting.meetingUrl,
+        description: meeting.description
       })
       setAssistNote(`In-call co-pilot started for "${meeting.title}". Dual recording active.`)
     } catch (err) {
@@ -1262,6 +1280,25 @@ export default function OverlayApp() {
       diarizer.adaptSpeakerNames(text)
       const wordCount = text.split(/\s+/).filter(Boolean).length
       diarizer.recordSpeakerWords(assignment.speakerId, wordCount)
+
+      // Live streaming commitment / action item detection
+      const detectedAction = detectLiveActionItem(text, assignment.label)
+      if (detectedAction) {
+        setLiveAction(detectedAction)
+        if (actionTimeoutRef.current !== null) {
+          window.clearTimeout(actionTimeoutRef.current)
+        }
+        actionTimeoutRef.current = window.setTimeout(() => setLiveAction(null), 12000)
+      }
+
+      // Live agenda progress check
+      if (agendaItemsRef.current.length > 0) {
+        const { updated, newlyAddressed } = checkAgendaProgress(agendaItemsRef.current, text)
+        if (newlyAddressed) {
+          agendaItemsRef.current = updated
+          setAgendaItems([...updated])
+        }
+      }
 
       const taggedLine = `[${assignment.label}]: ${text}`
       const next = [...transcript.slice(-7), taggedLine]
@@ -1936,12 +1973,99 @@ export default function OverlayApp() {
             {scratchpadText.trim() && <span className="overlay__copilot-dot" aria-hidden="true" />}
           </button>
 
+          {agendaItems.length > 0 && (
+            <button
+              type="button"
+              className={`overlay__copilot-chip ${showAgenda ? 'overlay__copilot-chip--active' : ''}`}
+              onClick={() => setShowAgenda(!showAgenda)}
+              title="Meeting Agenda Tracking"
+            >
+              <Calendar className="icon icon--xs" style={{ color: 'var(--accent)' }} aria-hidden="true" />
+              <span>
+                Agenda: {agendaItems.filter((i) => i.addressed).length}/{agendaItems.length}
+              </span>
+            </button>
+          )}
+
           {talkRatioPct > 0 && (
             <span className="overlay__pacing-badge" title="Live audio active speaking percentage">
               <Mic className="icon icon--xs" aria-hidden="true" />
               <span>Audio: {talkRatioPct}%</span>
             </span>
           )}
+        </div>
+      )}
+
+      {mode === 'listening' && liveAction && (
+        <div className="overlay__action-pulse" role="status" aria-live="polite">
+          <div className="overlay__action-pulse-main">
+            <span className="overlay__action-pulse-badge">
+              ⚡ Action: {liveAction.category.toUpperCase().replace('_', ' ')}
+            </span>
+            <span className="overlay__action-pulse-task">{liveAction.task}</span>
+            {liveAction.owner && <span className="overlay__action-pulse-meta">(@{liveAction.owner})</span>}
+            {liveAction.deadline && <span className="overlay__action-pulse-meta">[{liveAction.deadline}]</span>}
+          </div>
+          <div className="overlay__action-pulse-btns">
+            <button
+              type="button"
+              className="btn btn--primary btn--xs"
+              onClick={() => {
+                const noteItem = `- [ ] [${liveAction.category.toUpperCase()}] ${liveAction.task}${liveAction.owner ? ` (@${liveAction.owner})` : ''}${liveAction.deadline ? ` [Due: ${liveAction.deadline}]` : ''}`
+                setScratchpadText((prev) => (prev ? `${prev}\n${noteItem}` : noteItem))
+                if (interviewRef.current) {
+                  const updatedNotes = scratchpadText ? `${scratchpadText}\n${noteItem}` : noteItem
+                  void window.klyro.interviewsUpdate({ id: interviewRef.current, notes: updatedNotes })
+                }
+                setLiveAction(null)
+              }}
+              title="Add this commitment to meeting action items"
+            >
+              <Check className="icon icon--xs" />
+              <span>Add</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn--quiet btn--xs"
+              onClick={() => setLiveAction(null)}
+              aria-label="Dismiss action item"
+            >
+              <X className="icon icon--xs" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mode === 'listening' && showAgenda && agendaItems.length > 0 && (
+        <div className="overlay__agenda-flyout" role="region" aria-label="Meeting Agenda Checklist">
+          <div className="overlay__agenda-head">
+            <strong>Meeting Agenda Topics</strong>
+            <span>
+              {agendaItems.filter((i) => i.addressed).length} of {agendaItems.length} covered
+            </span>
+          </div>
+          <ul className="overlay__agenda-list">
+            {agendaItems.map((item) => (
+              <li
+                key={item.id}
+                className={`overlay__agenda-item ${item.addressed ? 'overlay__agenda-item--done' : ''}`}
+                onClick={() => {
+                  const updated = agendaItems.map((i) =>
+                    i.id === item.id ? { ...i, addressed: !i.addressed } : i
+                  )
+                  setAgendaItems(updated)
+                  agendaItemsRef.current = updated
+                }}
+              >
+                {item.addressed ? (
+                  <Check className="icon icon--xs" style={{ color: 'var(--status-ok)', flexShrink: 0 }} />
+                ) : (
+                  <span className="overlay__agenda-dot" aria-hidden="true" />
+                )}
+                <span>{item.title}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

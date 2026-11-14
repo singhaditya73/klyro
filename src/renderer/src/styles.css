@@ -3066,3 +3066,101 @@ button.pill:hover { background: var(--surface-hover); color: var(--text-primary)
   letter-spacing: 6px;
   font-weight: 700;
 }
+
+/* Live Action-Item Pulse */
+.overlay__action-pulse {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  margin: 6px 12px;
+  background: var(--surface-active);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  animation: pulseIn 0.2s ease-out;
+}
+@keyframes pulseIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.overlay__action-pulse-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.overlay__action-pulse-badge {
+  font-weight: 600;
+  color: var(--accent);
+  font-size: 11px;
+}
+.overlay__action-pulse-task {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.overlay__action-pulse-meta {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.overlay__action-pulse-btns {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Agenda Checklist Flyout */
+.overlay__agenda-flyout {
+  margin: 6px 12px;
+  padding: 8px 10px;
+  background: var(--surface-active);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+.overlay__agenda-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.overlay__agenda-head strong {
+  color: var(--text-primary);
+}
+.overlay__agenda-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.overlay__agenda-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.overlay__agenda-item:hover {
+  background: var(--surface-hover);
+}
+.overlay__agenda-item--done {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+.overlay__agenda-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1px solid var(--accent);
+  flex-shrink: 0;
+}

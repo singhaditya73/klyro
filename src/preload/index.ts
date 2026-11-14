@@ -149,6 +149,8 @@ const api: KlyroApi = {
   interviewsGenerateCrmNotes: (input: { id: string; meetingType?: string }) =>
     ipcRenderer.invoke(IPC.interviewsGenerateCrmNotes, input),
   interviewsExportMarkdown: (id: string) => ipcRenderer.invoke(IPC.interviewsExportMarkdown, id),
+  interviewsPushNotes: (input: { id: string; target: 'slack' | 'crm' | 'notion' | 'linear' }) =>
+    ipcRenderer.invoke(IPC.interviewsPushNotes, input),
   localAgentStartOpenCode: () => ipcRenderer.invoke(IPC.localAgentStartOpenCode),
   localAgentConnectOpenCode: () => ipcRenderer.invoke(IPC.localAgentConnectOpenCode),
   openCodePickModel: (baseUrl?: string) => ipcRenderer.invoke(IPC.localAgentOpenCodePickModel, baseUrl),
@@ -198,6 +200,10 @@ const api: KlyroApi = {
     ipcRenderer.invoke(IPC.integrationsSendSlack, input),
   integrationsSendCrm: (input: { payload: Record<string, unknown>; webhookUrl?: string }) =>
     ipcRenderer.invoke(IPC.integrationsSendCrm, input),
+  integrationsSendLinear: (input: { issue: { title: string; description: string; teamId?: string }; apiKey?: string }) =>
+    ipcRenderer.invoke(IPC.integrationsSendLinear, input),
+  integrationsSendNotion: (input: { page: { title: string; markdown: string; parentPageId?: string }; token?: string }) =>
+    ipcRenderer.invoke(IPC.integrationsSendNotion, input),
 
   mcpServers: () => ipcRenderer.invoke(IPC.mcpServers),
   mcpAddServer: (input: any) => ipcRenderer.invoke(IPC.mcpAddServer, input),

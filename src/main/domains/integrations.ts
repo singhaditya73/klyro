@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import type { DirectIntegrations, MCPServerConfig, MCPServerState } from '@shared/types'
+import type { DirectIntegrations, MCPServerConfig, MCPServerState, MeetingCrmNotes } from '@shared/types'
 import { JsonStore } from '../store/json-store'
 import { secrets } from '../security/secrets'
 import { logger } from '../logger'
+import { formatForCrm, formatForNotion, formatForSlack } from './meeting-notes'
 
 interface IntegrationsStoreData {
   integrations: DirectIntegrations
@@ -170,16 +171,17 @@ export class IntegrationsDomain {
     }
   }
 
-  async sendCrm(payload: Record<string, unknown>, overrideUrl?: string): Promise<{ ok: boolean; error?: string }> {
+  async sendCrm(payload: Record<string, unknown> | string, overrideUrl?: string): Promise<{ ok: boolean; error?: string }> {
     const url = (overrideUrl || this.getIntegrations().crmWebhookUrl || '').trim()
     if (!url) {
       return { ok: false, error: 'No CRM webhook URL configured' }
     }
     try {
+      const body = typeof payload === 'string' ? JSON.stringify({ text: payload, notes: payload }) : JSON.stringify(payload)
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body
       })
       if (!response.ok) {
         return { ok: false, error: `CRM webhook HTTP error ${response.status}` }
@@ -189,6 +191,221 @@ export class IntegrationsDomain {
       logger.warn('Failed to dispatch CRM webhook', (err as Error).message)
       return { ok: false, error: (err as Error).message }
     }
+  }
+
+  async sendLinear(
+    issue: { title: string; description: string; teamId?: string },
+    overrideKey?: string
+  ): Promise<{ ok: boolean; issueUrl?: string; error?: string }> {
+    const key = (overrideKey || this.getIntegrations().linearApiKey || '').trim()
+    if (!key) {
+      return { ok: false, error: 'No Linear API key configured in Settings → Integrations' }
+    }
+    try {
+      let teamId = issue.teamId
+      if (!teamId) {
+        const teamsResp = await fetch('https://api.linear.app/graphql', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: key
+          },
+          body: JSON.stringify({
+            query: 'query { teams(first: 1) { nodes { id name } } }'
+          })
+        })
+        const teamsData = (await teamsResp.json()) as { data?: { teams?: { nodes?: Array<{ id: string }> } } }
+        teamId = teamsData?.data?.teams?.nodes?.[0]?.id
+        if (!teamId) {
+          return { ok: false, error: 'No accessible Linear team found for this API key' }
+        }
+      }
+
+      const mutation = `
+        mutation IssueCreate($input: IssueCreateInput!) {
+          issueCreate(input: $input) {
+            success
+            issue {
+              id
+              title
+              url
+            }
+          }
+        }
+      `
+      const resp = await fetch('https://api.linear.app/graphql', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: key
+        },
+        body: JSON.stringify({
+          query: mutation,
+          variables: {
+            input: {
+              title: issue.title,
+              description: issue.description,
+              teamId
+            }
+          }
+        })
+      })
+      const result = (await resp.json()) as {
+        data?: { issueCreate?: { success?: boolean; issue?: { id: string; url?: string } } }
+        errors?: Array<{ message: string }>
+      }
+      const created = result?.data?.issueCreate?.issue
+      if (result?.data?.issueCreate?.success && created) {
+        return { ok: true, issueUrl: created.url }
+      }
+      return {
+        ok: false,
+        error: result?.errors?.[0]?.message || 'Failed to create Linear issue'
+      }
+    } catch (err) {
+      logger.warn('Failed to dispatch Linear issue', (err as Error).message)
+      return { ok: false, error: (err as Error).message }
+    }
+  }
+
+  async sendNotion(
+    page: { title: string; markdown: string; parentPageId?: string },
+    overrideToken?: string
+  ): Promise<{ ok: boolean; pageUrl?: string; error?: string }> {
+    const token = (overrideToken || this.getIntegrations().notionToken || '').trim()
+    if (!token) {
+      return { ok: false, error: 'No Notion integration token configured in Settings → Integrations' }
+    }
+    try {
+      const paragraphs = page.markdown
+        .split(/\n\n+/)
+        .map((p) => p.trim())
+        .filter(Boolean)
+        .slice(0, 40)
+
+      const children = paragraphs.map((para) => {
+        if (para.startsWith('## ')) {
+          return {
+            object: 'block',
+            type: 'heading_2',
+            heading_2: {
+              rich_text: [{ type: 'text', text: { content: para.replace(/^##\s+/, '') } }]
+            }
+          }
+        }
+        if (para.startsWith('- [ ] ') || para.startsWith('- [x] ')) {
+          return {
+            object: 'block',
+            type: 'to_do',
+            to_do: {
+              rich_text: [{ type: 'text', text: { content: para.replace(/^- \[[ x]\]\s+/, '') } }],
+              checked: para.startsWith('- [x] ')
+            }
+          }
+        }
+        if (para.startsWith('- ') || para.startsWith('* ')) {
+          return {
+            object: 'block',
+            type: 'bulleted_list_item',
+            bulleted_list_item: {
+              rich_text: [{ type: 'text', text: { content: para.replace(/^[-*]\s+/, '') } }]
+            }
+          }
+        }
+        return {
+          object: 'block',
+          type: 'paragraph',
+          paragraph: {
+            rich_text: [{ type: 'text', text: { content: para.slice(0, 1900) } }]
+          }
+        }
+      })
+
+      let parent: { page_id: string } | null = page.parentPageId ? { page_id: page.parentPageId } : null
+      if (!parent) {
+        const searchResp = await fetch('https://api.notion.com/v1/search', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+            'Notion-Version': '2022-06-28'
+          },
+          body: JSON.stringify({
+            filter: { value: 'page', property: 'object' },
+            page_size: 1
+          })
+        })
+        const searchData = (await searchResp.json()) as { results?: Array<{ id: string }> }
+        const foundId = searchData?.results?.[0]?.id
+        if (foundId) {
+          parent = { page_id: foundId }
+        }
+      }
+
+      if (!parent) {
+        return {
+          ok: false,
+          error: 'No accessible Notion page found. Share a page with your Klyro integration in Notion.'
+        }
+      }
+
+      const createResp = await fetch('https://api.notion.com/v1/pages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'Notion-Version': '2022-06-28'
+        },
+        body: JSON.stringify({
+          parent,
+          properties: {
+            title: {
+              title: [{ text: { content: page.title } }]
+            }
+          },
+          children
+        })
+      })
+
+      const created = (await createResp.json()) as { id?: string; url?: string; message?: string }
+      if (createResp.ok && created?.id) {
+        return { ok: true, pageUrl: created.url || `https://notion.so/${created.id.replace(/-/g, '')}` }
+      }
+      return {
+        ok: false,
+        error: created?.message || `Notion HTTP error ${createResp.status}`
+      }
+    } catch (err) {
+      logger.warn('Failed to dispatch Notion page', (err as Error).message)
+      return { ok: false, error: (err as Error).message }
+    }
+  }
+
+  async pushMeetingNotes(
+    notes: MeetingCrmNotes,
+    target: 'slack' | 'crm' | 'notion' | 'linear',
+    title: string = 'Meeting Notes'
+  ): Promise<{ ok: boolean; url?: string; error?: string }> {
+    if (target === 'slack') {
+      const formatted = formatForSlack(notes)
+      return this.sendSlack(formatted)
+    }
+    if (target === 'crm') {
+      const payload = formatForCrm(notes)
+      return this.sendCrm(payload)
+    }
+    if (target === 'notion') {
+      const md = formatForNotion(notes)
+      return this.sendNotion({ title, markdown: md })
+    }
+    if (target === 'linear') {
+      const desc =
+        (notes.executiveSummary || '') +
+        '\n\n### Action Items\n' +
+        notes.actionItems.map((a) => `- [ ] ${a.task} (@${a.owner || 'unassigned'})`).join('\n')
+      return this.sendLinear({ title, description: desc })
+    }
+    return { ok: false, error: `Unknown integration target: ${target}` }
   }
 
   /* ---------- MCP server definitions ---------- */

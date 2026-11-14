@@ -121,6 +121,14 @@ stored locally, never uploaded except as part of the prompt you send.
 transcript is written and timestamped as you go, saved locally, and mirrored to
 the Ghost Phone HUD. *Summarize* produces a short summary plus extracted action
 items, and a recap is written automatically when recording stops.
+- **Action-Item Pulse** — real-time HUD detection of first-person commitments,
+  second-person requests, and key decisions with instant deadline parsing and
+  1-click capture to notes.
+- **Agenda Tracker** — automatic extraction of discussion points from calendar
+  invitations with live transcript keyword matching and progress indicators.
+- **1-Click Export to Notion & Linear** — push synthesized meeting notes, action
+  items, decisions, and follow-ups directly to Notion pages or Linear issues,
+  alongside Slack and CRM webhooks.
 - **Quiet presence** — during active recording, Klyro automatically silences its
   own audio output, clears dock and taskbar notification badges, and suppresses
   window attention flashes to prevent audio or visual leaks into meeting streams.

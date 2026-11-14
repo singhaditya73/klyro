@@ -79,4 +79,45 @@ describe('integration credentials', () => {
     expect(result.ok).toBe(false)
     expect(result.error).toContain('not found')
   })
+
+  it('fails gracefully when dispatching Linear issue without an API key', async () => {
+    integrationsDomain.updateIntegrations({ linearApiKey: '' })
+    const result = await integrationsDomain.sendLinear({
+      title: 'Fix issue',
+      description: 'Bug description'
+    })
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain('No Linear API key')
+  })
+
+  it('fails gracefully when dispatching Notion page without a token', async () => {
+    integrationsDomain.updateIntegrations({ notionToken: '' })
+    const result = await integrationsDomain.sendNotion({
+      title: 'Meeting Notes',
+      markdown: '## Summary\nTest notes'
+    })
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain('No Notion integration token')
+  })
+
+  it('dispatches meeting notes to Slack when configured', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('ok', { status: 200 }))
+    integrationsDomain.updateIntegrations({ slackWebhookUrl: 'https://hooks.slack.com/services/test' })
+
+    const sampleNotes = {
+      title: 'Architecture Sync',
+      type: 'client_call' as const,
+      executiveSummary: 'Executive summary',
+      discussionTopics: ['Architecture'],
+      actionItems: [{ task: 'Update DB', owner: 'Aditya', category: 'technical' as const }],
+      keyDecisions: ['Approved design'],
+      model: 'mock-model',
+      generatedAt: Date.now()
+    }
+
+    const res = await integrationsDomain.pushMeetingNotes(sampleNotes, 'slack', 'Architecture Sync')
+    expect(res.ok).toBe(true)
+    expect(fetchSpy).toHaveBeenCalled()
+    fetchSpy.mockRestore()
+  })
 })
