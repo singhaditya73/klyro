@@ -2,6 +2,20 @@
 
 All notable changes to Klyro are recorded here. Versions follow [SemVer](https://semver.org/).
 
+## [0.9.30] — 2026-11-14
+
+Markdown formatting in overlay answers, clean distraction-free HUD footer, and seamless voice conversation without unexpected screen-capture prompts.
+
+### Fixed
+- **Markdown rendering in answers.** Integrated full markdown parsing (`ReactMarkdown`)
+  for overlay responses, properly formatting bold emphasis, bullet points, numbered lists,
+  and code snippets instead of displaying raw markdown asterisks (`***`).
+- **Talk mode voice conversation.** Removed automatic screen-capture triggers in voice
+  Talk mode, preventing unwanted Wayland/Linux desktop portal "Share your screen" prompts
+  and ensuring uninterrupted back-to-back voice questions and answers.
+- **HUD footer cleanup.** Removed developer latency/TTFT profiling badges and model ID
+  tags from beneath every answer, presenting a clean, modern aesthetic.
+
 ## [0.9.29] — 2026-11-14
 
 Persistent on-screen overlay HUD: eliminated unexpected auto-dismiss on outside clicks, allowing seamless multi-tasking across IDEs, browsers, and meeting applications.

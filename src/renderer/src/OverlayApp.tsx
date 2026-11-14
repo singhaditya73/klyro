@@ -48,6 +48,7 @@ import {
 import { createDualAudioStream } from './lib/audio-mixer'
 import { diarizer } from './lib/diarization'
 import { detectLiveActionItem, type DetectedActionItem } from './lib/commitments'
+import ReactMarkdown from 'react-markdown'
 import { parseAgendaItems, checkAgendaProgress, type AgendaItem } from './lib/agenda'
 import type { Attachment, CalendarEvent } from '@shared/types'
 import type { PickerGroup } from './components/ModelPicker'
@@ -130,7 +131,8 @@ function RenderAnswerWithCitations({ text }: { text: string }): React.ReactEleme
 
   while ((match = citationRegex.exec(text)) !== null) {
     if (match.index > lastIndex) {
-      parts.push(text.slice(lastIndex, match.index))
+      const slice = text.slice(lastIndex, match.index)
+      parts.push(<ReactMarkdown key={`md-${lastIndex}`}>{slice}</ReactMarkdown>)
     }
     const sourceLabel = match[1].trim()
     parts.push(
@@ -147,7 +149,8 @@ function RenderAnswerWithCitations({ text }: { text: string }): React.ReactEleme
   }
 
   if (lastIndex < text.length) {
-    parts.push(text.slice(lastIndex))
+    const slice = text.slice(lastIndex)
+    parts.push(<ReactMarkdown key={`md-${lastIndex}`}>{slice}</ReactMarkdown>)
   }
 
   return <>{parts}</>
@@ -196,6 +199,8 @@ export default function OverlayApp() {
 
   const [busy, setBusy] = useState(false)
   const [conversationId, setConversationId] = useState<string | null>(null)
+  const conversationIdRef = useRef<string | null>(null)
+  conversationIdRef.current = conversationId
   /** The interview this overlay is recording into, when it is recording one. */
   const [interviewId, setInterviewId] = useState<string | null>(null)
   const interviewRef = useRef<string | null>(null)
@@ -267,7 +272,6 @@ export default function OverlayApp() {
   const [showAgenda, setShowAgenda] = useState(false)
   const utteranceEndedAtRef = useRef<number | null>(null)
   const firstTokenReceivedRef = useRef(false)
-  const [streamingE2e, setStreamingE2e] = useState<number | null>(null)
 
   const rootRef = useRef<HTMLDivElement | null>(null)
   const innerRef = useRef<HTMLDivElement | null>(null)
@@ -469,7 +473,6 @@ export default function OverlayApp() {
         currentTurnRef.current.documents = undefined
         talkRef.current.answering = true
         firstTokenReceivedRef.current = false
-        setStreamingE2e(null)
         // The conversation mode has its own status line; a typed question does
         // not need one.
         if (talkRef.current.timer !== null) setTalkState('thinking')
@@ -482,7 +485,6 @@ export default function OverlayApp() {
           const e2e = utteranceEndedAtRef.current ? Date.now() - utteranceEndedAtRef.current : undefined
           currentTurnRef.current.e2eMs = e2e
           currentTurnRef.current.budgetMet = e2e !== undefined ? e2e <= 2000 : undefined
-          if (e2e !== undefined) setStreamingE2e(e2e)
         }
         currentTurnRef.current.answer += event.text
         tokenBufferRef.current += event.text
@@ -508,7 +510,6 @@ export default function OverlayApp() {
         }
         setBusy(false)
         talkRef.current.answering = false
-        setStreamingE2e(null)
         if (talkRef.current.timer !== null) setTalkState('listening')
         if (event.type === 'done') {
           const timingObj: SessionTiming = {
@@ -894,7 +895,7 @@ export default function OverlayApp() {
     partialBusy: false
   })
 
-  /** Answer a spoken question, with the screen attached when possible. */
+  /** Answer a spoken question, with the screen attached when user captured one. */
   const askSpoken = useCallback(async (spoken: string): Promise<void> => {
     if (!spoken.trim()) return
     archiveCurrentTurnIfAny()
@@ -904,18 +905,17 @@ export default function OverlayApp() {
     setTiming(null)
     setTalkState('thinking')
     try {
-      let id = conversationId
+      let id = conversationIdRef.current || conversationId
       if (!id) {
         const conversation = await window.klyro.createConversation()
         id = conversation.id
+        conversationIdRef.current = id
         setConversationId(id)
       }
       let attachments: Attachment[] | undefined
-      try {
-        const shot = await window.klyro.grabScreen()
-        attachments = [{ kind: 'image', mime: 'image/png', dataUrl: shot.dataUrl, label: shot.name }]
-      } catch {
-        // No screen? Answer from the words alone.
+      // Only attach screen if user explicitly captured or selected one
+      if (capture) {
+        attachments = [{ kind: 'image', mime: 'image/png', dataUrl: capture.dataUrl, label: capture.name }]
       }
       await window.klyro.sendChat({
         conversationId: id,
@@ -929,7 +929,10 @@ export default function OverlayApp() {
       setTalkState('listening')
       setAssistNote((error as Error).message)
     }
-  }, [conversationId])
+  }, [conversationId, capture])
+
+  const askSpokenRef = useRef(askSpoken)
+  askSpokenRef.current = askSpoken
 
   /** Transcribe the finished utterance and ask it. */
   const flushUtterance = useCallback(async (): Promise<void> => {
@@ -955,12 +958,15 @@ export default function OverlayApp() {
         return
       }
       setTranscript((previous) => [...previous, spoken].slice(-8))
-      await askSpoken(spoken)
+      await askSpokenRef.current(spoken)
     } catch (error) {
       setTalkState('listening')
       setAssistNote((error as Error).message)
     }
-  }, [askSpoken])
+  }, [])
+
+  const flushUtteranceRef = useRef(flushUtterance)
+  flushUtteranceRef.current = flushUtterance
 
   const stopTalking = useCallback((): void => {
     const talk = talkRef.current
@@ -1061,7 +1067,7 @@ export default function OverlayApp() {
         }
         if (talk.speaking) {
           if (utteranceEnded(true, now - talk.lastVoiceAt)) {
-            void flushUtterance()
+            void flushUtteranceRef.current()
             return
           }
         }
@@ -2211,14 +2217,6 @@ export default function OverlayApp() {
                   </div>
                 </div>
                 <div className="overlay__turn-footer">
-                  {turn.timing && (
-                    <>
-                      <span className="overlay__timing-badge">
-                        {turn.timing.cached ? 'instant' : `${(turn.timing.ms / 1000).toFixed(2)}s`}
-                      </span>
-                      {turn.timing.model && <span className="overlay__model-tag">{turn.timing.model}</span>}
-                    </>
-                  )}
                   <button
                     type="button"
                     className="btn btn--quiet btn--xs"
@@ -2275,64 +2273,13 @@ export default function OverlayApp() {
                 </div>
 
                 <footer className="overlay__footer">
-                  {timing && (
-                    <div className="overlay__timing-cluster">
-                      {timing.cached ? (
-                        <span className="overlay__timing-badge overlay__timing-badge--cached">instant replay</span>
-                      ) : (
-                        <>
-                          {timing.e2eMs !== undefined && (
-                            <span
-                              className={`overlay__timing-badge ${timing.budgetMet ? 'overlay__timing-badge--budget-ok' : 'overlay__timing-badge--budget-warn'}`}
-                              title={`Speech end → first token on screen: ${(timing.e2eMs / 1000).toFixed(2)}s (Budget: <2.0s)`}
-                            >
-                              ⚡ {(timing.e2eMs / 1000).toFixed(2)}s E2E
-                            </span>
-                          )}
-                          <span className="overlay__timing-badge" title="Model time to first token">
-                            {(timing.ms / 1000).toFixed(2)}s TTFT
-                          </span>
-                        </>
-                      )}
-                      {timing.fallback && (
-                        <span
-                          className="overlay__timing-badge overlay__timing-badge--fallback"
-                          title={`Fell back from ${timing.fallback.from} to ${timing.fallback.to} (${timing.fallback.reason})`}
-                        >
-                          ⚡ {timing.fallback.to}
-                        </span>
-                      )}
-                      {timing.model && (
-                        <span
-                          className="overlay__model-tag"
-                          title={`Answered by ${timing.provider ?? 'the selected provider'} using ${timing.model}${timing.fallback ? ` (fell back from ${timing.fallback.from})` : ''}`}
-                        >
-                          {timing.provider ? `${timing.provider} · ` : ''}
-                          {timing.model}
-                        </span>
-                      )}
-                      {(timing.memories || timing.documents) && (
-                        <span
-                          className="overlay__timing-badge"
-                          title={`Grounded in local context: ${timing.memories ?? 0} memor${timing.memories === 1 ? 'y' : 'ies'} and ${timing.documents ?? 0} document${timing.documents === 1 ? '' : 's'}. Nothing from these was sent anywhere except in the prompt to the provider that answered.`}
-                        >
-                          {timing.memories ?? 0} mem · {timing.documents ?? 0} docs
-                        </span>
-                      )}
-                      {timing.cached ? (
-                        <span>same question, same screen</span>
-                      ) : timing.totalMs > 0 ? (
-                        <span>complete in {(timing.totalMs / 1000).toFixed(1)}s</span>
-                      ) : null}
-                    </div>
-                  )}
                   {busy && hasAnswer && (
                     <span className="overlay__streaming-indicator">
                       <Zap className="icon icon--xs" />
-                      <span>Streaming live{streamingE2e ? ` (${(streamingE2e / 1000).toFixed(2)}s)` : ''}…</span>
+                      <span>Streaming live…</span>
                     </span>
                   )}
-                  {!timing && !busy && !hasAnswer && !errorText && (
+                  {!busy && !hasAnswer && !errorText && (
                     <span>Answers stay on this machine unless you use a hosted provider.</span>
                   )}
                   <div className="overlay__actions">
