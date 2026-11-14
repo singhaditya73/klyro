@@ -121,8 +121,8 @@
   --sidebar-collapsed-width: 68px;
   --header-height: 60px;
   --composer-min-height: 92px;
-  --content-max: 860px;
-  --content-wide: 1120px;
+  --content-max: 960px;
+  --content-wide: 1560px;
   --reading-max: 760px;
 
   /* ---- The overlay window ---- */
@@ -655,11 +655,11 @@ h1, h2, h3, h4, p { margin: 0; }
 /* ---------- Two columns ---------- */
 .split {
   display: grid;
-  grid-template-columns: minmax(280px, 340px) 1fr;
-  gap: var(--space-5);
+  grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
+  gap: var(--space-6);
   align-items: start;
 }
-@media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+@media (max-width: 1040px) { .split { grid-template-columns: 1fr; } }
 
 /* ---------- Destructive confirmation ---------- */
 .confirm {
@@ -2701,7 +2701,17 @@ button.pill:hover { background: rgba(255, 255, 255, 0.08); color: var(--text-pri
 .interviews__chevron--open { transform: rotate(180deg); }
 .interviews__detail { margin-top: var(--space-5); padding-top: var(--space-4); border-top: 1px solid var(--border-subtle); }
 .interviews__context { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: var(--text-xs); color: var(--text-secondary); }
-.interviews__question { padding: var(--space-3) 0; border-bottom: 1px solid var(--border-subtle); }
+.interviews__question {
+  padding: 12px 14px;
+  background: var(--surface-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+  transition: border-color var(--transition-fast);
+}
+.interviews__question:hover {
+  border-color: var(--border-default);
+}
 .interviews__question-head { display: flex; align-items: center; gap: var(--space-2); }
 .interviews__question-text { flex: 1; min-width: 0; font-size: var(--text-sm); font-weight: 550; }
 .interviews__answer { margin-top: 6px; font-size: var(--text-sm); color: var(--text-secondary); }
@@ -2797,10 +2807,10 @@ button.pill:hover { background: rgba(255, 255, 255, 0.08); color: var(--text-pri
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   background: var(--surface-raised);
-  padding: 18px;
+  padding: 16px 18px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   box-shadow: var(--shadow-xs);
   transition: border-color var(--transition-fast);
 }
@@ -2812,6 +2822,23 @@ button.pill:hover { background: rgba(255, 255, 255, 0.08); color: var(--text-pri
   border: 1px solid var(--border-default);
   border-left: 3px solid var(--accent);
   position: relative;
+}
+.crm-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.crm-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+@media (max-width: 1180px) {
+  .crm-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
 }
 .crm-card-header {
   display: flex;
@@ -2834,6 +2861,9 @@ button.pill:hover { background: rgba(255, 255, 255, 0.08); color: var(--text-pri
   display: flex;
   flex-direction: column;
   gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 .crm-action-row {
   display: flex;
@@ -2910,17 +2940,17 @@ button.pill:hover { background: rgba(255, 255, 255, 0.08); color: var(--text-pri
 
 .crm-insights-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
 }
 .crm-insight-card {
-  padding: 14px;
-  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
   background: var(--surface-input);
   border: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   transition: all var(--transition-fast);
 }
 .crm-insight-card:hover {
@@ -2941,7 +2971,7 @@ button.pill:hover { background: rgba(255, 255, 255, 0.08); color: var(--text-pri
   background: var(--surface-input);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  padding: 16px;
+  padding: 14px;
   font-size: var(--text-sm);
   line-height: 1.6;
   color: var(--text-primary);
@@ -2949,6 +2979,8 @@ button.pill:hover { background: rgba(255, 255, 255, 0.08); color: var(--text-pri
   font-family: inherit;
   user-select: text;
   text-align: left;
+  max-height: 240px;
+  overflow-y: auto;
 }
 
 /* Live Waveform in Overlay */
@@ -3076,11 +3108,11 @@ button.pill:hover { background: rgba(255, 255, 255, 0.08); color: var(--text-pri
 /* MEDDPIC Deal Qualification Grid */
 .crm-meddpic-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
 }
 .crm-meddpic-card {
-  padding: 14px;
+  padding: 10px 12px;
   background: var(--surface-input);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);

@@ -1313,249 +1313,258 @@ export function InterviewsView(): React.ReactNode {
                           </div>
                         </div>
 
-                        {/* MEDDPIC Deal Qualification Block */}
-                        {open.crmNotes.meddpic && (
-                          <div className="crm-card">
-                            <div className="crm-card-header">
-                              <h4 className="crm-card-title">
-                                <Award className="icon icon--xs" style={{ color: 'var(--accent)' }} />
-                                <span>MEDDPIC Enterprise Sales Deal Framework</span>
-                              </h4>
-                            </div>
-                            <div className="crm-meddpic-grid">
-                              {open.crmNotes.meddpic.metrics && (
-                                <div className="crm-meddpic-card">
-                                  <div className="crm-meddpic-label">M · Metrics (ROI)</div>
-                                  <div className="crm-meddpic-val">{open.crmNotes.meddpic.metrics}</div>
-                                </div>
-                              )}
-                              {open.crmNotes.meddpic.economicBuyer && (
-                                <div className="crm-meddpic-card">
-                                  <div className="crm-meddpic-label">E · Economic Buyer</div>
-                                  <div className="crm-meddpic-val">{open.crmNotes.meddpic.economicBuyer}</div>
-                                </div>
-                              )}
-                              {open.crmNotes.meddpic.decisionCriteria && (
-                                <div className="crm-meddpic-card">
-                                  <div className="crm-meddpic-label">D · Decision Criteria</div>
-                                  <div className="crm-meddpic-val">{open.crmNotes.meddpic.decisionCriteria}</div>
-                                </div>
-                              )}
-                              {open.crmNotes.meddpic.decisionProcess && (
-                                <div className="crm-meddpic-card">
-                                  <div className="crm-meddpic-label">D · Decision Process</div>
-                                  <div className="crm-meddpic-val">{open.crmNotes.meddpic.decisionProcess}</div>
-                                </div>
-                              )}
-                              {open.crmNotes.meddpic.painPoints && (
-                                <div className="crm-meddpic-card">
-                                  <div className="crm-meddpic-label" style={{ color: 'var(--danger)' }}>P · Identified Pain</div>
-                                  <div className="crm-meddpic-val">{open.crmNotes.meddpic.painPoints}</div>
-                                </div>
-                              )}
-                              {open.crmNotes.meddpic.champion && (
-                                <div className="crm-meddpic-card">
-                                  <div className="crm-meddpic-label" style={{ color: 'var(--status-ok)' }}>C · Internal Champion</div>
-                                  <div className="crm-meddpic-val">{open.crmNotes.meddpic.champion}</div>
-                                </div>
-                              )}
-                              {open.crmNotes.meddpic.competition && (
-                                <div className="crm-meddpic-card">
-                                  <div className="crm-meddpic-label" style={{ color: 'var(--warning)' }}>C · Competition</div>
-                                  <div className="crm-meddpic-val">{open.crmNotes.meddpic.competition}</div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Interactive Action Items Checklist */}
-                        <div className="crm-card">
-                          <div className="crm-card-header">
-                            <h4 className="crm-card-title">
-                              <CheckSquare className="icon icon--xs" style={{ color: 'var(--status-ok)' }} />
-                              <span>Action Items &amp; Deliverables</span>
-                              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)' }}>
-                                ({openActionCounts.done}/{openActionCounts.total} completed)
-                              </span>
-                            </h4>
-                          </div>
-
-                          <div className="crm-actions-list">
-                            {open.crmNotes.actionItems.map((item, idx) => (
-                              <div
-                                key={idx}
-                                className={`crm-action-row ${item.done ? 'crm-action-row--done' : ''}`}
-                                onClick={() => void toggleActionItem(idx)}
-                                role="checkbox"
-                                aria-checked={item.done}
-                                tabIndex={0}
-                              >
-                                <div
-                                  className={`crm-action-checkbox ${item.done ? 'crm-action-checkbox--checked' : ''}`}
-                                >
-                                  {item.done && <Check className="icon icon--xs" />}
-                                </div>
-                                <span className="crm-action-text">{item.task}</span>
-                                {item.owner && <Badge tone="idle">@{item.owner}</Badge>}
-                                {item.deadline && <Badge tone="warn">Due: {item.deadline}</Badge>}
+                        {/* 2-Column Responsive Intelligence Dashboard */}
+                        <div className="crm-dashboard-grid">
+                          {/* Column 1: Action Items, Key Decisions, Email */}
+                          <div className="crm-col">
+                            {/* Interactive Action Items Checklist */}
+                            <div className="crm-card">
+                              <div className="crm-card-header">
+                                <h4 className="crm-card-title">
+                                  <CheckSquare className="icon icon--xs" style={{ color: 'var(--status-ok)' }} />
+                                  <span>Action Items &amp; Deliverables</span>
+                                  <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)' }}>
+                                    ({openActionCounts.done}/{openActionCounts.total} completed)
+                                  </span>
+                                </h4>
                               </div>
-                            ))}
+
+                              <div className="crm-actions-list">
+                                {open.crmNotes.actionItems.map((item, idx) => (
+                                  <div
+                                    key={idx}
+                                    className={`crm-action-row ${item.done ? 'crm-action-row--done' : ''}`}
+                                    onClick={() => void toggleActionItem(idx)}
+                                    role="checkbox"
+                                    aria-checked={item.done}
+                                    tabIndex={0}
+                                  >
+                                    <div
+                                      className={`crm-action-checkbox ${item.done ? 'crm-action-checkbox--checked' : ''}`}
+                                    >
+                                      {item.done && <Check className="icon icon--xs" />}
+                                    </div>
+                                    <span className="crm-action-text">{item.task}</span>
+                                    {item.owner && <Badge tone="idle">@{item.owner}</Badge>}
+                                    {item.deadline && <Badge tone="warn">Due: {item.deadline}</Badge>}
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Inline add action item */}
+                              <div className="crm-add-action">
+                                <input
+                                  type="text"
+                                  placeholder="Add a new action item or follow-up task…"
+                                  value={newActionText}
+                                  onChange={(e) => setNewActionText(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') void addActionItem()
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  className="btn btn--quiet btn--sm"
+                                  onClick={() => void addActionItem()}
+                                  disabled={!newActionText.trim()}
+                                >
+                                  <Plus className="icon icon--xs" />
+                                  <span>Add</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Key Decisions Made */}
+                            {open.crmNotes.keyDecisions.length > 0 && (
+                              <div className="crm-card">
+                                <h4 className="crm-card-title">
+                                  <Target className="icon icon--xs" style={{ color: 'var(--accent)' }} />
+                                  <span>Key Decisions Made</span>
+                                </h4>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                  {open.crmNotes.keyDecisions.map((decision, idx) => (
+                                    <div
+                                      key={idx}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'flex-start',
+                                        gap: 8,
+                                        fontSize: 13,
+                                        lineHeight: 1.5
+                                      }}
+                                    >
+                                      <CheckCircle2
+                                        className="icon icon--xs"
+                                        style={{ color: 'var(--status-ok)', marginTop: 3, flexShrink: 0 }}
+                                      />
+                                      <span>{decision}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Ready-to-send Follow-up Email */}
+                            {open.crmNotes.followUpEmail && (
+                              <div className="crm-card">
+                                <div className="crm-card-header">
+                                  <h4 className="crm-card-title">
+                                    <Mail className="icon icon--xs" style={{ color: 'var(--accent)' }} />
+                                    <span>Ready-to-send Follow-up Email</span>
+                                  </h4>
+                                  <div style={{ display: 'flex', gap: 6 }}>
+                                    <button
+                                      type="button"
+                                      className="btn btn--quiet btn--sm"
+                                      onClick={() => void copyToClipboard(open.crmNotes!.followUpEmail!, 'email')}
+                                    >
+                                      {copiedKey === 'email' ? (
+                                        <Check className="icon icon--xs" style={{ color: 'var(--status-ok)' }} />
+                                      ) : (
+                                        <Copy className="icon icon--xs" />
+                                      )}
+                                      <span>{copiedKey === 'email' ? 'Copied Email!' : 'Copy Draft'}</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn--quiet btn--sm"
+                                      onClick={() => openMailClient(open.crmNotes!)}
+                                      title="Open in default mail client"
+                                    >
+                                      <ExternalLink className="icon icon--xs" />
+                                      <span>Mail App</span>
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="crm-email-box">{open.crmNotes.followUpEmail}</div>
+                              </div>
+                            )}
                           </div>
 
-                          {/* Inline add action item */}
-                          <div className="crm-add-action">
-                            <input
-                              type="text"
-                              placeholder="Add a new action item or follow-up task…"
-                              value={newActionText}
-                              onChange={(e) => setNewActionText(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') void addActionItem()
-                              }}
-                            />
-                            <button
-                              type="button"
-                              className="btn btn--quiet btn--sm"
-                              onClick={() => void addActionItem()}
-                              disabled={!newActionText.trim()}
-                            >
-                              <Plus className="icon icon--xs" />
-                              <span>Add</span>
-                            </button>
+                          {/* Column 2: Deal Framework, Commercial/Strategic Insights */}
+                          <div className="crm-col">
+                            {/* MEDDPIC Deal Qualification Block */}
+                            {open.crmNotes.meddpic && (
+                              <div className="crm-card">
+                                <div className="crm-card-header">
+                                  <h4 className="crm-card-title">
+                                    <Award className="icon icon--xs" style={{ color: 'var(--accent)' }} />
+                                    <span>MEDDPIC Enterprise Sales Deal Framework</span>
+                                  </h4>
+                                </div>
+                                <div className="crm-meddpic-grid">
+                                  {open.crmNotes.meddpic.metrics && (
+                                    <div className="crm-meddpic-card">
+                                      <div className="crm-meddpic-label">M · Metrics (ROI)</div>
+                                      <div className="crm-meddpic-val">{open.crmNotes.meddpic.metrics}</div>
+                                    </div>
+                                  )}
+                                  {open.crmNotes.meddpic.economicBuyer && (
+                                    <div className="crm-meddpic-card">
+                                      <div className="crm-meddpic-label">E · Economic Buyer</div>
+                                      <div className="crm-meddpic-val">{open.crmNotes.meddpic.economicBuyer}</div>
+                                    </div>
+                                  )}
+                                  {open.crmNotes.meddpic.decisionCriteria && (
+                                    <div className="crm-meddpic-card">
+                                      <div className="crm-meddpic-label">D · Decision Criteria</div>
+                                      <div className="crm-meddpic-val">{open.crmNotes.meddpic.decisionCriteria}</div>
+                                    </div>
+                                  )}
+                                  {open.crmNotes.meddpic.decisionProcess && (
+                                    <div className="crm-meddpic-card">
+                                      <div className="crm-meddpic-label">D · Decision Process</div>
+                                      <div className="crm-meddpic-val">{open.crmNotes.meddpic.decisionProcess}</div>
+                                    </div>
+                                  )}
+                                  {open.crmNotes.meddpic.painPoints && (
+                                    <div className="crm-meddpic-card">
+                                      <div className="crm-meddpic-label" style={{ color: 'var(--danger)' }}>P · Identified Pain</div>
+                                      <div className="crm-meddpic-val">{open.crmNotes.meddpic.painPoints}</div>
+                                    </div>
+                                  )}
+                                  {open.crmNotes.meddpic.champion && (
+                                    <div className="crm-meddpic-card">
+                                      <div className="crm-meddpic-label" style={{ color: 'var(--status-ok)' }}>C · Internal Champion</div>
+                                      <div className="crm-meddpic-val">{open.crmNotes.meddpic.champion}</div>
+                                    </div>
+                                  )}
+                                  {open.crmNotes.meddpic.competition && (
+                                    <div className="crm-meddpic-card">
+                                      <div className="crm-meddpic-label" style={{ color: 'var(--warning)' }}>C · Competition</div>
+                                      <div className="crm-meddpic-val">{open.crmNotes.meddpic.competition}</div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Commercial & Strategic Insights Grid */}
+                            {open.crmNotes.crmInsights && (
+                              <div className="crm-card" style={{ background: 'var(--surface-sunken)' }}>
+                                <h4 className="crm-card-title">
+                                  <Briefcase className="icon icon--xs" style={{ color: 'var(--info)' }} />
+                                  <span>Commercial &amp; Strategic Insights</span>
+                                </h4>
+                                <div className="crm-insights-grid">
+                                  {open.crmNotes.crmInsights.clientNeeds &&
+                                    open.crmNotes.crmInsights.clientNeeds.length > 0 && (
+                                      <div className="crm-insight-card">
+                                        <div className="crm-insight-card-title" style={{ color: 'var(--info)' }}>
+                                          <Target className="icon icon--xs" />
+                                          <span>Customer Needs</span>
+                                        </div>
+                                        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.4 }}>
+                                          {open.crmNotes.crmInsights.clientNeeds.map((need, idx) => (
+                                            <li key={idx}>{need}</li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    )}
+
+                                  {open.crmNotes.crmInsights.objectionsOrRisks &&
+                                    open.crmNotes.crmInsights.objectionsOrRisks.length > 0 && (
+                                      <div className="crm-insight-card">
+                                        <div className="crm-insight-card-title" style={{ color: 'var(--danger)' }}>
+                                          <ShieldAlert className="icon icon--xs" />
+                                          <span>Objections &amp; Blockers</span>
+                                        </div>
+                                        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.4 }}>
+                                          {open.crmNotes.crmInsights.objectionsOrRisks.map((risk, idx) => (
+                                            <li key={idx}>{risk}</li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    )}
+
+                                  {open.crmNotes.crmInsights.budgetTimeline && (
+                                    <div className="crm-insight-card">
+                                      <div className="crm-insight-card-title" style={{ color: 'var(--status-ok)' }}>
+                                        <DollarSign className="icon icon--xs" />
+                                        <span>Budget &amp; Timeline</span>
+                                      </div>
+                                      <div style={{ fontSize: 13, lineHeight: 1.4 }}>
+                                        {open.crmNotes.crmInsights.budgetTimeline}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {open.crmNotes.crmInsights.nextSteps && (
+                                    <div className="crm-insight-card">
+                                      <div className="crm-insight-card-title" style={{ color: 'var(--accent)' }}>
+                                        <ArrowRight className="icon icon--xs" />
+                                        <span>Agreed Next Steps</span>
+                                      </div>
+                                      <div style={{ fontSize: 13, lineHeight: 1.4, fontWeight: 500 }}>
+                                        {open.crmNotes.crmInsights.nextSteps}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
-
-                        {/* Key Decisions Made */}
-                        {open.crmNotes.keyDecisions.length > 0 && (
-                          <div className="crm-card">
-                            <h4 className="crm-card-title">
-                              <Target className="icon icon--xs" style={{ color: 'var(--accent)' }} />
-                              <span>Key Decisions Made</span>
-                            </h4>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                              {open.crmNotes.keyDecisions.map((decision, idx) => (
-                                <div
-                                  key={idx}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'flex-start',
-                                    gap: 8,
-                                    fontSize: 13,
-                                    lineHeight: 1.5
-                                  }}
-                                >
-                                  <CheckCircle2
-                                    className="icon icon--xs"
-                                    style={{ color: 'var(--status-ok)', marginTop: 3, flexShrink: 0 }}
-                                  />
-                                  <span>{decision}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Commercial & CRM Insights Grid */}
-                        {open.crmNotes.crmInsights && (
-                          <div className="crm-card" style={{ background: 'var(--surface-sunken)' }}>
-                            <h4 className="crm-card-title">
-                              <Briefcase className="icon icon--xs" style={{ color: 'var(--info)' }} />
-                              <span>Commercial &amp; Strategic Insights</span>
-                            </h4>
-                            <div className="crm-insights-grid">
-                              {open.crmNotes.crmInsights.clientNeeds &&
-                                open.crmNotes.crmInsights.clientNeeds.length > 0 && (
-                                  <div className="crm-insight-card">
-                                    <div className="crm-insight-card-title" style={{ color: 'var(--info)' }}>
-                                      <Target className="icon icon--xs" />
-                                      <span>Customer Needs</span>
-                                    </div>
-                                    <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.4 }}>
-                                      {open.crmNotes.crmInsights.clientNeeds.map((need, idx) => (
-                                        <li key={idx}>{need}</li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-
-                              {open.crmNotes.crmInsights.objectionsOrRisks &&
-                                open.crmNotes.crmInsights.objectionsOrRisks.length > 0 && (
-                                  <div className="crm-insight-card">
-                                    <div className="crm-insight-card-title" style={{ color: 'var(--danger)' }}>
-                                      <ShieldAlert className="icon icon--xs" />
-                                      <span>Objections &amp; Blockers</span>
-                                    </div>
-                                    <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.4 }}>
-                                      {open.crmNotes.crmInsights.objectionsOrRisks.map((risk, idx) => (
-                                        <li key={idx}>{risk}</li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-
-                              {open.crmNotes.crmInsights.budgetTimeline && (
-                                <div className="crm-insight-card">
-                                  <div className="crm-insight-card-title" style={{ color: 'var(--status-ok)' }}>
-                                    <DollarSign className="icon icon--xs" />
-                                    <span>Budget &amp; Timeline</span>
-                                  </div>
-                                  <div style={{ fontSize: 13, lineHeight: 1.4 }}>
-                                    {open.crmNotes.crmInsights.budgetTimeline}
-                                  </div>
-                                </div>
-                              )}
-
-                              {open.crmNotes.crmInsights.nextSteps && (
-                                <div className="crm-insight-card">
-                                  <div className="crm-insight-card-title" style={{ color: 'var(--accent)' }}>
-                                    <ArrowRight className="icon icon--xs" />
-                                    <span>Agreed Next Steps</span>
-                                  </div>
-                                  <div style={{ fontSize: 13, lineHeight: 1.4, fontWeight: 500 }}>
-                                    {open.crmNotes.crmInsights.nextSteps}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Ready-to-send Follow-up Email */}
-                        {open.crmNotes.followUpEmail && (
-                          <div className="crm-card">
-                            <div className="crm-card-header">
-                              <h4 className="crm-card-title">
-                                <Mail className="icon icon--xs" style={{ color: 'var(--accent)' }} />
-                                <span>Ready-to-send Follow-up Email</span>
-                              </h4>
-                              <div style={{ display: 'flex', gap: 6 }}>
-                                <button
-                                  type="button"
-                                  className="btn btn--quiet btn--sm"
-                                  onClick={() => void copyToClipboard(open.crmNotes!.followUpEmail!, 'email')}
-                                >
-                                  {copiedKey === 'email' ? (
-                                    <Check className="icon icon--xs" style={{ color: 'var(--status-ok)' }} />
-                                  ) : (
-                                    <Copy className="icon icon--xs" />
-                                  )}
-                                  <span>{copiedKey === 'email' ? 'Copied Email!' : 'Copy Draft'}</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn btn--quiet btn--sm"
-                                  onClick={() => openMailClient(open.crmNotes!)}
-                                  title="Open in default mail client"
-                                >
-                                  <ExternalLink className="icon icon--xs" />
-                                  <span>Mail App</span>
-                                </button>
-                              </div>
-                            </div>
-                            <div className="crm-email-box">{open.crmNotes.followUpEmail}</div>
-                          </div>
-                        )}
                       </>
                     ) : (
                       <EmptyState
