@@ -33,13 +33,11 @@ import {
   UtteranceAssembler,
   type LevelWatcher,
   isNoAnswer,
-  isSpeech,
   listenPrompt,
   looksLikeQuestion,
   pickRecordMimeType,
   rmsFromTimeDomain,
   snippetPrompt,
-  utteranceEnded,
   utteranceWorthAsking,
   decodeAudioToPcm16kBuffer,
   resampleTo16k,
@@ -47,6 +45,15 @@ import {
   HARDWARE_AUDIO_CONSTRAINTS,
   type SilenceWatcher
 } from './lib/listen'
+import {
+  type CadencePreset,
+  CADENCE_BASE_MS,
+  ProsodyTracker,
+  estimatePitch,
+  computeZeroCrossingRate,
+  isAcousticVoice,
+  calculateDynamicSilence
+} from './lib/endpointing'
 import { createDualAudioStream } from './lib/audio-mixer'
 import { diarizer } from './lib/diarization'
 import { detectLiveActionItem, type DetectedActionItem } from './lib/commitments'
@@ -242,6 +249,29 @@ export default function OverlayApp() {
   const [talkState, setTalkState] = useState<'idle' | 'listening' | 'hearing' | 'thinking'>('idle')
   const [level, setLevel] = useState(0)
   const [partialText, setPartialText] = useState('')
+  const [cadencePreset, setCadencePreset] = useState<CadencePreset>(() => {
+    try {
+      return (localStorage.getItem('klyro:voice_cadence') as CadencePreset) || 'balanced'
+    } catch {
+      return 'balanced'
+    }
+  })
+  const cadencePresetRef = useRef<CadencePreset>(cadencePreset)
+  cadencePresetRef.current = cadencePreset
+
+  const [pushToTalkActive, setPushToTalkActive] = useState(false)
+  const pushToTalkActiveRef = useRef(false)
+  pushToTalkActiveRef.current = pushToTalkActive
+
+  const cycleCadence = useCallback(() => {
+    setCadencePreset((prev) => {
+      const next: CadencePreset = prev === 'snappy' ? 'balanced' : prev === 'balanced' ? 'patient' : 'snappy'
+      try {
+        localStorage.setItem('klyro:voice_cadence', next)
+      } catch {}
+      return next
+    })
+  }, [])
   // Screens and windows to choose from (instant capture turned off).
   const [overlaySources, setOverlaySources] = useState<Array<{ id: string; name: string; thumbnail: string }> | null>(null)
   // The provider the overlay answers with, and the model it uses.
@@ -640,13 +670,40 @@ export default function OverlayApp() {
       } else if (event.altKey && event.key.toLowerCase() === 'r') {
         event.preventDefault()
         setShowRsvp((prev) => !prev)
+      } else if (talkState !== 'idle') {
+        const tag = (event.target as HTMLElement | null)?.tagName?.toLowerCase()
+        const isEditable = tag === 'input' || tag === 'textarea' || (event.target as HTMLElement | null)?.isContentEditable
+        if (event.code === 'Space' && !event.repeat && !isEditable) {
+          event.preventDefault()
+          pushToTalkActiveRef.current = true
+          setPushToTalkActive(true)
+          if (!talkRef.current.speaking) {
+            talkRef.current.speaking = true
+            talkRef.current.startedAt = Date.now()
+            talkRef.current.lastVoiceAt = Date.now()
+            talkRef.current.utterancePcm = [...talkRef.current.rollingPcm]
+            setTalkState('hearing')
+          }
+        }
+      }
+    }
+    const onKeyUp = (event: KeyboardEvent): void => {
+      if (event.code === 'Space' && pushToTalkActiveRef.current) {
+        event.preventDefault()
+        pushToTalkActiveRef.current = false
+        setPushToTalkActive(false)
+        if (talkRef.current.speaking) {
+          void flushUtteranceRef.current()
+        }
       }
     }
     window.addEventListener('keydown', onKey)
+    window.addEventListener('keyup', onKeyUp)
     return () => {
       window.removeEventListener('keydown', onKey)
+      window.removeEventListener('keyup', onKeyUp)
     }
-  }, [decoyMode, showRsvp, showRemoteHudModal])
+  }, [decoyMode, showRsvp, showRemoteHudModal, talkState])
 
   // Release the microphone when the overlay goes away — once, on unmount. This
   // cleanup used to live in the key handler effect above, so toggling decoy,
@@ -879,6 +936,9 @@ export default function OverlayApp() {
     timer: number | null
     answering: boolean
     partialBusy: boolean
+    dynamicSilenceMs: number
+    prosodyTracker: ProsodyTracker
+    interimCheckedForPause: boolean
   }>({
     stream: null,
     analyser: null,
@@ -892,7 +952,10 @@ export default function OverlayApp() {
     startedAt: 0,
     timer: null,
     answering: false,
-    partialBusy: false
+    partialBusy: false,
+    dynamicSilenceMs: 1600,
+    prosodyTracker: new ProsodyTracker(),
+    interimCheckedForPause: false
   })
 
   /** Answer a spoken question, with the screen attached when user captured one. */
@@ -940,6 +1003,9 @@ export default function OverlayApp() {
     const duration = Date.now() - talk.startedAt
     talk.speaking = false
     setPartialText('')
+    talk.prosodyTracker.reset()
+    talk.dynamicSilenceMs = CADENCE_BASE_MS[cadencePresetRef.current]
+    talk.interimCheckedForPause = false
 
     const pcmBlocks = talk.utterancePcm
     talk.utterancePcm = []
@@ -1038,6 +1104,9 @@ export default function OverlayApp() {
           if (talk.rollingPcm.length > 4) talk.rollingPcm.shift()
         } else {
           talk.utterancePcm.push(copy)
+          const sampleRate = talk.context?.sampleRate || 48000
+          const { pitchHz, confidence } = estimatePitch(copy, sampleRate)
+          talk.prosodyTracker.push(pitchHz, confidence)
         }
       }
 
@@ -1053,26 +1122,78 @@ export default function OverlayApp() {
         const rms = rmsFromTimeDomain(talk.buffer)
         setLevel(Math.min(1, rms * 12))
         const now = Date.now()
-        if (isSpeech(rms)) {
+
+        const lastBlock = talk.speaking
+          ? talk.utterancePcm[talk.utterancePcm.length - 1]
+          : talk.rollingPcm[talk.rollingPcm.length - 1]
+        const zcr = lastBlock ? computeZeroCrossingRate(lastBlock) : 0.1
+        const sampleRate = talk.context?.sampleRate || 48000
+        const { confidence: pitchConf } = lastBlock ? estimatePitch(lastBlock, sampleRate) : { confidence: 0 }
+        const voiced = isAcousticVoice(rms, zcr, pitchConf)
+
+        if (voiced || pushToTalkActiveRef.current) {
           if (!talk.speaking) {
             talk.speaking = true
             talk.startedAt = now
             // Copy preroll blocks so initial speech onset is preserved
             talk.utterancePcm = [...talk.rollingPcm]
             setTalkState('hearing')
+            talk.prosodyTracker.reset()
+            talk.dynamicSilenceMs = CADENCE_BASE_MS[cadencePresetRef.current]
+            talk.interimCheckedForPause = false
             void window.klyro.prewarmTranscribe?.()
           }
           talk.lastVoiceAt = now
+          talk.interimCheckedForPause = false
           return
         }
-        if (talk.speaking) {
-          if (utteranceEnded(true, now - talk.lastVoiceAt)) {
+
+        if (talk.speaking && !pushToTalkActiveRef.current) {
+          const msSinceVoice = now - talk.lastVoiceAt
+          const baseSilence = CADENCE_BASE_MS[cadencePresetRef.current]
+          const isHoldingFloor = talk.prosodyTracker.isHoldingFloor()
+
+          // If paused for 400ms+, do an interim transcription to check semantic completeness
+          if (!talk.interimCheckedForPause && msSinceVoice >= 400 && talk.utterancePcm.length >= 4) {
+            talk.interimCheckedForPause = true
+            void (async () => {
+              try {
+                const blocks = talk.utterancePcm
+                if (blocks.length === 0 || !talk.speaking) return
+                let total = 0
+                for (const b of blocks) total += b.length
+                const merged = new Float32Array(total)
+                let off = 0
+                for (const b of blocks) {
+                  merged.set(b, off)
+                  off += b.length
+                }
+                const inputRate = talk.context?.sampleRate || 48000
+                const pcm16 = resampleTo16k(merged, inputRate)
+                const wav = pcm16kToWav(pcm16)
+                const res = await window.klyro.transcribe(wav, 'audio/wav', pcm16.slice().buffer as ArrayBuffer)
+                const text = res.text.trim()
+                if (text && talk.speaking) {
+                  setPartialText(text)
+                  talk.dynamicSilenceMs = calculateDynamicSilence({
+                    baseCadenceMs: baseSilence,
+                    partialTranscript: text,
+                    isHoldingFloor: talk.prosodyTracker.isHoldingFloor()
+                  })
+                }
+              } catch {}
+            })()
+          }
+
+          const effectiveSilence = talk.dynamicSilenceMs || (isHoldingFloor ? baseSilence + 400 : baseSilence)
+          if (msSinceVoice >= effectiveSilence) {
             void flushUtteranceRef.current()
             return
           }
         }
+
         // Barge-in: speaking while the answer is still streaming cuts it off.
-        if (talk.answering && isSpeech(rms)) {
+        if (talk.answering && voiced) {
           talk.answering = false
           void window.klyro.abortChat()
         }
@@ -2128,15 +2249,25 @@ export default function OverlayApp() {
         <div className="overlay__talk" aria-live="polite">
           <span className={`overlay__talk-dot overlay__talk-dot--${talkState}`} aria-hidden="true" />
           <span className="overlay__talk-label">
-            {talkState === 'listening'
-              ? 'Listening — speak whenever you like'
-              : talkState === 'hearing'
-                ? partialText ? `“${partialText}…”` : 'Hearing you…'
-                : 'Thinking…'}
+            {pushToTalkActive
+              ? '🎙️ [Space held] Speaking — release to send'
+              : talkState === 'listening'
+                ? 'Listening — speak freely (or hold Space)'
+                : talkState === 'hearing'
+                  ? partialText ? `“${partialText}…”` : 'Hearing you…'
+                  : 'Thinking…'}
           </span>
           <span className="overlay__meter" aria-hidden="true">
             <span className="overlay__meter-fill" style={{ width: `${Math.round(Math.min(1, level) * 100)}%` }} />
           </span>
+          <button
+            type="button"
+            className="overlay__cadence-btn"
+            onClick={cycleCadence}
+            title="Click to cycle pause sensitivity (Snappy: 0.8s / Balanced: 1.6s / Patient: 2.4s)"
+          >
+            {cadencePreset === 'snappy' ? '⚡ Snappy' : cadencePreset === 'patient' ? '🧠 Patient' : '⚖️ Balanced'}
+          </button>
         </div>
       )}
 

@@ -2352,6 +2352,24 @@ button.pill:hover { background: rgba(255, 255, 255, 0.08); color: var(--text-pri
   border-radius: var(--radius-pill);
   transition: width 90ms linear;
 }
+.overlay__cadence-btn {
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 500;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-active);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
+}
+.overlay__cadence-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
 .overlay__transcript {
   max-height: 92px;
   overflow-y: auto;
