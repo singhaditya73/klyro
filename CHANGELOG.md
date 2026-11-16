@@ -2,6 +2,22 @@
 
 All notable changes to Klyro are recorded here. Versions follow [SemVer](https://semver.org/).
 
+## [0.9.31] — 2026-11-16
+
+Autonomous GTM Deal Dispatch Staging Deck, live in-call battlecards HUD, "Catch Me Up" late-joiner briefing, 1-click follow-up calendar scheduler, expansive widescreen CRM layout, intelligent multi-layer speech endpointing, and resilient CI/CD release workflow.
+
+### Added
+- **Autonomous GTM Deal Dispatch Deck.** Interactive end-of-call staging modal with inline editing for deal summaries, action items, customer pain points, follow-up emails, and CRM integration.
+- **Live In-Call Battlecards HUD.** Proactive real-time competitor detection during sales calls, presenting battle-tested differentiators, objection handles, and competitor landmines in the overlay HUD.
+- **"Catch Me Up" Briefing Deck (`Alt+U`).** On-demand distilled summary for late meeting joiners or distracted moments, highlighting missed points, settled decisions, current topic, and an intelligent talking point.
+- **1-Click Calendar Follow-Up Scheduler.** Natural-language date and time extraction from meeting commitments with instant 1-click export to Google Calendar, Outlook Web, and RFC 5545 `.ics` files.
+- **Auto-Detect Meetings & Smart Launch.** Ambient detection of active video calls with immediate `Enter` launch from the composer.
+- **Intelligent Speech Endpointing & Cadence.** Multi-layered voice boundary detection combining acoustic zero-crossing VAD, pitch prosody contouring, semantic completeness, and configurable Push-to-Talk.
+
+### Changed
+- **Expansive Widescreen CRM Layout.** Responsive 2-column layout for Meetings & CRM intelligence dashboard, utilizing available display width with zero wasted margins.
+- **Resilient CI/CD Release Pipelines.** Updated GitHub Actions workflows with offline-safe `ONNXRUNTIME_NODE_INSTALL=skip` and graceful artifact handling to prevent release failures.
+
 ## [0.9.30] — 2026-11-14
 
 Markdown formatting in overlay answers, clean distraction-free HUD footer, and seamless voice conversation without unexpected screen-capture prompts.

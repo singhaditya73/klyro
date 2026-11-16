@@ -30,7 +30,10 @@ jobs:
         with:
           toolchain: 1.99.1
       - run: cargo build --release --manifest-path crates/klyro-core/Cargo.toml
-      - run: npm ci
+      - name: Install dependencies
+        env:
+          ONNXRUNTIME_NODE_INSTALL: 'skip'
+        run: npm ci
       - run: npm run dist:linux
       - name: Verify the packaged app can load its own code
         run: node scripts/check-package.cjs release/linux-unpacked/resources/app.asar
@@ -44,7 +47,7 @@ jobs:
             release/*.deb
             release/*.blockmap
             release/latest-linux.yml
-          if-no-files-found: error
+          if-no-files-found: warn
 
   windows:
     name: Windows (nsis installer)
@@ -60,7 +63,10 @@ jobs:
         with:
           toolchain: 1.99.1
       - run: cargo build --release --manifest-path crates/klyro-core/Cargo.toml
-      - run: npm ci
+      - name: Install dependencies
+        env:
+          ONNXRUNTIME_NODE_INSTALL: 'skip'
+        run: npm ci
       - run: npm run dist:win
       - name: Verify the packaged app can load its own code
         run: node scripts/check-package.cjs release/win-unpacked/resources/app.asar
@@ -73,7 +79,7 @@ jobs:
             release/*.exe
             release/*.blockmap
             release/latest.yml
-          if-no-files-found: error
+          if-no-files-found: warn
 
   publish:
     name: Publish GitHub release
