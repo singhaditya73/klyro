@@ -5,6 +5,7 @@ import {
   Award,
   Bookmark,
   Briefcase,
+  Calendar,
   Check,
   CheckCircle2,
   CheckSquare,
@@ -1114,6 +1115,15 @@ export function InterviewsView(): React.ReactNode {
                           >
                             <Zap className="icon icon--xs" style={{ color: '#ffffff' }} />
                             <span>🚀 1-Click GTM Dispatch</span>
+                          </button>
+
+                          <button
+                            className="btn btn--quiet btn--sm"
+                            onClick={() => setShowGtmModal(true)}
+                            title="Schedule follow-up meeting with Google Calendar or .ics"
+                          >
+                            <Calendar className="icon icon--xs" style={{ color: 'var(--accent)' }} />
+                            <span>Schedule Follow-Up</span>
                           </button>
 
                           <button

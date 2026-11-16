@@ -58,6 +58,7 @@ import { createDualAudioStream } from './lib/audio-mixer'
 import { diarizer } from './lib/diarization'
 import { detectLiveActionItem, type DetectedActionItem } from './lib/commitments'
 import { detectBattlecard, type DetectedBattlecardMatch } from './lib/battlecards'
+import { generateCatchUpBriefing, type CatchUpBriefing } from './lib/catchup'
 import ReactMarkdown from 'react-markdown'
 import { parseAgendaItems, checkAgendaProgress, type AgendaItem } from './lib/agenda'
 import type { Attachment, CalendarEvent } from '@shared/types'
@@ -305,6 +306,8 @@ export default function OverlayApp() {
   const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([])
   const agendaItemsRef = useRef<AgendaItem[]>([])
   const [showAgenda, setShowAgenda] = useState(false)
+  const [showCatchUp, setShowCatchUp] = useState(false)
+  const [catchUpBriefing, setCatchUpBriefing] = useState<CatchUpBriefing | null>(null)
   const utteranceEndedAtRef = useRef<number | null>(null)
   const firstTokenReceivedRef = useRef(false)
 
@@ -659,11 +662,20 @@ export default function OverlayApp() {
           setActiveBattlecard(null)
           return
         }
+        if (showCatchUp) {
+          setShowCatchUp(false)
+          return
+        }
         if (decoyMode) {
           setDecoyMode(false)
           return
         }
         if (modeRef.current === 'idle') void window.klyro.hideOverlay()
+      } else if (event.altKey && event.key.toLowerCase() === 'u') {
+        event.preventDefault()
+        const briefing = generateCatchUpBriefing(transcript)
+        setCatchUpBriefing(briefing)
+        setShowCatchUp((prev) => !prev)
       } else if (event.altKey && event.key.toLowerCase() === 'd') {
         event.preventDefault()
         setDecoyMode((prev) => !prev)
@@ -1897,6 +1909,11 @@ export default function OverlayApp() {
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey) {
+              if (!text.trim() && upcomingMeeting && mode === 'idle') {
+                event.preventDefault()
+                void startMeetingCoPilot(upcomingMeeting)
+                return
+              }
               event.preventDefault()
               void ask()
             }
@@ -2046,18 +2063,14 @@ export default function OverlayApp() {
         <div className="overlay__copilot-bar">
           <button
             type="button"
-            className="overlay__copilot-chip"
-            disabled={busy || transcript.length === 0}
-            onClick={async () => {
-              const summaryContext = transcript.slice(-12).join('\n')
-              if (!summaryContext) return
-              archiveCurrentTurnIfAny()
-              currentTurnRef.current = { question: 'Catch me up on what was just said', answer: '', timing: null }
-              setQuestion('Catch me up on what was just said')
-              setAnswer('')
-              await askAssist(`In 3 concise, high-impact bullet points, summarize what was just discussed in this meeting:\n\n${summaryContext}`)
+            className={`overlay__copilot-chip ${showCatchUp ? 'overlay__copilot-chip--active' : ''}`}
+            disabled={transcript.length === 0}
+            onClick={() => {
+              const briefing = generateCatchUpBriefing(transcript)
+              setCatchUpBriefing(briefing)
+              setShowCatchUp(!showCatchUp)
             }}
-            title="3-bullet summary of the recent discussion so you never miss a beat"
+            title="Instant late-joiner briefing of missed context and active topic (Alt+U)"
           >
             <Zap className="icon icon--xs" style={{ color: 'var(--accent)' }} aria-hidden="true" />
             <span>Catch Me Up</span>
@@ -2113,6 +2126,58 @@ export default function OverlayApp() {
               <span>Audio: {talkRatioPct}%</span>
             </span>
           )}
+        </div>
+      )}
+
+      {showCatchUp && catchUpBriefing && (
+        <div className="overlay__catchup-card" role="region" aria-label="Catch Me Up Briefing">
+          <div className="overlay__catchup-head">
+            <span className="overlay__catchup-badge">
+              <Zap className="icon icon--xs" style={{ color: 'var(--accent)' }} />
+              <span>⚡ CATCH ME UP ({catchUpBriefing.totalLinesAnalyzed} TURNS ANALYZED)</span>
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button
+                type="button"
+                className="btn btn--icon btn--xs btn--quiet"
+                onClick={() => setShowCatchUp(false)}
+                title="Dismiss (Esc)"
+                aria-label="Dismiss Catch Me Up"
+              >
+                <X className="icon icon--xs" />
+              </button>
+            </div>
+          </div>
+
+          <div className="overlay__catchup-section">
+            <div className="overlay__catchup-label">What You Missed</div>
+            <div className="overlay__catchup-text">{catchUpBriefing.missedSummary}</div>
+          </div>
+
+          {catchUpBriefing.keyDecisions.length > 0 && (
+            <div className="overlay__catchup-section">
+              <div className="overlay__catchup-label">Settled Decisions</div>
+              <ul className="overlay__catchup-decisions">
+                {catchUpBriefing.keyDecisions.map((d, i) => (
+                  <li key={i} className="overlay__catchup-decision-item">
+                    {d}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="overlay__catchup-active">
+            <div className="overlay__catchup-label" style={{ color: 'var(--status-ok)' }}>
+              Active Topic Right Now {catchUpBriefing.activeTopic.lastSpeaker ? `(${catchUpBriefing.activeTopic.lastSpeaker})` : ''}
+            </div>
+            <div className="overlay__catchup-text" style={{ fontWeight: 600 }}>
+              {catchUpBriefing.activeTopic.topic}
+            </div>
+            <div className="overlay__catchup-suggestion">
+              💡 <strong>Say this if asked:</strong> {catchUpBriefing.activeTopic.suggestedContribution}
+            </div>
+          </div>
         </div>
       )}
 

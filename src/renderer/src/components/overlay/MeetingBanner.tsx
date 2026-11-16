@@ -48,7 +48,7 @@ export function MeetingBanner({
           title="1-click start dual recording and pre-fill meeting details"
         >
           <Zap className="icon icon--xs" />
-          <span>Start in-call co-pilot</span>
+          <span>Start in-call co-pilot (Enter ↵)</span>
         </button>
         <button
           type="button"

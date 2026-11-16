@@ -36,7 +36,7 @@ describe('GtmDispatchModal', () => {
     expect(container.firstChild).toBeNull()
   })
 
-  it('renders all 4 staging cards with pre-populated values', () => {
+  it('renders all 5 staging cards with pre-populated values', () => {
     render(
       <GtmDispatchModal
         isOpen={true}
@@ -50,15 +50,16 @@ describe('GtmDispatchModal', () => {
     expect(screen.getByText('Autonomous GTM Staging Deck')).toBeTruthy()
     expect(screen.getByText('Human-in-the-Loop Review')).toBeTruthy()
 
-    // 4 Cards
+    // 5 Cards
     expect(screen.getByText(/1\. CRM Deal & Pipeline Update/i)).toBeTruthy()
     expect(screen.getByText(/2\. Executive Follow-up Email/i)).toBeTruthy()
     expect(screen.getByText(/3\. Internal Team Briefing \(Slack \/ Teams\)/i)).toBeTruthy()
     expect(screen.getByText(/4\. Engineering & CS Tasks/i)).toBeTruthy()
+    expect(screen.getByText(/5\. Follow-Up Calendar Invitation/i)).toBeTruthy()
 
     // Pre-filled values
     expect(screen.getByText('Acme Corp - Enterprise Evaluation')).toBeTruthy()
-    expect(screen.getByText('4 of 4')).toBeTruthy()
+    expect(screen.getByText('5 of 5')).toBeTruthy()
   })
 
   it('allows toggling inline edit mode on cards', async () => {
