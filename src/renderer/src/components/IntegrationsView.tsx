@@ -19,8 +19,7 @@ import {
   Send,
   Server,
   Share2,
-  Trash2,
-  Zap
+  Trash2
 } from 'lucide-react'
 import { Badge, EmptyState, Group, PageHeader } from './ui'
 import type { DirectIntegrations, MCPServerState } from '@shared/types'
@@ -67,6 +66,7 @@ export function IntegrationsView(): React.ReactNode {
   })
   const [servers, setServers] = useState<MCPServerState[]>([])
   const [activeTab, setActiveTab] = useState<'integrations' | 'mcp'>('integrations')
+  const [showIcalHelp, setShowIcalHelp] = useState(false)
 
   // Custom MCP form state
   const [showAddModal, setShowAddModal] = useState(false)
@@ -146,15 +146,6 @@ export function IntegrationsView(): React.ReactNode {
       setCalendarFeedback({ ok: false, msg: (err as Error).message })
     } finally {
       setSyncingCalendar(false)
-    }
-  }
-
-  const handleToggleAutoDetectWindows = async (enabled: boolean): Promise<void> => {
-    try {
-      await window.klyro.calendarToggleAutoDetect(enabled)
-      setCalendarStatus((prev) => ({ ...prev, autoDetectWindows: enabled }))
-    } catch (err) {
-      console.error('Failed to toggle auto-detect windows', err)
     }
   }
 
@@ -401,6 +392,68 @@ export function IntegrationsView(): React.ReactNode {
                         >
                           Zero-Click Meeting Start
                         </span>
+                        <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => setShowIcalHelp((prev) => !prev)}
+                            onMouseEnter={() => setShowIcalHelp(true)}
+                            onMouseLeave={() => setShowIcalHelp(false)}
+                            aria-label="How to get private iCal link"
+                            style={{
+                              width: 15,
+                              height: 15,
+                              padding: 0,
+                              borderRadius: '50%',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#38bdf8',
+                              background: showIcalHelp ? 'rgba(56, 189, 248, 0.22)' : 'rgba(56, 189, 248, 0.1)',
+                              border: '1px solid rgba(56, 189, 248, 0.35)',
+                              cursor: 'pointer',
+                              flexShrink: 0,
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            <span style={{ fontSize: 9.5, fontWeight: 700, fontStyle: 'italic', fontFamily: 'Georgia, serif', lineHeight: 1, userSelect: 'none' }}>
+                              i
+                            </span>
+                          </button>
+                          {showIcalHelp && (
+                            <div
+                              role="tooltip"
+                              style={{
+                                position: 'absolute',
+                                top: 'calc(100% + 6px)',
+                                left: 0,
+                                zIndex: 100,
+                                width: 330,
+                                padding: '12px 14px',
+                                background: '#13151b',
+                                border: '1px solid var(--border-default)',
+                                borderRadius: 'var(--radius-md)',
+                                boxShadow: '0 12px 32px rgba(0, 0, 0, 0.7)',
+                                fontSize: 11.5,
+                                color: 'var(--text-secondary)',
+                                lineHeight: 1.5,
+                                backdropFilter: 'blur(16px)'
+                              }}
+                            >
+                              <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>
+                                How to get your private iCal link
+                              </div>
+                              <div style={{ marginBottom: 6 }}>
+                                <strong style={{ color: 'var(--text-primary)' }}>Google Calendar:</strong> Settings ➔ [Your Calendar] ➔ Integrate Calendar ➔ Copy <em>Secret address in iCal format</em>.
+                              </div>
+                              <div style={{ marginBottom: 6 }}>
+                                <strong style={{ color: 'var(--text-primary)' }}>Outlook:</strong> Settings ➔ Calendar ➔ Shared calendars ➔ Publish calendar ➔ Copy <em>ICS link</em>.
+                              </div>
+                              <div style={{ color: 'var(--text-muted)', fontSize: 10.5, borderTop: '1px solid var(--border-subtle)', paddingTop: 5 }}>
+                                100% Local-First &amp; Zero-Auth. No OAuth or corporate approval required.
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                       <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                         Detects calls 1 minute before start, displays an unobtrusive chip, and 1-click starts dual recording with pre-filled title, participants, and company.
@@ -468,54 +521,6 @@ export function IntegrationsView(): React.ReactNode {
                     <span>{calendarFeedback.msg}</span>
                   </div>
                 )}
-
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '8px 12px',
-                    borderRadius: 'var(--radius-sm)',
-                    background: 'rgba(255, 255, 255, 0.02)',
-                    border: '1px solid var(--border-subtle)'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Zap className="icon icon--xs" style={{ color: 'var(--accent)' }} />
-                    <label
-                      htmlFor="auto-detect-windows"
-                      style={{ fontSize: 12, color: 'var(--text-primary)', cursor: 'pointer' }}
-                    >
-                      Also detect active Zoom, Google Meet &amp; Teams windows (asks your OS for screen-capture access)
-                    </label>
-                  </div>
-                  <input
-                    id="auto-detect-windows"
-                    type="checkbox"
-                    checked={calendarStatus.autoDetectWindows}
-                    onChange={(e) => void handleToggleAutoDetectWindows(e.target.checked)}
-                    style={{ cursor: 'pointer', accentColor: 'var(--accent)' }}
-                  />
-                </div>
-
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: 'var(--text-muted)',
-                    lineHeight: 1.5,
-                    padding: '8px 10px',
-                    borderRadius: 4,
-                    background: 'rgba(255,255,255,0.02)'
-                  }}
-                >
-                  <strong style={{ color: 'var(--text-primary)' }}>How to get your private iCal link:</strong>
-                  <br />
-                  • <strong>Google Calendar:</strong> Calendar Settings ➔ [Your Calendar] ➔ Integrate Calendar ➔ Copy <em>Secret address in iCal format</em>.
-                  <br />
-                  • <strong>Outlook:</strong> Settings ➔ Calendar ➔ Shared calendars ➔ Publish calendar ➔ Copy <em>ICS link</em>.
-                  <br />
-                  • <em>100% Local-First &amp; Zero-Auth:</em> No OAuth, no third-party cloud apps, and no corporate admin approval required.
-                </div>
               </div>
 
               {/* Slack Integration Card */}
@@ -647,6 +652,8 @@ export function IntegrationsView(): React.ReactNode {
                     value={integrations.crmType || 'hubspot'}
                     onChange={(e) => setIntegrations({ ...integrations, crmType: e.target.value as any })}
                     style={{
+                      width: 140,
+                      flexShrink: 0,
                       fontSize: 13,
                       padding: '8px 10px',
                       borderRadius: 'var(--radius-sm)',
@@ -667,6 +674,7 @@ export function IntegrationsView(): React.ReactNode {
                     onChange={(e) => setIntegrations({ ...integrations, crmWebhookUrl: e.target.value })}
                     style={{
                       flex: 1,
+                      minWidth: 0,
                       fontSize: 13,
                       padding: '8px 12px',
                       borderRadius: 'var(--radius-sm)',
@@ -680,6 +688,7 @@ export function IntegrationsView(): React.ReactNode {
                     className="btn btn--quiet btn--sm"
                     onClick={handleTestCrm}
                     disabled={testingCrm || !integrations.crmWebhookUrl?.trim()}
+                    style={{ flexShrink: 0 }}
                   >
                     {testingCrm ? <Loader2 className="icon icon--xs spin" /> : <Send className="icon icon--xs" />}
                     <span>Test Deal Sync</span>

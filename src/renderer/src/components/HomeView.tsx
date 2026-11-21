@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  ArrowUpRight,
   Brain,
+  CircleDollarSign,
   Clock,
+  Coins,
   Cpu,
   FileText,
   Keyboard,
   MessageSquare,
-  Sparkles,
+  ShieldCheck,
   Zap
 } from 'lucide-react'
-import type { AppSettings, DataSummary, ProviderId, ProviderStatus } from '@shared/types'
+import type { AppSettings, DataSummary, ProviderId, ProviderStatus, ProviderUsageRow } from '@shared/types'
 import { Badge, EmptyState, Group, Loading, PageHeader, StatusDot } from './ui'
 import {
   type CliInfo,
@@ -49,6 +52,7 @@ export function HomeView({ onNavigate }: { onNavigate: (route: Route) => void })
   const [data, setData] = useState<DataSummary | null>(null)
   const [sessions, setSessions] = useState<InterviewSummary[] | null>(null)
   const [shortcut, setShortcut] = useState('CommandOrControl+Shift+Space')
+  const [usageRows, setUsageRows] = useState<ProviderUsageRow[]>([])
   const [error, setError] = useState<string | null>(null)
 
   /**
@@ -60,7 +64,7 @@ export function HomeView({ onNavigate }: { onNavigate: (route: Route) => void })
    */
   const load = useCallback(async (): Promise<void> => {
     const failures: string[] = []
-    const [next, list, local, programs, summary] = await Promise.all([
+    const [next, list, local, programs, summary, usage] = await Promise.all([
       window.klyro.getSettings().catch((caught) => {
         failures.push(`settings: ${(caught as Error).message}`)
         return null
@@ -80,7 +84,8 @@ export function HomeView({ onNavigate }: { onNavigate: (route: Route) => void })
       window.klyro.dataSummary().catch((caught) => {
         failures.push(`what Klyro knows: ${(caught as Error).message}`)
         return null
-      })
+      }),
+      window.klyro.usageRows().catch(() => [] as ProviderUsageRow[])
     ])
     if (next) {
       setSettings(next)
@@ -90,6 +95,7 @@ export function HomeView({ onNavigate }: { onNavigate: (route: Route) => void })
     setAgents(local)
     setClis(programs)
     setData(summary)
+    setUsageRows(usage || [])
     setError(failures.length > 0 ? failures.join(' · ') : null)
   }, [])
 
@@ -152,6 +158,52 @@ export function HomeView({ onNavigate }: { onNavigate: (route: Route) => void })
   const localCount = connected.filter((provider) => isLocalProvider(provider.id)).length
   const hostedCount = connected.length - localCount
 
+  const totalSpend = useMemo(
+    () => usageRows.reduce((sum, r) => sum + (r.estimatedSpendUsd || 0), 0),
+    [usageRows]
+  )
+  const totalTokens = useMemo(
+    () => usageRows.reduce((sum, r) => sum + (r.totalTokens || 0), 0),
+    [usageRows]
+  )
+  const totalInTokens = useMemo(
+    () => usageRows.reduce((sum, r) => sum + (r.inputTokens || 0), 0),
+    [usageRows]
+  )
+  const totalOutTokens = useMemo(
+    () => usageRows.reduce((sum, r) => sum + (r.outputTokens || 0), 0),
+    [usageRows]
+  )
+  const totalRequests = useMemo(
+    () => usageRows.reduce((sum, r) => sum + (r.requests || 0), 0),
+    [usageRows]
+  )
+
+  const formattedKeys = useMemo(() => {
+    const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform)
+    const raw = shortcut || 'CommandOrControl+Shift+Space'
+    const parts = raw.split('+').map((p) => p.trim())
+    return parts.map((part) => {
+      if (part === 'CommandOrControl') return isMac ? '⌘' : 'Ctrl'
+      if (part === 'Control') return isMac ? '⌃' : 'Ctrl'
+      if (part === 'Shift') return isMac ? '⇧' : 'Shift'
+      if (part === 'Alt') return isMac ? '⌥' : 'Alt'
+      return part
+    })
+  }, [shortcut])
+
+  const formatTokens = (n: number): string => {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
+    return n.toLocaleString()
+  }
+
+  const formatSpend = (usd: number): string => {
+    if (usd === 0) return '$0.00'
+    if (usd < 0.01) return `$${usd.toFixed(4)}`
+    return `$${usd.toFixed(2)}`
+  }
+
   return (
     <>
       <PageHeader
@@ -171,45 +223,142 @@ export function HomeView({ onNavigate }: { onNavigate: (route: Route) => void })
         </div>
       )}
 
+      {/* Ready to Answer Hero Card */}
       <Group>
-        <div className="row row--wrap" style={{ gap: 16 }}>
-          <span className="icon-tile">
-            <Sparkles className="icon icon--md" aria-hidden="true" />
-          </span>
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <div className="row" style={{ gap: 8 }}>
-              <span className="card__title">Ready to answer</span>
-              {activeState && (
-                <Badge tone={activeState.tone === 'ok' ? 'ok' : activeState.tone === 'warn' ? 'warn' : 'idle'}>
-                  <StatusDot state={activeState.tone === 'ok' ? 'ok' : activeState.tone === 'warn' ? 'warn' : 'idle'} />
-                  {activeState.label}
-                </Badge>
-              )}
+        <div
+          style={{
+            padding: '20px 8px 18px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 20,
+            flexWrap: 'wrap'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1, minWidth: 280 }}>
+            <div
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 'var(--radius-md)',
+                background: 'rgba(59, 130, 246, 0.12)',
+                border: '1px solid rgba(59, 130, 246, 0.25)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#60a5fa',
+                flexShrink: 0
+              }}
+            >
+              <Zap className="icon icon--md" aria-hidden="true" />
             </div>
-            <div className="card__subtitle">
-              {active ? (
-                <>
-                  {active.label}
-                  {activeModel ? ` · ${activeModel}` : ''} ·{' '}
-                  {data?.activeProviderIsLocal
-                    ? 'answers stay on this machine'
-                    : 'answers go to a remote service'}
-                </>
-              ) : (
-                'No provider selected yet.'
-              )}
-            </div>
-            <div className="row" style={{ gap: 6, marginTop: 8 }}>
-              <Keyboard className="icon icon--xs" style={{ color: 'var(--text-disabled)' }} aria-hidden="true" />
-              <span className="hint">
-                <kbd className="kbd">{shortcut}</kbd> opens the overlay anywhere — in a meeting, in your editor, anywhere.
-              </span>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+              {/* Header Title Row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
+                  Ready to answer
+                </span>
+                {activeState && (
+                  <Badge tone={activeState.tone === 'ok' ? 'ok' : activeState.tone === 'warn' ? 'warn' : 'idle'}>
+                    <StatusDot state={activeState.tone === 'ok' ? 'ok' : activeState.tone === 'warn' ? 'warn' : 'idle'} />
+                    {activeState.label}
+                  </Badge>
+                )}
+                {data?.activeProviderIsLocal ? (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      padding: '2px 8px',
+                      borderRadius: 12,
+                      background: 'rgba(52, 211, 153, 0.12)',
+                      color: 'var(--status-ok)',
+                      fontWeight: 500,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4
+                    }}
+                  >
+                    <ShieldCheck className="icon icon--2xs" aria-hidden="true" />
+                    100% Local · Air-gapped
+                  </span>
+                ) : (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      padding: '2px 8px',
+                      borderRadius: 12,
+                      background: 'rgba(255, 255, 255, 0.06)',
+                      color: 'var(--text-muted)',
+                      fontWeight: 500
+                    }}
+                  >
+                    Remote API Stream
+                  </span>
+                )}
+              </div>
+
+              {/* Active Model / Provider Specs */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                  Active provider: <strong style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{active ? active.label : 'None configured'}</strong>
+                </span>
+                {activeModel && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontFamily: 'var(--font-mono, monospace)',
+                      padding: '2px 7px',
+                      borderRadius: 4,
+                      background: 'var(--surface-hover)',
+                      border: '1px solid var(--border-subtle)',
+                      color: 'var(--text-secondary)'
+                    }}
+                  >
+                    {activeModel}
+                  </span>
+                )}
+              </div>
+
+              {/* Shortcut Banner */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginTop: 2,
+                  color: 'var(--text-muted)',
+                  fontSize: 12
+                }}
+              >
+                <Keyboard className="icon icon--xs" style={{ color: 'var(--text-disabled)', flexShrink: 0 }} aria-hidden="true" />
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                  Press
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {formattedKeys.map((k, i) => (
+                      <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        {i > 0 && <span style={{ color: 'var(--text-disabled)', fontSize: 11 }}>+</span>}
+                        <kbd className="kbd" style={{ minWidth: 20, textAlign: 'center', padding: '2px 6px' }}>{k}</kbd>
+                      </span>
+                    ))}
+                  </span>
+                  to toggle the HUD anywhere on your desktop
+                </span>
+              </div>
             </div>
           </div>
-          <button className="btn" onClick={() => onNavigate('models')}>
-            <Cpu className="icon icon--sm" aria-hidden="true" />
-            <span>Change the model</span>
-          </button>
+
+          {/* Quick Actions */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, alignSelf: 'center' }}>
+            <button className="btn btn--primary" onClick={() => void window.klyro.toggleOverlay?.()}>
+              <Zap className="icon icon--xs" aria-hidden="true" />
+              <span>Quick ask</span>
+            </button>
+            <button className="btn" onClick={() => onNavigate('models')}>
+              <Cpu className="icon icon--xs" aria-hidden="true" />
+              <span>Change model</span>
+            </button>
+          </div>
         </div>
       </Group>
 
@@ -231,8 +380,9 @@ export function HomeView({ onNavigate }: { onNavigate: (route: Route) => void })
         </Group>
       )}
 
+      {/* Split Dashboard Columns: Left = Connected + What Klyro knows | Right = Token Expenses + Recent activity */}
       <div className="split" style={{ marginTop: 16 }}>
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <Group
             title="Connected"
             description={
@@ -286,9 +436,8 @@ export function HomeView({ onNavigate }: { onNavigate: (route: Route) => void })
               </div>
             )}
           </Group>
-        </div>
 
-        <div>
+          {/* What Klyro knows (swapped to left column) */}
           <Group title="What Klyro knows" description="Kept on this machine." icon={Brain} flush>
             <div className="list">
               <div className="list__row">
@@ -326,6 +475,149 @@ export function HomeView({ onNavigate }: { onNavigate: (route: Route) => void })
                 </div>
               </div>
             </div>
+          </Group>
+        </div>
+
+        {/* Right Column: Token Expenses & Spend + Recent activity */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Token Expenses & Spend Card */}
+          <Group
+            title="Token Expenses & Spend"
+            description="API consumption and estimated spend measured locally on your machine."
+            icon={CircleDollarSign}
+            flush
+            actions={
+              <button
+                className="btn btn--sm btn--quiet"
+                onClick={() => onNavigate('settings')}
+                title="View full ledger in Settings"
+                style={{ fontSize: 11, padding: '4px 8px' }}
+              >
+                <span>View ledger</span>
+                <ArrowUpRight className="icon icon--2xs" aria-hidden="true" />
+              </button>
+            }
+          >
+            {/* Top KPI Metrics */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: 8,
+                padding: '12px 14px',
+                background: 'var(--surface-sunken)',
+                borderBottom: '1px solid var(--border-subtle)'
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Spend
+                </div>
+                <div
+                  style={{
+                    fontSize: 16,
+                    fontWeight: 700,
+                    color: totalSpend > 0 ? '#38bdf8' : 'var(--text-primary)',
+                    fontVariantNumeric: 'tabular-nums',
+                    marginTop: 3
+                  }}
+                >
+                  {formatSpend(totalSpend)}
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-disabled)', marginTop: 2 }}>
+                  {totalSpend > 0 ? 'BYOK keys' : '100% Free / Local'}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Tokens
+                </div>
+                <div
+                  style={{
+                    fontSize: 16,
+                    fontWeight: 700,
+                    color: 'var(--text-primary)',
+                    fontVariantNumeric: 'tabular-nums',
+                    marginTop: 3
+                  }}
+                >
+                  {formatTokens(totalTokens)}
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-disabled)', marginTop: 2 }}>
+                  {Math.round(totalInTokens / 1000)}k in · {Math.round(totalOutTokens / 1000)}k out
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Requests
+                </div>
+                <div
+                  style={{
+                    fontSize: 16,
+                    fontWeight: 700,
+                    color: 'var(--text-primary)',
+                    fontVariantNumeric: 'tabular-nums',
+                    marginTop: 3
+                  }}
+                >
+                  {totalRequests}
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-disabled)', marginTop: 2 }}>
+                  API calls
+                </div>
+              </div>
+            </div>
+
+            {/* Provider usage breakdown or clean empty state */}
+            {usageRows.length > 0 ? (
+              <div className="list">
+                {usageRows.slice(0, 4).map((row) => {
+                  const spend = row.estimatedSpendUsd || 0
+                  const isLocal = isLocalProvider(row.provider)
+                  const label = row.provider.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+                  return (
+                    <div key={row.provider} className="list__row" style={{ padding: '8px 14px' }}>
+                      <div className="list__main">
+                        <div className="row" style={{ alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{label}</span>
+                          {isLocal ? (
+                            <Badge tone="ok">Local</Badge>
+                          ) : (
+                            <Badge tone="idle">Metered</Badge>
+                          )}
+                        </div>
+                        <div className="list__meta" style={{ fontSize: 11 }}>
+                          {row.requests} query{row.requests === 1 ? '' : 's'} · {formatTokens(row.totalTokens)} tokens
+                        </div>
+                      </div>
+                      <div className="list__actions" style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: spend > 0 ? '#38bdf8' : 'var(--text-muted)' }}>
+                          {spend > 0 ? formatSpend(spend) : 'Free'}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div
+                style={{
+                  padding: '16px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  color: 'var(--text-muted)',
+                  fontSize: 12
+                }}
+              >
+                <Coins className="icon icon--sm" style={{ color: 'var(--text-disabled)', flexShrink: 0 }} aria-hidden="true" />
+                <span>
+                  No token costs recorded yet. Every query through your connected models logs token consumption here.
+                </span>
+              </div>
+            )}
           </Group>
 
           <Group
