@@ -2,7 +2,6 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useSta
 import {
   Copy,
   Check,
-  Eye,
   EyeOff,
   GripVertical,
   Headphones,
@@ -24,8 +23,8 @@ import {
   Zap,
   Calendar,
   Ghost,
-  Smartphone,
-  Target
+  Activity,
+  SlidersHorizontal
 } from 'lucide-react'
 import {
   createSilenceWatcher,
@@ -59,12 +58,14 @@ import { diarizer } from './lib/diarization'
 import { detectLiveActionItem, type DetectedActionItem } from './lib/commitments'
 import { detectBattlecard, type DetectedBattlecardMatch } from './lib/battlecards'
 import { generateCatchUpBriefing, type CatchUpBriefing } from './lib/catchup'
+import { analyzeBuyerHesitation, type HesitationAnalysis } from './lib/hesitation-radar'
 import ReactMarkdown from 'react-markdown'
 import { parseAgendaItems, checkAgendaProgress, type AgendaItem } from './lib/agenda'
 import type { Attachment, CalendarEvent } from '@shared/types'
 import type { PickerGroup } from './components/ModelPicker'
 import { GhostPhoneModal } from './components/overlay/GhostPhoneModal'
 import { MeetingBanner } from './components/overlay/MeetingBanner'
+import { OverlayCommandMenu } from './components/overlay/OverlayCommandMenu'
 import { recentModels, rememberModel } from './lib/recent'
 import { knownModelNames, rememberModelNames } from './lib/modelNames'
 import { StatusDot } from './components/ui'
@@ -230,6 +231,8 @@ export default function OverlayApp() {
   const [prompterMode, setPrompterMode] = useState(false)
   const [zeroFocus, setZeroFocus] = useState(false)
   const [showRsvp, setShowRsvp] = useState(false)
+  const [showCommandMenu, setShowCommandMenu] = useState(false)
+  const [deckTab, setDeckTab] = useState<'catchup' | 'radar' | 'battlecard' | 'agenda' | 'notes'>('catchup')
   const [showRemoteHudModal, setShowRemoteHudModal] = useState(false)
   const [linkCopied, setLinkCopied] = useState(false)
   const [remoteHudUrl, setRemoteHudUrl] = useState<string | null>(null)
@@ -308,6 +311,8 @@ export default function OverlayApp() {
   const [showAgenda, setShowAgenda] = useState(false)
   const [showCatchUp, setShowCatchUp] = useState(false)
   const [catchUpBriefing, setCatchUpBriefing] = useState<CatchUpBriefing | null>(null)
+  const [hesitationRadarOn, setHesitationRadarOn] = useState(false)
+  const [liveHesitation, setLiveHesitation] = useState<HesitationAnalysis | null>(null)
   const utteranceEndedAtRef = useRef<number | null>(null)
   const firstTokenReceivedRef = useRef(false)
 
@@ -650,6 +655,10 @@ export default function OverlayApp() {
           return
         }
         lastEscPressRef.current = now
+        if (showCommandMenu) {
+          setShowCommandMenu(false)
+          return
+        }
         if (showRsvp) {
           setShowRsvp(false)
           return
@@ -666,16 +675,42 @@ export default function OverlayApp() {
           setShowCatchUp(false)
           return
         }
+        if (showAgenda) {
+          setShowAgenda(false)
+          return
+        }
+        if (showScratchpad) {
+          setShowScratchpad(false)
+          return
+        }
         if (decoyMode) {
           setDecoyMode(false)
           return
         }
         if (modeRef.current === 'idle') void window.klyro.hideOverlay()
+      } else if (
+        (event.altKey && event.key.toLowerCase() === 'k') ||
+        ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k')
+      ) {
+        event.preventDefault()
+        setShowCommandMenu((prev) => !prev)
+      } else if (event.altKey && event.key.toLowerCase() === 'z') {
+        event.preventDefault()
+        setZeroFocus((prev) => {
+          const next = !prev
+          void window.klyro.setZeroFocus?.(next)
+          return next
+        })
       } else if (event.altKey && event.key.toLowerCase() === 'u') {
         event.preventDefault()
         const briefing = generateCatchUpBriefing(transcript)
         setCatchUpBriefing(briefing)
+        setDeckTab('catchup')
         setShowCatchUp((prev) => !prev)
+      } else if (event.altKey && event.key.toLowerCase() === 'h') {
+        event.preventDefault()
+        setDeckTab('radar')
+        setHesitationRadarOn((prev) => !prev)
       } else if (event.altKey && event.key.toLowerCase() === 'd') {
         event.preventDefault()
         setDecoyMode((prev) => !prev)
@@ -722,7 +757,17 @@ export default function OverlayApp() {
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('keyup', onKeyUp)
     }
-  }, [decoyMode, showRsvp, showRemoteHudModal, talkState])
+  }, [
+    decoyMode,
+    showRsvp,
+    showRemoteHudModal,
+    showCommandMenu,
+    showAgenda,
+    showScratchpad,
+    showCatchUp,
+    activeBattlecard,
+    talkState
+  ])
 
   // Release the microphone when the overlay goes away — once, on unmount. This
   // cleanup used to live in the key handler effect above, so toggling decoy,
@@ -984,6 +1029,7 @@ export default function OverlayApp() {
     const card = detectBattlecard(spoken)
     if (card) {
       setActiveBattlecard(card)
+      setDeckTab('battlecard')
       if (battlecardTimeoutRef.current !== null) {
         window.clearTimeout(battlecardTimeoutRef.current)
       }
@@ -1451,6 +1497,7 @@ export default function OverlayApp() {
       const detectedCard = detectBattlecard(text)
       if (detectedCard) {
         setActiveBattlecard(detectedCard)
+        setDeckTab('battlecard')
         if (battlecardTimeoutRef.current !== null) {
           window.clearTimeout(battlecardTimeoutRef.current)
         }
@@ -1477,6 +1524,15 @@ export default function OverlayApp() {
       }
       // Mirror the live transcript to the phone HUD, not just the answer.
       void window.klyro.remoteHudTranscript?.(taggedLine)?.catch(() => undefined)
+
+      if (hesitationRadarOn && text.length > 8) {
+        const analysis = analyzeBuyerHesitation({
+          text,
+          latencyMs: 350,
+          durationMs: 4000
+        })
+        setLiveHesitation(analysis)
+      }
 
       if (interviewRef.current) {
         void window.klyro.interviewsAddTranscript?.({ id: interviewRef.current, line: taggedLine })
@@ -1624,6 +1680,146 @@ export default function OverlayApp() {
   const recording = mode === 'recording' || mode === 'listening'
   const hasAnswer = Boolean(answer) && !isNoAnswer(answer)
 
+  const handleCommandAction = useCallback((actionId: string) => {
+    switch (actionId) {
+      case 'catchup': {
+        const briefing = generateCatchUpBriefing(transcript)
+        setCatchUpBriefing(briefing)
+        setDeckTab('catchup')
+        setShowCatchUp((prev) => !prev)
+        break
+      }
+      case 'radar': {
+        setDeckTab('radar')
+        setHesitationRadarOn((prev) => {
+          const next = !prev
+          if (next && transcript.length > 0) {
+            const sample = transcript[transcript.length - 1]
+            setLiveHesitation(
+              analyzeBuyerHesitation({
+                text: sample,
+                durationMs: 4500,
+                latencyMs: 500
+              })
+            )
+          }
+          return next
+        })
+        break
+      }
+      case 'objection': {
+        const recent = transcript.slice(-4).join('\n')
+        if (recent) {
+          archiveCurrentTurnIfAny()
+          currentTurnRef.current = { question: 'Suggest response to objection', answer: '', timing: null }
+          setQuestion('Suggest response to objection')
+          setAnswer('')
+          void askAssist(
+            `The meeting attendee voiced this objection or point:\n"${recent}"\n\nProvide 2 tactful, persuasive, and professional ways to overcome this objection:`
+          )
+        }
+        break
+      }
+      case 'agenda': {
+        setDeckTab('agenda')
+        setShowAgenda((prev) => !prev)
+        break
+      }
+      case 'notes': {
+        setDeckTab('notes')
+        setShowScratchpad((prev) => !prev)
+        break
+      }
+      case 'private': {
+        void togglePrivate()
+        break
+      }
+      case 'zerofocus': {
+        setZeroFocus((prev) => {
+          const next = !prev
+          void window.klyro.setZeroFocus?.(next)
+          return next
+        })
+        break
+      }
+      case 'ghostphone': {
+        void (async () => {
+          try {
+            if (!remoteHudUrl) {
+              const res = await window.klyro.remoteHudStart?.()
+              if (res?.url) {
+                setRemoteHudUrl(res.url)
+                if (res.pairingCode) {
+                  setRemoteHudPairing({ code: res.pairingCode, expiresAt: res.expiresAt })
+                }
+              }
+            }
+            setShowRemoteHudModal(true)
+            setLinkCopied(false)
+          } catch (error) {
+            setAssistNote(`Ghost Phone could not start: ${(error as Error).message}`)
+          }
+        })()
+        break
+      }
+      case 'decoy': {
+        setDecoyMode(true)
+        break
+      }
+      case 'rsvp': {
+        setShowRsvp((prev) => !prev)
+        break
+      }
+      case 'prompter': {
+        setPrompterMode((prev) => {
+          const next = !prev
+          if (next) void window.klyro.snapToNotch?.()
+          return next
+        })
+        break
+      }
+      case 'clear': {
+        setHistory([])
+        currentTurnRef.current = { question: '', answer: '', timing: null }
+        setQuestion('')
+        setAnswer('')
+        break
+      }
+      case 'panel': {
+        void window.klyro.showMainWindow?.()
+        break
+      }
+    }
+  }, [transcript, remoteHudUrl, archiveCurrentTurnIfAny])
+
+  let capsuleDotState: 'ready' | 'listening' | 'hearing' | 'thinking' | 'recording' = 'ready'
+  let capsuleLabel = 'Ready'
+
+  if (mode === 'recording') {
+    capsuleDotState = 'recording'
+    capsuleLabel = 'Recording'
+  } else if (mode === 'listening') {
+    capsuleDotState = 'listening'
+    capsuleLabel = assistSource?.includes('Dual') ? 'Dual Audio' : 'Listening'
+  } else if (talkState !== 'idle') {
+    if (talkState === 'hearing') {
+      capsuleDotState = 'hearing'
+      capsuleLabel = 'Hearing…'
+    } else if (talkState === 'thinking') {
+      capsuleDotState = 'thinking'
+      capsuleLabel = 'Thinking…'
+    } else {
+      capsuleDotState = 'listening'
+      capsuleLabel = 'Voice Active'
+    }
+  } else if (busy) {
+    capsuleDotState = 'thinking'
+    capsuleLabel = 'Thinking…'
+  } else if (privateMode?.enabled) {
+    capsuleDotState = 'ready'
+    capsuleLabel = 'Stealth Guard'
+  }
+
   const glowClass = talkState === 'hearing'
     ? ' overlay--glow-hearing'
     : busy || talkState === 'thinking'
@@ -1700,168 +1896,136 @@ export default function OverlayApp() {
                 <span style={{ fontSize: 11, opacity: 0.8 }}>Press Ctrl+Shift+G to restore</span>
               </div>
             )}
+            <OverlayCommandMenu
+              open={showCommandMenu}
+              onClose={() => setShowCommandMenu(false)}
+              onSelectAction={handleCommandAction}
+              state={{
+                privateMode: !!privateMode?.enabled,
+                zeroFocus,
+                hesitationRadar: hesitationRadarOn,
+                ghostPhone: !!remoteHudUrl,
+                hasAnswer,
+                hasHistory: history.length > 0,
+                mode
+              }}
+            />
+
             <header className="overlay__head">
-        <div className="overlay__drag-grip" title="Drag to move anywhere on screen" aria-hidden="true">
-          <GripVertical className="icon icon--xs" />
-        </div>
-        <button
-          type="button"
-          className="overlay__home"
-          onClick={() => void window.klyro.showMainWindow?.()}
-          title="Open the Klyro control panel"
-          aria-label="Open the Klyro control panel"
-        >
-          <img src={KlyroMark} alt="" className="overlay__mark" aria-hidden="true" />
-          <span className="overlay__brand">Klyro</span>
-        </button>
-        {overlayProvider && (
-          <Suspense fallback={null}>
-            <ModelPicker
-            groups={catalogue}
-            value={overlayModel}
-            variant="chip"
-            loading={catalogueLoading}
-            note={catalogueNote}
-            recent={recent}
-            knownNames={knownNames}
-            contextLabel={providerLabel}
-            onOpen={() => {
-              void syncProvider()
-              void loadCatalogue()
-              growForMenu()
-            }}
-            onClose={shrinkAfterMenu}
-            onRefresh={() => void loadCatalogue()}
-            onChange={(next, providerId) => {
-              // A model from another provider switches the overlay to that
-              // provider; the control panel uses the same choice.
-              const target = providerId || overlayProvider
-              setOverlayModel(next)
-              setOverlayProvider(target)
-              setRecent(rememberModel(next))
-              void (async () => {
-                try {
-                  const settings = await window.klyro.getSettings()
-                  await window.klyro.updateSettings({
-                    activeProvider: target,
-                    providers: {
-                      ...settings.providers,
-                      [target]: { ...settings.providers[target], fastModel: next }
-                    }
-                  })
-                } catch {
-                  // The choice still shows; the next answer uses the old model.
-                }
-              })()
-            }}
-          />
-          </Suspense>
-        )}
-        {vision === 'yes' && (
-          <span className="overlay__state" title="This model can read the screen you share with it.">
-            <ScanEye className="icon icon--xs" aria-hidden="true" />
-            <span className="overlay__state-label">Reads images</span>
-          </span>
-        )}
-        {providerNote && (
-          <span className="overlay__state" title={providerNote}>
-            <StatusDot state="warn" />
-            <span className="overlay__state-label">No key</span>
-          </span>
-        )}
-        {privateMode && (
-          <button
-            className="btn btn--icon btn--icon-sm btn--ghost"
-            onClick={() => void togglePrivate()}
-            disabled={!privateMode.supported}
-            aria-pressed={privateMode.enabled}
-            aria-label="Private mode: hide this overlay from screen captures and shares"
-            title={
-              privateMode.supported
-                ? 'Private mode — keep this overlay out of screen shares and screenshots'
-                : 'Private mode is not supported on Linux/X11: any capture of the whole display still shows this overlay'
-            }
-          >
-            {privateMode.enabled ? <EyeOff className="icon icon--sm" aria-hidden="true" /> : <Eye className="icon icon--sm" aria-hidden="true" />}
-          </button>
-        )}
-        <button
-          type="button"
-          className={`btn btn--icon btn--icon-sm ${zeroFocus ? 'btn--accent' : 'btn--ghost'}`}
-          onClick={async () => {
-            const next = !zeroFocus
-            setZeroFocus(next)
-            await window.klyro.setZeroFocus?.(next)
-          }}
-          title={
-            zeroFocus
-              ? 'Zero-Focus ACTIVE: Overlay never steals focus from your browser or IDE (Click to disable)'
-              : 'Zero-Focus Mode: Never steal focus from your active window (HackerRank & proctoring safe)'
-          }
-          aria-label={zeroFocus ? 'Disable Zero-Focus' : 'Enable Zero-Focus'}
-        >
-          <Target className="icon icon--sm" aria-hidden="true" />
-        </button>
+              <div className="overlay__drag-grip" title="Drag to move anywhere on screen" aria-hidden="true">
+                <GripVertical className="icon icon--xs" />
+              </div>
+              <button
+                type="button"
+                className="overlay__home"
+                onClick={() => void window.klyro.showMainWindow?.()}
+                title="Open the Klyro control panel"
+                aria-label="Open the Klyro control panel"
+              >
+                <img src={KlyroMark} alt="" className="overlay__mark" aria-hidden="true" />
+                <span className="overlay__brand">Klyro</span>
+              </button>
+              {overlayProvider && (
+                <Suspense fallback={null}>
+                  <ModelPicker
+                    groups={catalogue}
+                    value={overlayModel}
+                    variant="chip"
+                    loading={catalogueLoading}
+                    note={catalogueNote}
+                    recent={recent}
+                    knownNames={knownNames}
+                    contextLabel={providerLabel}
+                    onOpen={() => {
+                      void syncProvider()
+                      void loadCatalogue()
+                      growForMenu()
+                    }}
+                    onClose={shrinkAfterMenu}
+                    onRefresh={() => void loadCatalogue()}
+                    onChange={(next, providerId) => {
+                      const target = providerId || overlayProvider
+                      setOverlayModel(next)
+                      setOverlayProvider(target)
+                      setRecent(rememberModel(next))
+                      void (async () => {
+                        try {
+                          const settings = await window.klyro.getSettings()
+                          await window.klyro.updateSettings({
+                            activeProvider: target,
+                            providers: {
+                              ...settings.providers,
+                              [target]: { ...settings.providers[target], fastModel: next }
+                            }
+                          })
+                        } catch {}
+                      })()
+                    }}
+                  />
+                </Suspense>
+              )}
+              {vision === 'yes' && (
+                <span className="overlay__state" title="This model can read the screen you share with it.">
+                  <ScanEye className="icon icon--xs" aria-hidden="true" />
+                </span>
+              )}
+              {providerNote && (
+                <span className="overlay__state" title={providerNote}>
+                  <StatusDot state="warn" />
+                </span>
+              )}
 
-        <button
-          type="button"
-          className={`btn btn--icon btn--icon-sm ${remoteHudUrl ? 'btn--accent' : 'btn--ghost'}`}
-          onClick={async () => {
-            try {
-              if (!remoteHudUrl) {
-                const res = await window.klyro.remoteHudStart?.()
-                if (res?.url) {
-                  setRemoteHudUrl(res.url)
-                  if (res.pairingCode) {
-                    setRemoteHudPairing({ code: res.pairingCode, expiresAt: res.expiresAt })
-                  }
-                }
-              }
-              setShowRemoteHudModal(!showRemoteHudModal)
-              setLinkCopied(false)
-            } catch (error) {
-              setAssistNote(`Ghost Phone could not start: ${(error as Error).message}`)
-            }
-          }}
-          title={remoteHudUrl ? `Ghost Phone Live at ${remoteHudUrl} (Click for controls)` : 'Start Ghost Phone Remote Mirror (Zero On-Screen Footprint)'}
-          aria-label="Ghost Phone HUD"
-        >
-          <Smartphone className="icon icon--sm" aria-hidden="true" />
-        </button>
+              {/* Raycast-style Unified State Capsule */}
+              <div
+                className="overlay__status-capsule"
+                role="status"
+                title={`System State: ${capsuleLabel}${privateMode?.enabled ? ' (Stealth Guard Active)' : ''}`}
+              >
+                <span className={`overlay__capsule-dot overlay__capsule-dot--${capsuleDotState}`} aria-hidden="true" />
+                <span className="overlay__capsule-text">{capsuleLabel}</span>
+                {privateMode?.enabled && (
+                  <button
+                    type="button"
+                    className="overlay__stealth-badge btn--quiet"
+                    onClick={() => void togglePrivate()}
+                    title="Stealth Mode Active (Click to disable)"
+                    aria-label="Stealth mode active"
+                  >
+                    <EyeOff className="icon icon--xs" />
+                  </button>
+                )}
+              </div>
 
-        {hasAnswer && (
-          <button
-            type="button"
-            className={`btn btn--icon btn--icon-sm ${showRsvp ? 'btn--accent' : 'btn--ghost'}`}
-            onClick={() => setShowRsvp(!showRsvp)}
-            title={showRsvp ? 'Close RSVP Eye-Gaze Flasher' : 'RSVP Eye-Gaze Reduction Flasher (Read answer at single focal point) · Alt+R'}
-            aria-label="RSVP Flasher"
-          >
-            <Zap className="icon icon--sm" aria-hidden="true" />
-          </button>
-        )}
-
-        <div className="overlay__controls">
-          <button
-            type="button"
-            className="overlay__control-btn overlay__control-btn--minimize"
-            onClick={() => void window.klyro.minimizeOverlay?.()}
-            title="Minimize overlay"
-            aria-label="Minimize"
-          >
-            <Minus className="icon icon--xs" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="overlay__control-btn overlay__control-btn--close"
-            onClick={() => void window.klyro.hideOverlay()}
-            title="Close overlay"
-            aria-label="Close"
-          >
-            <X className="icon icon--xs" aria-hidden="true" />
-          </button>
-        </div>
-      </header>
+              <div className="overlay__controls">
+                <button
+                  type="button"
+                  className={`overlay__control-btn ${showCommandMenu ? 'btn--accent' : ''}`}
+                  onClick={() => setShowCommandMenu(!showCommandMenu)}
+                  title="Quick Command Menu &amp; Tools · ⌘K / Alt+K"
+                  aria-label="Command Menu"
+                >
+                  <SlidersHorizontal className="icon icon--xs" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className="overlay__control-btn overlay__control-btn--minimize"
+                  onClick={() => void window.klyro.minimizeOverlay?.()}
+                  title="Minimize overlay"
+                  aria-label="Minimize"
+                >
+                  <Minus className="icon icon--xs" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className="overlay__control-btn overlay__control-btn--close"
+                  onClick={() => void window.klyro.hideOverlay()}
+                  title="Close overlay"
+                  aria-label="Close"
+                >
+                  <X className="icon icon--xs" aria-hidden="true" />
+                </button>
+              </div>
+            </header>
 
       {showRemoteHudModal && remoteHudUrl && (
         <GhostPhoneModal
@@ -2068,12 +2232,41 @@ export default function OverlayApp() {
             onClick={() => {
               const briefing = generateCatchUpBriefing(transcript)
               setCatchUpBriefing(briefing)
+              setDeckTab('catchup')
               setShowCatchUp(!showCatchUp)
             }}
             title="Instant late-joiner briefing of missed context and active topic (Alt+U)"
           >
             <Zap className="icon icon--xs" style={{ color: 'var(--accent)' }} aria-hidden="true" />
             <span>Catch Me Up</span>
+          </button>
+
+          <button
+            type="button"
+            className={`overlay__copilot-chip ${hesitationRadarOn ? 'overlay__copilot-chip--active' : ''}`}
+            onClick={() => {
+              const nextState = !hesitationRadarOn
+              setHesitationRadarOn(nextState)
+              setDeckTab('radar')
+              if (nextState && transcript.length > 0) {
+                const sampleText = transcript[transcript.length - 1]
+                const analysis = analyzeBuyerHesitation({
+                  text: sampleText,
+                  durationMs: 4500,
+                  latencyMs: 500
+                })
+                setLiveHesitation(analysis)
+              }
+            }}
+            title="Toggle Live Buyer Hesitation & Intent Heatmap Radar (Alt+H)"
+            aria-label="Buyer Hesitation Radar"
+          >
+            <Activity
+              className="icon icon--xs"
+              style={{ color: hesitationRadarOn ? '#10b981' : 'var(--accent)' }}
+              aria-hidden="true"
+            />
+            <span>{hesitationRadarOn ? 'Radar: Active' : 'Hesitation Radar'}</span>
           </button>
 
           <button
@@ -2098,7 +2291,10 @@ export default function OverlayApp() {
           <button
             type="button"
             className={`overlay__copilot-chip ${showScratchpad ? 'overlay__copilot-chip--active' : ''}`}
-            onClick={() => setShowScratchpad(!showScratchpad)}
+            onClick={() => {
+              setDeckTab('notes')
+              setShowScratchpad(!showScratchpad)
+            }}
             title="Jot private notes live that automatically merge into the CRM recap"
           >
             <FileText className="icon icon--xs" aria-hidden="true" />
@@ -2110,7 +2306,10 @@ export default function OverlayApp() {
             <button
               type="button"
               className={`overlay__copilot-chip ${showAgenda ? 'overlay__copilot-chip--active' : ''}`}
-              onClick={() => setShowAgenda(!showAgenda)}
+              onClick={() => {
+                setDeckTab('agenda')
+                setShowAgenda(!showAgenda)
+              }}
               title="Meeting Agenda Tracking"
             >
               <Calendar className="icon icon--xs" style={{ color: 'var(--accent)' }} aria-hidden="true" />
@@ -2129,87 +2328,195 @@ export default function OverlayApp() {
         </div>
       )}
 
-      {showCatchUp && catchUpBriefing && (
-        <div className="overlay__catchup-card" role="region" aria-label="Catch Me Up Briefing">
-          <div className="overlay__catchup-head">
-            <span className="overlay__catchup-badge">
-              <Zap className="icon icon--xs" style={{ color: 'var(--accent)' }} />
-              <span>⚡ CATCH ME UP ({catchUpBriefing.totalLinesAnalyzed} TURNS ANALYZED)</span>
-            </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      {mode === 'listening' && (activeBattlecard || (showCatchUp && catchUpBriefing) || (hesitationRadarOn && liveHesitation) || (showAgenda && agendaItems.length > 0) || showScratchpad) && (
+        <div className="overlay__intelligence-deck" role="region" aria-label="Live Intelligence Deck">
+          <div className="overlay__intelligence-tabs">
+            {activeBattlecard && (
               <button
                 type="button"
-                className="btn btn--icon btn--xs btn--quiet"
-                onClick={() => setShowCatchUp(false)}
-                title="Dismiss (Esc)"
-                aria-label="Dismiss Catch Me Up"
+                className={`overlay__intelligence-tab ${deckTab === 'battlecard' ? 'overlay__intelligence-tab--active' : ''}`}
+                onClick={() => setDeckTab('battlecard')}
               >
-                <X className="icon icon--xs" />
+                <ShieldAlert className="icon icon--xs" style={{ color: '#eab308' }} />
+                <span>🛡️ {activeBattlecard.battlecard.title}</span>
               </button>
-            </div>
-          </div>
-
-          <div className="overlay__catchup-section">
-            <div className="overlay__catchup-label">What You Missed</div>
-            <div className="overlay__catchup-text">{catchUpBriefing.missedSummary}</div>
-          </div>
-
-          {catchUpBriefing.keyDecisions.length > 0 && (
-            <div className="overlay__catchup-section">
-              <div className="overlay__catchup-label">Settled Decisions</div>
-              <ul className="overlay__catchup-decisions">
-                {catchUpBriefing.keyDecisions.map((d, i) => (
-                  <li key={i} className="overlay__catchup-decision-item">
-                    {d}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          <div className="overlay__catchup-active">
-            <div className="overlay__catchup-label" style={{ color: 'var(--status-ok)' }}>
-              Active Topic Right Now {catchUpBriefing.activeTopic.lastSpeaker ? `(${catchUpBriefing.activeTopic.lastSpeaker})` : ''}
-            </div>
-            <div className="overlay__catchup-text" style={{ fontWeight: 600 }}>
-              {catchUpBriefing.activeTopic.topic}
-            </div>
-            <div className="overlay__catchup-suggestion">
-              💡 <strong>Say this if asked:</strong> {catchUpBriefing.activeTopic.suggestedContribution}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeBattlecard && (
-        <div className="overlay__battlecard" role="region" aria-label="Live Battlecard">
-          <div className="overlay__battlecard-head">
-            <span className="overlay__battlecard-badge">
-              <ShieldAlert className="icon icon--xs" style={{ color: '#eab308' }} />
-              <span>🛡️ {activeBattlecard.battlecard.title.toUpperCase()}</span>
-            </span>
+            )}
+            {showCatchUp && catchUpBriefing && (
+              <button
+                type="button"
+                className={`overlay__intelligence-tab ${deckTab === 'catchup' ? 'overlay__intelligence-tab--active' : ''}`}
+                onClick={() => setDeckTab('catchup')}
+              >
+                <Zap className="icon icon--xs" style={{ color: '#3b82f6' }} />
+                <span>⚡ Catch-up</span>
+              </button>
+            )}
+            {hesitationRadarOn && liveHesitation && (
+              <button
+                type="button"
+                className={`overlay__intelligence-tab ${deckTab === 'radar' ? 'overlay__intelligence-tab--active' : ''}`}
+                onClick={() => setDeckTab('radar')}
+              >
+                <Activity
+                  className="icon icon--xs"
+                  style={{
+                    color:
+                      liveHesitation.level === 'hesitant'
+                        ? '#f97316'
+                        : liveHesitation.level === 'guarded'
+                        ? '#eab308'
+                        : '#10b981'
+                  }}
+                />
+                <span>📈 Radar ({liveHesitation.score}%)</span>
+              </button>
+            )}
+            {showAgenda && agendaItems.length > 0 && (
+              <button
+                type="button"
+                className={`overlay__intelligence-tab ${deckTab === 'agenda' ? 'overlay__intelligence-tab--active' : ''}`}
+                onClick={() => setDeckTab('agenda')}
+              >
+                <Calendar className="icon icon--xs" style={{ color: '#38bdf8' }} />
+                <span>📋 Agenda ({agendaItems.filter((i) => i.addressed).length}/{agendaItems.length})</span>
+              </button>
+            )}
+            {showScratchpad && (
+              <button
+                type="button"
+                className={`overlay__intelligence-tab ${deckTab === 'notes' ? 'overlay__intelligence-tab--active' : ''}`}
+                onClick={() => setDeckTab('notes')}
+              >
+                <FileText className="icon icon--xs" />
+                <span>📝 Notes</span>
+              </button>
+            )}
             <button
               type="button"
               className="btn btn--icon btn--xs btn--quiet"
-              onClick={() => setActiveBattlecard(null)}
-              title="Dismiss Battlecard (Esc)"
-              aria-label="Dismiss Battlecard"
+              style={{ marginLeft: 'auto' }}
+              onClick={() => {
+                if (deckTab === 'battlecard') setActiveBattlecard(null)
+                else if (deckTab === 'catchup') setShowCatchUp(false)
+                else if (deckTab === 'radar') setLiveHesitation(null)
+                else if (deckTab === 'agenda') setShowAgenda(false)
+                else if (deckTab === 'notes') setShowScratchpad(false)
+              }}
+              title="Dismiss active card (Esc)"
+              aria-label="Dismiss card"
             >
               <X className="icon icon--xs" />
             </button>
           </div>
-          <ul className="overlay__battlecard-points">
-            {activeBattlecard.battlecard.keyPoints.map((point, idx) => (
-              <li key={idx} className="overlay__battlecard-point">
-                {point}
-              </li>
-            ))}
-          </ul>
-          {activeBattlecard.battlecard.trapQuestion && (
-            <div className="overlay__battlecard-trap">
-              <strong>Trap Question:</strong> {activeBattlecard.battlecard.trapQuestion}
-            </div>
-          )}
+          <div className="overlay__intelligence-body">
+            {deckTab === 'battlecard' && activeBattlecard && (
+              <div className="overlay__battlecard-body">
+                <ul className="overlay__battlecard-points">
+                  {activeBattlecard.battlecard.keyPoints.map((point, idx) => (
+                    <li key={idx} className="overlay__battlecard-point">
+                      {point}
+                    </li>
+                  ))}
+                </ul>
+                {activeBattlecard.battlecard.trapQuestion && (
+                  <div className="overlay__battlecard-trap">
+                    <strong>Trap Question:</strong> {activeBattlecard.battlecard.trapQuestion}
+                  </div>
+                )}
+              </div>
+            )}
+            {deckTab === 'catchup' && catchUpBriefing && (
+              <div className="overlay__catchup-body">
+                <div className="overlay__catchup-section">
+                  <div className="overlay__catchup-label">What You Missed</div>
+                  <div className="overlay__catchup-text">{catchUpBriefing.missedSummary}</div>
+                </div>
+                {catchUpBriefing.keyDecisions.length > 0 && (
+                  <div className="overlay__catchup-section">
+                    <div className="overlay__catchup-label">Settled Decisions</div>
+                    <ul className="overlay__catchup-decisions">
+                      {catchUpBriefing.keyDecisions.map((d, i) => (
+                        <li key={i} className="overlay__catchup-decision-item">
+                          {d}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <div className="overlay__catchup-active">
+                  <div className="overlay__catchup-label" style={{ color: 'var(--status-ok)' }}>
+                    Active Topic Right Now {catchUpBriefing.activeTopic.lastSpeaker ? `(${catchUpBriefing.activeTopic.lastSpeaker})` : ''}
+                  </div>
+                  <div className="overlay__catchup-text" style={{ fontWeight: 600 }}>
+                    {catchUpBriefing.activeTopic.topic}
+                  </div>
+                  <div className="overlay__catchup-suggestion">
+                    💡 <strong>Say this if asked:</strong> {catchUpBriefing.activeTopic.suggestedContribution}
+                  </div>
+                </div>
+              </div>
+            )}
+            {deckTab === 'radar' && liveHesitation && (
+              <div className="overlay__radar-body">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#f1f5f9' }}>
+                    {liveHesitation.level.toUpperCase()} CADENCE ({liveHesitation.score}% FRICTION INDEX) · {liveHesitation.topicCategory.toUpperCase()}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span className="overlay__hesitation-pill">{liveHesitation.speechRateWpm} WPM</span>
+                    {liveHesitation.fillerCount > 0 && (
+                      <span className="overlay__hesitation-pill">{liveHesitation.fillerCount} Disfluencies</span>
+                    )}
+                  </div>
+                </div>
+                <div className="overlay__hesitation-cue">
+                  💡 <strong>Tactical Sales Cue:</strong> {liveHesitation.tacticalCue}
+                </div>
+              </div>
+            )}
+            {deckTab === 'agenda' && showAgenda && agendaItems.length > 0 && (
+              <div className="overlay__agenda-body">
+                <ul className="overlay__agenda-list">
+                  {agendaItems.map((item) => (
+                    <li
+                      key={item.id}
+                      className={`overlay__agenda-item ${item.addressed ? 'overlay__agenda-item--done' : ''}`}
+                      onClick={() => {
+                        const updated = agendaItems.map((i) =>
+                          i.id === item.id ? { ...i, addressed: !i.addressed } : i
+                        )
+                        setAgendaItems(updated)
+                        agendaItemsRef.current = updated
+                      }}
+                    >
+                      {item.addressed ? (
+                        <Check className="icon icon--xs" style={{ color: 'var(--status-ok)', flexShrink: 0 }} />
+                      ) : (
+                        <span className="overlay__agenda-dot" aria-hidden="true" />
+                      )}
+                      <span>{item.title}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {deckTab === 'notes' && showScratchpad && (
+              <div className="overlay__scratchpad">
+                <textarea
+                  rows={2}
+                  placeholder="Jot private notes live (will be blended into the final CRM notes)…"
+                  value={scratchpadText}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setScratchpadText(val)
+                    if (interviewRef.current) {
+                      void window.klyro.interviewsUpdate({ id: interviewRef.current, notes: val })
+                    }
+                  }}
+                />
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -2250,56 +2557,6 @@ export default function OverlayApp() {
               <X className="icon icon--xs" />
             </button>
           </div>
-        </div>
-      )}
-
-      {mode === 'listening' && showAgenda && agendaItems.length > 0 && (
-        <div className="overlay__agenda-flyout" role="region" aria-label="Meeting Agenda Checklist">
-          <div className="overlay__agenda-head">
-            <strong>Meeting Agenda Topics</strong>
-            <span>
-              {agendaItems.filter((i) => i.addressed).length} of {agendaItems.length} covered
-            </span>
-          </div>
-          <ul className="overlay__agenda-list">
-            {agendaItems.map((item) => (
-              <li
-                key={item.id}
-                className={`overlay__agenda-item ${item.addressed ? 'overlay__agenda-item--done' : ''}`}
-                onClick={() => {
-                  const updated = agendaItems.map((i) =>
-                    i.id === item.id ? { ...i, addressed: !i.addressed } : i
-                  )
-                  setAgendaItems(updated)
-                  agendaItemsRef.current = updated
-                }}
-              >
-                {item.addressed ? (
-                  <Check className="icon icon--xs" style={{ color: 'var(--status-ok)', flexShrink: 0 }} />
-                ) : (
-                  <span className="overlay__agenda-dot" aria-hidden="true" />
-                )}
-                <span>{item.title}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {mode === 'listening' && showScratchpad && (
-        <div className="overlay__scratchpad">
-          <textarea
-            rows={2}
-            placeholder="Jot private notes live (will be blended into the final CRM notes)…"
-            value={scratchpadText}
-            onChange={(e) => {
-              const val = e.target.value
-              setScratchpadText(val)
-              if (interviewRef.current) {
-                void window.klyro.interviewsUpdate({ id: interviewRef.current, notes: val })
-              }
-            }}
-          />
         </div>
       )}
 

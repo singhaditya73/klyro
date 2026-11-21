@@ -24,6 +24,14 @@ import {
   generateGoogleCalendarUrl,
   downloadIcsFile
 } from '../lib/calendar-scheduler'
+import {
+  CrmPlatform,
+  dispatchCrmDeal,
+  generateMailtoUri,
+  copyRichEmailToClipboard,
+  getSavedCrmConfig,
+  saveCrmConfig
+} from '../lib/crm-dispatch'
 import type { MeetingCrmNotes } from '@shared/types'
 
 export interface GtmDispatchModalProps {
@@ -65,6 +73,13 @@ export function GtmDispatchModal({
   const [dealNextSteps, setDealNextSteps] = useState(
     crmNotes.actionItems[0]?.task || 'Schedule technical architecture deep dive'
   )
+
+  // Direct CRM Webhook Dispatch State
+  const [crmPlatform, setCrmPlatform] = useState<CrmPlatform>(() => getSavedCrmConfig().platform)
+  const [crmWebhookUrl, setCrmWebhookUrl] = useState(() => getSavedCrmConfig().webhookUrl)
+  const [crmDispatching, setCrmDispatching] = useState(false)
+  const [crmStatusMessage, setCrmStatusMessage] = useState<string | null>(null)
+  const [copiedRichEmail, setCopiedRichEmail] = useState(false)
 
   // 2. Email State
   const [emailEnabled, setEmailEnabled] = useState(true)
@@ -444,6 +459,81 @@ export function GtmDispatchModal({
                     </div>
                   </div>
                 )}
+
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border-subtle, rgba(255,255,255,0.06))' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      Direct CRM Webhook Destination:
+                    </span>
+                    {crmStatusMessage && (
+                      <span style={{ fontSize: 11, color: 'var(--accent, #38bdf8)' }}>
+                        {crmStatusMessage}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <select
+                      className="input input--sm"
+                      style={{ width: 140 }}
+                      value={crmPlatform}
+                      onChange={(e) => {
+                        const plat = e.target.value as CrmPlatform
+                        setCrmPlatform(plat)
+                        saveCrmConfig(plat, crmWebhookUrl)
+                      }}
+                      aria-label="CRM Platform Destination"
+                    >
+                      <option value="hubspot">HubSpot</option>
+                      <option value="salesforce">Salesforce</option>
+                      <option value="notion">Notion</option>
+                      <option value="webhook">Custom Webhook</option>
+                    </select>
+                    <input
+                      className="input input--sm"
+                      style={{ flex: 1 }}
+                      placeholder={`Paste ${crmPlatform.toUpperCase()} webhook endpoint URL...`}
+                      value={crmWebhookUrl}
+                      onChange={(e) => {
+                        setCrmWebhookUrl(e.target.value)
+                        saveCrmConfig(crmPlatform, e.target.value)
+                      }}
+                      aria-label="CRM Webhook URL"
+                    />
+                    <button
+                      type="button"
+                      className="btn btn--quiet btn--xs"
+                      disabled={crmDispatching || !crmWebhookUrl.trim()}
+                      onClick={async () => {
+                        setCrmDispatching(true)
+                        setCrmStatusMessage(null)
+                        try {
+                          const res = await dispatchCrmDeal(
+                            { platform: crmPlatform, webhookUrl: crmWebhookUrl },
+                            {
+                              company,
+                              dealName,
+                              dealStage,
+                              dealAmount,
+                              dealCloseDate,
+                              dealNextSteps,
+                              executiveSummary: crmNotes.executiveSummary,
+                              keyDecisions: crmNotes.keyDecisions,
+                              actionItems: crmNotes.actionItems
+                            }
+                          )
+                          setCrmStatusMessage(res.success ? `✓ HTTP ${res.statusCode} Dispatched` : `Status: ${res.statusCode}`)
+                        } catch (err) {
+                          setCrmStatusMessage('Failed: ' + (err instanceof Error ? err.message : String(err)))
+                        } finally {
+                          setCrmDispatching(false)
+                        }
+                      }}
+                    >
+                      {crmDispatching ? <Loader2 className="icon icon--xs spin" /> : <Send className="icon icon--xs" />}
+                      <span>Dispatch Now</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -459,6 +549,7 @@ export function GtmDispatchModal({
                 />
                 <Mail className="icon icon--xs" style={{ color: 'var(--accent)' }} />
                 <span className="gtm-card-heading">2. Executive Follow-up Email</span>
+                <Badge tone="accent">Ghost Draft Active</Badge>
               </label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 {dispatchResults?.email && (
@@ -471,22 +562,45 @@ export function GtmDispatchModal({
                     <button
                       type="button"
                       className="btn btn--quiet btn--xs"
-                      onClick={() => void copyToClipboard(emailBody, 'email')}
+                      onClick={async () => {
+                        const ok = await copyRichEmailToClipboard({
+                          to: emailTo,
+                          subject: emailSubject,
+                          bodyText: emailBody,
+                          company,
+                          keyDecisions: crmNotes.keyDecisions,
+                          actionItems: crmNotes.actionItems
+                        })
+                        if (ok) {
+                          setCopiedRichEmail(true)
+                          setTimeout(() => setCopiedRichEmail(false), 2000)
+                        } else {
+                          void copyToClipboard(emailBody, 'email')
+                        }
+                      }}
+                      title="Copy rich HTML formatted email for Gmail or Outlook"
                     >
-                      {copiedSection === 'email' ? (
+                      {copiedRichEmail ? (
                         <Check className="icon icon--xs" style={{ color: 'var(--status-ok)' }} />
                       ) : (
                         <Copy className="icon icon--xs" />
                       )}
-                      <span>{copiedSection === 'email' ? 'Copied' : 'Copy'}</span>
+                      <span>{copiedRichEmail ? 'HTML Copied' : 'Copy Rich HTML'}</span>
                     </button>
                     <a
-                      href={`mailto:${encodeURIComponent(emailTo)}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`}
+                      href={generateMailtoUri({
+                        to: emailTo,
+                        subject: emailSubject,
+                        bodyText: emailBody,
+                        company,
+                        keyDecisions: crmNotes.keyDecisions,
+                        actionItems: crmNotes.actionItems
+                      })}
                       className="btn btn--quiet btn--xs"
-                      title="Open in default mail client"
+                      title="Open directly in default desktop mail client"
                     >
                       <ExternalLink className="icon icon--xs" />
-                      <span>Mail App</span>
+                      <span>Open in Mailbox</span>
                     </a>
                     <button
                       type="button"
@@ -841,6 +955,81 @@ export function GtmDispatchModal({
                     </div>
                   </div>
                 )}
+
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border-subtle, rgba(255,255,255,0.06))' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      Direct CRM Webhook Destination:
+                    </span>
+                    {crmStatusMessage && (
+                      <span style={{ fontSize: 11, color: 'var(--accent, #38bdf8)' }}>
+                        {crmStatusMessage}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <select
+                      className="input input--sm"
+                      style={{ width: 140 }}
+                      value={crmPlatform}
+                      onChange={(e) => {
+                        const plat = e.target.value as CrmPlatform
+                        setCrmPlatform(plat)
+                        saveCrmConfig(plat, crmWebhookUrl)
+                      }}
+                      aria-label="CRM Platform Destination"
+                    >
+                      <option value="hubspot">HubSpot</option>
+                      <option value="salesforce">Salesforce</option>
+                      <option value="notion">Notion</option>
+                      <option value="webhook">Custom Webhook</option>
+                    </select>
+                    <input
+                      className="input input--sm"
+                      style={{ flex: 1 }}
+                      placeholder={`Paste ${crmPlatform.toUpperCase()} webhook endpoint URL...`}
+                      value={crmWebhookUrl}
+                      onChange={(e) => {
+                        setCrmWebhookUrl(e.target.value)
+                        saveCrmConfig(crmPlatform, e.target.value)
+                      }}
+                      aria-label="CRM Webhook URL"
+                    />
+                    <button
+                      type="button"
+                      className="btn btn--quiet btn--xs"
+                      disabled={crmDispatching || !crmWebhookUrl.trim()}
+                      onClick={async () => {
+                        setCrmDispatching(true)
+                        setCrmStatusMessage(null)
+                        try {
+                          const res = await dispatchCrmDeal(
+                            { platform: crmPlatform, webhookUrl: crmWebhookUrl },
+                            {
+                              company,
+                              dealName,
+                              dealStage,
+                              dealAmount,
+                              dealCloseDate,
+                              dealNextSteps,
+                              executiveSummary: crmNotes.executiveSummary,
+                              keyDecisions: crmNotes.keyDecisions,
+                              actionItems: crmNotes.actionItems
+                            }
+                          )
+                          setCrmStatusMessage(res.success ? `✓ HTTP ${res.statusCode} Dispatched` : `Status: ${res.statusCode}`)
+                        } catch (err) {
+                          setCrmStatusMessage('Failed: ' + (err instanceof Error ? err.message : String(err)))
+                        } finally {
+                          setCrmDispatching(false)
+                        }
+                      }}
+                    >
+                      {crmDispatching ? <Loader2 className="icon icon--xs spin" /> : <Send className="icon icon--xs" />}
+                      <span>Dispatch Now</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>

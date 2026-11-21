@@ -6,7 +6,11 @@ import { logger } from './logger'
 import { diagnostics } from './diagnostics'
 import { secrets } from './security/secrets'
 import { isAllowedPermission, isTrustedRendererUrl, setPackagedRenderer } from './security/origins'
+import { enforceAntiTamperPolicy } from './security/anti-tamper'
 import { registerIpcHandlers } from './domains/ipc'
+
+// Enforce Anti-Debugging & Process Hijacking Prevention (Layer 4)
+enforceAntiTamperPolicy()
 import { registerShortcuts, unregisterShortcuts } from './domains/shortcuts'
 import { settingsDomain } from './domains/settings'
 import { applyTrayVisibility } from './domains/tray'

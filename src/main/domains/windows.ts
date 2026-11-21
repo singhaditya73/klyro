@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { BrowserWindow, app, screen, shell, nativeImage } from 'electron'
 import { KLYRO_ICON_DATA_URL } from '../assets'
 import { isExternalHttpUrl, isTrustedRendererUrl } from '../security/origins'
+import { protectWindowFromDevTools } from '../security/anti-tamper'
 import { diagnostics } from '../diagnostics'
 import { logger } from '../logger'
 import { settingsDomain } from './settings'
@@ -134,6 +135,7 @@ export function createMainWindow(options: { show?: boolean } = {}): BrowserWindo
     mainWindow.once('ready-to-show', () => mainWindow?.show())
   }
   applyMainWindowVisibility()
+  protectWindowFromDevTools(mainWindow)
   attachNavigationGuards(mainWindow)
   loadRoute(mainWindow, '/')
   mainWindow.on('closed', () => {
@@ -192,6 +194,7 @@ export function createOverlayWindow(): BrowserWindow {
   // to freely work across their desktop, IDE, or meeting notes while referencing answers.
   // Minimization and dismissal are handled explicitly via the overlay header buttons,
   // global hotkey, or Escape.
+  protectWindowFromDevTools(overlayWindow)
   attachNavigationGuards(overlayWindow)
   loadRoute(overlayWindow, 'overlay')
   overlayWindow.on('closed', () => {

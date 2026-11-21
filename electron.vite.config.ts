@@ -6,6 +6,7 @@ export default defineConfig({
   main: {
     build: {
       outDir: 'out/main',
+      sourcemap: false,
       rollupOptions: {
         input: { index: resolve(__dirname, 'src/main/index.ts') }
       }
@@ -17,6 +18,7 @@ export default defineConfig({
   preload: {
     build: {
       outDir: 'out/preload',
+      sourcemap: false,
       rollupOptions: {
         input: { index: resolve(__dirname, 'src/preload/index.ts') }
       }
@@ -29,6 +31,7 @@ export default defineConfig({
     root: resolve(__dirname, 'src/renderer'),
     build: {
       outDir: 'out/renderer',
+      sourcemap: false,
       rollupOptions: {
         input: { index: resolve(__dirname, 'src/renderer/index.html') }
       }
