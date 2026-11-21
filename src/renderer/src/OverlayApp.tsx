@@ -2237,8 +2237,8 @@ export default function OverlayApp() {
             }}
             title="Instant late-joiner briefing of missed context and active topic (Alt+U)"
           >
-            <Zap className="icon icon--xs" style={{ color: 'var(--accent)' }} aria-hidden="true" />
-            <span>Catch Me Up</span>
+            <Zap className="icon icon--xs" aria-hidden="true" />
+            <span>Catch-up</span>
           </button>
 
           <button
@@ -2263,10 +2263,10 @@ export default function OverlayApp() {
           >
             <Activity
               className="icon icon--xs"
-              style={{ color: hesitationRadarOn ? '#10b981' : 'var(--accent)' }}
+              style={{ color: hesitationRadarOn ? '#10b981' : undefined }}
               aria-hidden="true"
             />
-            <span>{hesitationRadarOn ? 'Radar: Active' : 'Hesitation Radar'}</span>
+            <span>{hesitationRadarOn ? 'Radar Active' : 'Pacing Radar'}</span>
           </button>
 
           <button
@@ -2282,10 +2282,10 @@ export default function OverlayApp() {
               setAnswer('')
               await askAssist(`The meeting attendee voiced this objection or point:\n"${recent}"\n\nProvide 2 tactful, persuasive, and professional ways to overcome this objection:`)
             }}
-            title="Instant diplomatic responses to customer objections or skepticism"
+            title="Diplomatic responses to customer objections or skepticism"
           >
-            <ShieldAlert className="icon icon--xs" style={{ color: 'var(--warning)' }} aria-hidden="true" />
-            <span>Objection Helper</span>
+            <ShieldAlert className="icon icon--xs" aria-hidden="true" />
+            <span>Objections</span>
           </button>
 
           <button
@@ -2298,7 +2298,7 @@ export default function OverlayApp() {
             title="Jot private notes live that automatically merge into the CRM recap"
           >
             <FileText className="icon icon--xs" aria-hidden="true" />
-            <span>{showScratchpad ? 'Hide Notes' : 'Live Notes'}</span>
+            <span>{showScratchpad ? 'Close Notes' : 'Notes'}</span>
             {scratchpadText.trim() && <span className="overlay__copilot-dot" aria-hidden="true" />}
           </button>
 
@@ -2312,9 +2312,9 @@ export default function OverlayApp() {
               }}
               title="Meeting Agenda Tracking"
             >
-              <Calendar className="icon icon--xs" style={{ color: 'var(--accent)' }} aria-hidden="true" />
+              <Calendar className="icon icon--xs" aria-hidden="true" />
               <span>
-                Agenda: {agendaItems.filter((i) => i.addressed).length}/{agendaItems.length}
+                Agenda ({agendaItems.filter((i) => i.addressed).length}/{agendaItems.length})
               </span>
             </button>
           )}
@@ -2338,7 +2338,7 @@ export default function OverlayApp() {
                 onClick={() => setDeckTab('battlecard')}
               >
                 <ShieldAlert className="icon icon--xs" style={{ color: '#eab308' }} />
-                <span>🛡️ {activeBattlecard.battlecard.title}</span>
+                <span>{activeBattlecard.battlecard.title}</span>
               </button>
             )}
             {showCatchUp && catchUpBriefing && (
@@ -2348,7 +2348,7 @@ export default function OverlayApp() {
                 onClick={() => setDeckTab('catchup')}
               >
                 <Zap className="icon icon--xs" style={{ color: '#3b82f6' }} />
-                <span>⚡ Catch-up</span>
+                <span>Catch-up</span>
               </button>
             )}
             {hesitationRadarOn && liveHesitation && (
@@ -2368,7 +2368,7 @@ export default function OverlayApp() {
                         : '#10b981'
                   }}
                 />
-                <span>📈 Radar ({liveHesitation.score}%)</span>
+                <span>Pacing ({liveHesitation.score}%)</span>
               </button>
             )}
             {showAgenda && agendaItems.length > 0 && (
@@ -2378,7 +2378,7 @@ export default function OverlayApp() {
                 onClick={() => setDeckTab('agenda')}
               >
                 <Calendar className="icon icon--xs" style={{ color: '#38bdf8' }} />
-                <span>📋 Agenda ({agendaItems.filter((i) => i.addressed).length}/{agendaItems.length})</span>
+                <span>Agenda ({agendaItems.filter((i) => i.addressed).length}/{agendaItems.length})</span>
               </button>
             )}
             {showScratchpad && (
@@ -2388,7 +2388,7 @@ export default function OverlayApp() {
                 onClick={() => setDeckTab('notes')}
               >
                 <FileText className="icon icon--xs" />
-                <span>📝 Notes</span>
+                <span>Notes</span>
               </button>
             )}
             <button
@@ -2410,67 +2410,68 @@ export default function OverlayApp() {
           </div>
           <div className="overlay__intelligence-body">
             {deckTab === 'battlecard' && activeBattlecard && (
-              <div className="overlay__battlecard-body">
-                <ul className="overlay__battlecard-points">
+              <div className="overlay__cue-card">
+                <div className="overlay__cue-header">
+                  <span className="overlay__cue-badge">Competitor Brief: {activeBattlecard.battlecard.title}</span>
+                </div>
+                <ul className="overlay__cue-bullets">
                   {activeBattlecard.battlecard.keyPoints.map((point, idx) => (
-                    <li key={idx} className="overlay__battlecard-point">
+                    <li key={idx} className="overlay__cue-bullet">
                       {point}
                     </li>
                   ))}
                 </ul>
                 {activeBattlecard.battlecard.trapQuestion && (
-                  <div className="overlay__battlecard-trap">
-                    <strong>Trap Question:</strong> {activeBattlecard.battlecard.trapQuestion}
+                  <div className="overlay__cue-meta-box">
+                    <span className="overlay__cue-meta-label">Trap question:</span> {activeBattlecard.battlecard.trapQuestion}
                   </div>
                 )}
               </div>
             )}
             {deckTab === 'catchup' && catchUpBriefing && (
-              <div className="overlay__catchup-body">
-                <div className="overlay__catchup-section">
-                  <div className="overlay__catchup-label">What You Missed</div>
-                  <div className="overlay__catchup-text">{catchUpBriefing.missedSummary}</div>
+              <div className="overlay__cue-card">
+                <div className="overlay__cue-header">
+                  <span className="overlay__cue-badge">Active: {catchUpBriefing.activeTopic.topic}</span>
+                  {catchUpBriefing.activeTopic.lastSpeaker && (
+                    <span className="overlay__cue-sub">Speaker: {catchUpBriefing.activeTopic.lastSpeaker}</span>
+                  )}
                 </div>
+
+                <div className="overlay__cue-lead">
+                  <span className="overlay__cue-lead-label">Suggested response</span>
+                  <div className="overlay__cue-lead-text">{catchUpBriefing.activeTopic.suggestedContribution}</div>
+                </div>
+
+                <div className="overlay__cue-context">
+                  <div className="overlay__cue-context-label">Context summary</div>
+                  <div className="overlay__cue-context-text">{catchUpBriefing.missedSummary}</div>
+                </div>
+
                 {catchUpBriefing.keyDecisions.length > 0 && (
-                  <div className="overlay__catchup-section">
-                    <div className="overlay__catchup-label">Settled Decisions</div>
-                    <ul className="overlay__catchup-decisions">
-                      {catchUpBriefing.keyDecisions.map((d, i) => (
-                        <li key={i} className="overlay__catchup-decision-item">
-                          {d}
-                        </li>
-                      ))}
-                    </ul>
+                  <div className="overlay__cue-decisions">
+                    <span className="overlay__cue-decisions-label">Settled:</span>
+                    <span className="overlay__cue-decisions-text">{catchUpBriefing.keyDecisions.join(' · ')}</span>
                   </div>
                 )}
-                <div className="overlay__catchup-active">
-                  <div className="overlay__catchup-label" style={{ color: 'var(--status-ok)' }}>
-                    Active Topic Right Now {catchUpBriefing.activeTopic.lastSpeaker ? `(${catchUpBriefing.activeTopic.lastSpeaker})` : ''}
-                  </div>
-                  <div className="overlay__catchup-text" style={{ fontWeight: 600 }}>
-                    {catchUpBriefing.activeTopic.topic}
-                  </div>
-                  <div className="overlay__catchup-suggestion">
-                    💡 <strong>Say this if asked:</strong> {catchUpBriefing.activeTopic.suggestedContribution}
-                  </div>
-                </div>
               </div>
             )}
             {deckTab === 'radar' && liveHesitation && (
-              <div className="overlay__radar-body">
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#f1f5f9' }}>
-                    {liveHesitation.level.toUpperCase()} CADENCE ({liveHesitation.score}% FRICTION INDEX) · {liveHesitation.topicCategory.toUpperCase()}
+              <div className="overlay__cue-card">
+                <div className="overlay__cue-header">
+                  <span className="overlay__cue-badge">
+                    {liveHesitation.level === 'hesitant' ? 'Buyer Pacing: Hesitant' :
+                     liveHesitation.level === 'guarded' ? 'Buyer Pacing: Guarded' :
+                     liveHesitation.level === 'decisive' ? 'Buyer Pacing: High Conviction' :
+                     'Buyer Pacing: Steady'}
                   </span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span className="overlay__hesitation-pill">{liveHesitation.speechRateWpm} WPM</span>
-                    {liveHesitation.fillerCount > 0 && (
-                      <span className="overlay__hesitation-pill">{liveHesitation.fillerCount} Disfluencies</span>
-                    )}
-                  </div>
+                  <span className="overlay__cue-sub">
+                    {liveHesitation.speechRateWpm} WPM · {liveHesitation.topicCategory}
+                  </span>
                 </div>
-                <div className="overlay__hesitation-cue">
-                  💡 <strong>Tactical Sales Cue:</strong> {liveHesitation.tacticalCue}
+
+                <div className="overlay__cue-lead">
+                  <span className="overlay__cue-lead-label">Recommended guidance</span>
+                  <div className="overlay__cue-lead-text">{liveHesitation.tacticalCue}</div>
                 </div>
               </div>
             )}
