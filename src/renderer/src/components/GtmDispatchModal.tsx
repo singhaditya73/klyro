@@ -466,7 +466,7 @@ export function GtmDispatchModal({
                       Direct CRM Webhook Destination:
                     </span>
                     {crmStatusMessage && (
-                      <span style={{ fontSize: 11, color: 'var(--accent, #38bdf8)' }}>
+                      <span style={{ fontSize: 11, color: 'var(--accent, #f97316)' }}>
                         {crmStatusMessage}
                       </span>
                     )}
@@ -962,7 +962,7 @@ export function GtmDispatchModal({
                       Direct CRM Webhook Destination:
                     </span>
                     {crmStatusMessage && (
-                      <span style={{ fontSize: 11, color: 'var(--accent, #38bdf8)' }}>
+                      <span style={{ fontSize: 11, color: 'var(--accent, #f97316)' }}>
                         {crmStatusMessage}
                       </span>
                     )}

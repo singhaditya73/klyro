@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
-import { Blocks, Brain, Clock, Cpu, Download, House, Keyboard, PanelLeft, Settings, ShieldCheck, Zap } from 'lucide-react'
+import { Blocks, Brain, Clock, Cpu, Download, House, PanelLeft, Settings, ShieldCheck, Zap } from 'lucide-react'
 import { useHashRoute, type Route } from './hooks/useHashRoute'
 import type { UpdateStatus } from '@shared/types'
 import KlyroMark from './assets/logo/klyro-mark.svg'
@@ -49,8 +49,6 @@ export default function App() {
   const [navOpen, setNavOpen] = useState(false)
   // A narrow window turns the sidebar into a drawer.
   const [narrow, setNarrow] = useState(() => window.innerWidth <= 980)
-  const [shortcut, setShortcut] = useState('CommandOrControl+Shift+Space')
-  const [version, setVersion] = useState<string | null>(null)
   const [update, setUpdate] = useState<UpdateStatus | null>(null)
 
   // The sidebar is always visible, so it is the one place that can say "an
@@ -106,17 +104,6 @@ export default function App() {
       media.removeEventListener('change', onChange)
       offSettings?.()
     }
-  }, [])
-
-  useEffect(() => {
-    void window.klyro
-      .getSettings()
-      .then((settings) => setShortcut(settings?.toggleShortcut || 'CommandOrControl+Shift+Space'))
-      .catch(() => undefined)
-    void window.klyro
-      .getAppInfo()
-      .then((info) => setVersion(info.version))
-      .catch(() => undefined)
   }, [])
 
   const go = useCallback(
@@ -190,11 +177,6 @@ export default function App() {
             <Zap className="icon icon--xs" aria-hidden="true" />
             <span>Quick ask</span>
           </button>
-          <div className="sidebar__version row" style={{ gap: 6 }}>
-            <Keyboard className="icon icon--xs" aria-hidden="true" />
-            <span>{shortcut}</span>
-          </div>
-          {version && <div className="sidebar__version">Klyro {version}</div>}
           {update?.phase === 'ready' && (
             <button
               className="btn btn--quiet btn--sm"

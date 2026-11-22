@@ -2367,7 +2367,7 @@ export default function OverlayApp() {
                       className={`overlay__intelligence-tab ${deckTab === 'catchup' ? 'overlay__intelligence-tab--active' : ''}`}
                       onClick={() => setDeckTab('catchup')}
                     >
-                      <Zap className="icon icon--xs" style={{ color: '#3b82f6' }} />
+                      <Zap className="icon icon--xs" style={{ color: '#f97316' }} />
                       <span>Catch-up</span>
                     </button>
                   )}
@@ -2397,7 +2397,7 @@ export default function OverlayApp() {
                       className={`overlay__intelligence-tab ${deckTab === 'agenda' ? 'overlay__intelligence-tab--active' : ''}`}
                       onClick={() => setDeckTab('agenda')}
                     >
-                      <Calendar className="icon icon--xs" style={{ color: '#38bdf8' }} />
+                      <Calendar className="icon icon--xs" style={{ color: '#fb923c' }} />
                       <span>Agenda ({agendaItems.filter((i) => i.addressed).length}/{agendaItems.length})</span>
                     </button>
                   )}

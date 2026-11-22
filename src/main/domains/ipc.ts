@@ -186,7 +186,7 @@ export function registerIpcHandlers(): void {
     }
     if ('showTray' in parsed) applyTrayVisibility()
     if ('hideFromTaskbar' in parsed) applyMainWindowVisibility()
-    if ('toggleShortcut' in parsed || 'panicShortcut' in parsed) registerShortcuts()
+    if ('toggleShortcut' in parsed || 'panicShortcut' in parsed || 'ghostShortcut' in parsed) registerShortcuts()
     if ('overlayPrivateMode' in parsed) applyOverlayPrivateMode()
     if ('overlayOpacity' in parsed) applyOverlayOpacity()
     if ('overlayDisplay' in parsed) applyOverlayDisplay()

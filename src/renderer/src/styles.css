@@ -49,8 +49,8 @@
   --success-soft: rgba(16, 185, 129, 0.12);
   --warning: #f59e0b;
   --warning-soft: rgba(245, 158, 11, 0.12);
-  --info: #38bdf8;
-  --info-soft: rgba(56, 189, 248, 0.12);
+  --info: #fb923c;
+  --info-soft: rgba(251, 146, 60, 0.12);
 
   --focus-ring: #f97316;
   --focus-ring-soft: rgba(249, 115, 22, 0.2);
@@ -5337,7 +5337,7 @@ button.pill:hover {
 }
 
 .overlay__capsule-dot--hearing {
-  background: #38bdf8;
+  background: #fb923c;
 }
 
 .overlay__capsule-dot--thinking {
@@ -5762,4 +5762,21 @@ button.pill:hover {
 .overlay__cue-meta-label {
   font-weight: 600;
   color: #e2e8f0;
+}
+
+/* ---------- Global Hotkey Recorder Component ---------- */
+.hotkey-card:hover {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  background: rgba(255, 255, 255, 0.035) !important;
+}
+
+.hotkey-card--recording {
+  border-color: var(--accent, #f97316) !important;
+  box-shadow: 0 0 12px rgba(249, 115, 22, 0.15) !important;
+}
+
+@keyframes hotkeyPulse {
+  0% { transform: scale(0.95); opacity: 0.6; }
+  50% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.6; }
 }

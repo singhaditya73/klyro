@@ -523,7 +523,7 @@ export function HomeView({ onNavigate }: { onNavigate: (route: Route) => void })
                   style={{
                     fontSize: 16,
                     fontWeight: 700,
-                    color: totalSpend > 0 ? '#38bdf8' : 'var(--text-primary)',
+                    color: totalSpend > 0 ? '#f97316' : 'var(--text-primary)',
                     fontVariantNumeric: 'tabular-nums',
                     marginTop: 3
                   }}
@@ -599,7 +599,7 @@ export function HomeView({ onNavigate }: { onNavigate: (route: Route) => void })
                         </div>
                       </div>
                       <div className="list__actions" style={{ textAlign: 'right' }}>
-                        <span style={{ fontSize: 12, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: spend > 0 ? '#38bdf8' : 'var(--text-muted)' }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: spend > 0 ? '#f97316' : 'var(--text-muted)' }}>
                           {spend > 0 ? formatSpend(spend) : 'Free'}
                         </span>
                       </div>

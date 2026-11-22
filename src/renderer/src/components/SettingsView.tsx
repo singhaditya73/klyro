@@ -19,6 +19,7 @@ import {
 import type { AppSettings, PermissionState, ProviderStatus } from '@shared/types'
 import { Badge, Group, Hint, PageHeader, SettingRow, StatusDot } from './ui'
 import { AudioDeviceMeter } from './AudioDeviceMeter'
+import { HotkeyRecorder } from './HotkeyRecorder'
 import { UpdateCard } from './UpdateCard'
 import { providerState } from '../lib/providers'
 import type { Route } from '../hooks/useHashRoute'
@@ -73,7 +74,7 @@ function UsageSection(): React.ReactNode {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 16 }}>
             <div style={{ background: 'var(--bg-surface-elevated, #161922)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '12px 14px' }}>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Estimated Spend</div>
-              <div style={{ fontSize: 20, fontWeight: 700, color: totalSpend > 0 ? '#38bdf8' : '#34d399', marginTop: 4 }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: totalSpend > 0 ? '#f97316' : 'var(--text-primary)', marginTop: 4 }}>
                 ${totalSpend.toFixed(3)}
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-disabled)', marginTop: 2 }}>USD BYOK usage</div>
@@ -109,7 +110,7 @@ function UsageSection(): React.ReactNode {
                       {isFree ? (
                         <Badge tone="ok">100% Free / Local</Badge>
                       ) : (
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: '#38bdf8' }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: '#f97316' }}>
                           ${spend.toFixed(4)}
                         </span>
                       )}
@@ -272,6 +273,9 @@ export function SettingsView({ onNavigate }: { onNavigate: (route: Route) => voi
   const patch = useCallback(async (next: Partial<AppSettings>): Promise<void> => {
     const updated = await window.klyro.updateSettings(next)
     setSettings(updated)
+    if ('toggleShortcut' in next || 'panicShortcut' in next || 'ghostShortcut' in next) {
+      void window.klyro.shortcutStatus().then(setShortcuts).catch(() => undefined)
+    }
     // The theme is applied to <html>; apply it the moment it changes so the
     // switch feels instant instead of waiting for a restart.
     if (next.theme) {
@@ -367,200 +371,179 @@ export function SettingsView({ onNavigate }: { onNavigate: (route: Route) => voi
           )}
 
           {section === 'desktop' && (
-            <Group title="Desktop" description="How Klyro starts, and how the overlay behaves.">
-              <SettingRow label="Launch Klyro at login" hint="Starts the hotkey and the overlay when you sign in.">
-                <input
-                  type="checkbox"
-                  checked={settings.launchAtLogin}
-                  onChange={(event) => void patch({ launchAtLogin: event.target.checked })}
-                />
-              </SettingRow>
-              <SettingRow label="Quick-ask shortcut" hint="Opens the overlay from anywhere." stacked>
-                <input
-                  value={settings.toggleShortcut}
-                  onChange={(event) =>
-                    void patch({ toggleShortcut: event.target.value }).then(() =>
-                      window.klyro.shortcutStatus().then(setShortcuts).catch(() => undefined)
-                    )
-                  }
-                />
-              </SettingRow>
-              <SettingRow
-                label={`Overlay visibility — ${settings.overlayOpacity === 100 ? 'solid' : `${settings.overlayOpacity}% opacity`}`}
-                hint="How see-through the overlay is. Capture exclusion (Private mode) is unaffected. The top bar and the wordmark are drag handles."
+            <>
+              <Group
+                title="Global Shortcuts & Hotkeys"
+                description="Control Klyro instantly from any app without taking your hands off the keyboard. Click any hotkey to record new keys."
               >
-                <input
-                  type="range"
-                  min={20}
-                  max={100}
-                  step={5}
-                  value={settings.overlayOpacity}
-                  onChange={(event) => void patch({ overlayOpacity: Number(event.target.value) })}
-                  aria-label="Overlay window opacity percentage"
-                />
-              </SettingRow>
-              <SettingRow
-                label="Overlay screen"
-                hint="With two screens, put the overlay on the one you are not sharing: the meeting cannot show what is not in the shared framebuffer."
-              >
-                <select
-                  value={String(settings.overlayDisplay)}
-                  onChange={(event) => {
-                    const raw = event.target.value
-                    void patch({ overlayDisplay: raw === 'primary' ? 'primary' : Number(raw) })
-                  }}
-                >
-                  <option value="primary">Primary screen</option>
-                  {displays.map((display) => (
-                    <option key={display.index} value={String(display.index)}>
-                      {display.label}
-                      {display.primary ? ' (primary)' : ''} — {display.bounds.width}×{display.bounds.height}
-                    </option>
-                  ))}
-                </select>
-              </SettingRow>
-              <SettingRow
-                label="Instant replay"
-                hint="The same question about an unchanged screen comes back instantly, labelled as a replay. The cache expires after 15 minutes and is stored locally."
-              >
-                <input
-                  type="checkbox"
-                  checked={settings.overlayAnswerCache}
-                  onChange={(event) => void patch({ overlayAnswerCache: event.target.checked })}
-                />
-              </SettingRow>
-              <SettingRow
-                label="Fall back to another provider"
-                hint="Off by default. When the chosen provider is slow or fails, the overlay may answer through another provider. Leaving this off means your question and screen go only to the provider you picked. Local Ollama is always used as a fallback because it runs on this machine."
-              >
-                <input
-                  type="checkbox"
-                  checked={settings.allowHostedFallback}
-                  onChange={(event) => void patch({ allowHostedFallback: event.target.checked })}
-                />
-              </SettingRow>
-              <SettingRow
-                label="Ghost Phone on local network"
-                hint="Off by default. The phone HUD carries live meeting content, so it listens only on this machine until you turn this on. On a public or shared Wi-Fi network, prefer a hotspot you control."
-              >
-                <input
-                  type="checkbox"
-                  checked={settings.remoteHudLan}
-                  onChange={(event) => void patch({ remoteHudLan: event.target.checked })}
-                />
-              </SettingRow>
-              <SettingRow
-                label="Ask for screen permission at launch"
-                hint="Off by default. macOS raises a one-time prompt the first time anything captures the screen; capturing on demand means it appears when you click capture, not when Klyro starts. Turn this on only if you would rather answer it before a call. Windows never asks per capture; on Linux this has no effect."
-              >
-                <input
-                  type="checkbox"
-                  checked={settings.screenPreWarm}
-                  onChange={(event) => void patch({ screenPreWarm: event.target.checked })}
-                />
-              </SettingRow>
-              <SettingRow label="Welcome tour" hint="Show the introduction again.">
-                <button className="btn btn--ghost btn--sm" onClick={() => void patch({ onboardingComplete: false })}>
-                  <Sparkles className="icon icon--xs" aria-hidden="true" />
-                  <span>Show it again</span>
-                </button>
-              </SettingRow>
-            </Group>
-          )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <HotkeyRecorder
+                    label="Toggle Overlay / Quick-Ask"
+                    description="Brings up or focuses the AI assistant overlay over your meeting or active window."
+                    value={settings.toggleShortcut}
+                    defaultValue="CommandOrControl+Shift+Space"
+                    isRegistered={shortcuts.find((s) => s.kind === 'toggle')?.registered ?? true}
+                    onChange={(val) => void patch({ toggleShortcut: val })}
+                  />
 
-          {section === 'desktop' && (
-            <Group
-              title="Running quietly"
-              description="What the desktop shows while Klyro is open. None of this changes what the operating system sees: the process is still there, still named Klyro, and still in Task Manager and System Monitor."
-            >
-              <SettingRow
-                label="Tray icon"
-                hint="Off removes the icon from the tray and the menu bar. The quick-ask shortcut still opens the overlay, and launching Klyro again brings this window back."
+                  <HotkeyRecorder
+                    label="Ghost / Click-Through Mode"
+                    description="Makes the overlay faint and click-through so mouse events pass directly to the window underneath."
+                    value={settings.ghostShortcut}
+                    defaultValue="CommandOrControl+Shift+G"
+                    isRegistered={shortcuts.find((s) => s.kind === 'ghost')?.registered ?? true}
+                    onChange={(val) => void patch({ ghostShortcut: val })}
+                  />
+
+                  <HotkeyRecorder
+                    label="Emergency Panic Hide"
+                    description="Instantly vanishes the overlay and all windows from the screen without closing your session."
+                    value={settings.panicShortcut}
+                    defaultValue="CommandOrControl+Shift+H"
+                    isRegistered={shortcuts.find((s) => s.kind === 'hide')?.registered ?? true}
+                    onChange={(val) => void patch({ panicShortcut: val })}
+                  />
+                </div>
+              </Group>
+
+              <Group title="Desktop & Overlay" description="How Klyro starts, where the overlay renders, and in-call behavior.">
+                <SettingRow label="Launch Klyro at login" hint="Starts the hotkey and the overlay when you sign in.">
+                  <input
+                    type="checkbox"
+                    checked={settings.launchAtLogin}
+                    onChange={(event) => void patch({ launchAtLogin: event.target.checked })}
+                  />
+                </SettingRow>
+                <SettingRow
+                  label={`Overlay visibility — ${settings.overlayOpacity === 100 ? 'solid' : `${settings.overlayOpacity}% opacity`}`}
+                  hint="How see-through the overlay is. Capture exclusion (Private mode) is unaffected. The top bar and the wordmark are drag handles."
+                >
+                  <input
+                    type="range"
+                    min={20}
+                    max={100}
+                    step={5}
+                    value={settings.overlayOpacity}
+                    onChange={(event) => void patch({ overlayOpacity: Number(event.target.value) })}
+                    aria-label="Overlay window opacity percentage"
+                  />
+                </SettingRow>
+                <SettingRow
+                  label="Overlay screen"
+                  hint="With two screens, put the overlay on the one you are not sharing: the meeting cannot show what is not in the shared framebuffer."
+                >
+                  <select
+                    value={String(settings.overlayDisplay)}
+                    onChange={(event) => {
+                      const raw = event.target.value
+                      void patch({ overlayDisplay: raw === 'primary' ? 'primary' : Number(raw) })
+                    }}
+                  >
+                    <option value="primary">Primary screen</option>
+                    {displays.map((display) => (
+                      <option key={display.index} value={String(display.index)}>
+                        {display.label}
+                        {display.primary ? ' (primary)' : ''} — {display.bounds.width}×{display.bounds.height}
+                      </option>
+                    ))}
+                  </select>
+                </SettingRow>
+                <SettingRow
+                  label="Instant replay"
+                  hint="The same question about an unchanged screen comes back instantly, labelled as a replay. The cache expires after 15 minutes and is stored locally."
+                >
+                  <input
+                    type="checkbox"
+                    checked={settings.overlayAnswerCache}
+                    onChange={(event) => void patch({ overlayAnswerCache: event.target.checked })}
+                  />
+                </SettingRow>
+                <SettingRow
+                  label="Fall back to another provider"
+                  hint="Off by default. When the chosen provider is slow or fails, the overlay may answer through another provider. Leaving this off means your question and screen go only to the provider you picked. Local Ollama is always used as a fallback because it runs on this machine."
+                >
+                  <input
+                    type="checkbox"
+                    checked={settings.allowHostedFallback}
+                    onChange={(event) => void patch({ allowHostedFallback: event.target.checked })}
+                  />
+                </SettingRow>
+                <SettingRow
+                  label="Ghost Phone on local network"
+                  hint="Off by default. The phone HUD carries live meeting content, so it listens only on this machine until you turn this on. On a public or shared Wi-Fi network, prefer a hotspot you control."
+                >
+                  <input
+                    type="checkbox"
+                    checked={settings.remoteHudLan}
+                    onChange={(event) => void patch({ remoteHudLan: event.target.checked })}
+                  />
+                </SettingRow>
+                <SettingRow
+                  label="Ask for screen permission at launch"
+                  hint="Off by default. macOS raises a one-time prompt the first time anything captures the screen; capturing on demand means it appears when you click capture, not when Klyro starts. Turn this on only if you would rather answer it before a call. Windows never asks per capture; on Linux this has no effect."
+                >
+                  <input
+                    type="checkbox"
+                    checked={settings.screenPreWarm}
+                    onChange={(event) => void patch({ screenPreWarm: event.target.checked })}
+                  />
+                </SettingRow>
+                <SettingRow label="Welcome tour" hint="Show the introduction again.">
+                  <button className="btn btn--ghost btn--sm" onClick={() => void patch({ onboardingComplete: false })}>
+                    <Sparkles className="icon icon--xs" aria-hidden="true" />
+                    <span>Show it again</span>
+                  </button>
+                </SettingRow>
+              </Group>
+
+              <Group
+                title="Running quietly"
+                description="What the desktop shows while Klyro is open. None of this changes what the operating system sees: the process is still there, still named Klyro, and still in Task Manager and System Monitor."
               >
-                <input
-                  type="checkbox"
-                  checked={settings.showTray}
-                  onChange={(event) => void patch({ showTray: event.target.checked })}
-                />
-              </SettingRow>
-              <SettingRow
-                label="Keep this window out of the taskbar"
-                hint="Removes the taskbar button on Windows and Linux, and the Dock icon on macOS. The window still opens on screen while you are using it."
-              >
-                <input
-                  type="checkbox"
-                  checked={settings.hideFromTaskbar}
-                  onChange={(event) => void patch({ hideFromTaskbar: event.target.checked })}
-                />
-              </SettingRow>
-              <SettingRow
-                label="Hide everything shortcut"
-                hint="Instantly hides the overlay and this window. The process keeps running — a fast way off the screen, not a way out of the process list. Leave empty to turn it off."
-                stacked
-              >
-                <input
-                  value={settings.panicShortcut}
-                  placeholder="CommandOrControl+Shift+H"
-                  onChange={(event) =>
-                    void patch({ panicShortcut: event.target.value }).then(() =>
-                      window.klyro.shortcutStatus().then(setShortcuts).catch(() => undefined)
-                    )
-                  }
-                />
-              </SettingRow>
-              <SettingRow
-                label="Ghost mode shortcut"
-                hint="Toggles click-through mode: the overlay stays visible but faint, and mouse clicks reach the app underneath. Leave empty to turn it off."
-                stacked
-              >
-                <input
-                  value={settings.ghostShortcut}
-                  placeholder="CommandOrControl+Shift+G"
-                  onChange={(event) =>
-                    void patch({ ghostShortcut: event.target.value }).then(() =>
-                      window.klyro.shortcutStatus().then(setShortcuts).catch(() => undefined)
-                    )
-                  }
-                />
-              </SettingRow>
-              <SettingRow
-                label="Local-only network (airgap)"
-                hint="Refuses every hosted provider request, so only models on this machine (Ollama, LM Studio, the local daemon) can answer. Meeting audio and documents then never leave the device."
-              >
-                <input
-                  type="checkbox"
-                  checked={settings.airgap === true}
-                  onChange={(event) => {
-                    const next = event.target.checked
-                    void patch({ airgap: next }).then(() => window.klyro.setAirgap(next))
-                  }}
-                />
-              </SettingRow>
-              <SettingRow
-                label="Quit Klyro"
-                hint="With the tray icon off, this is how you stop the app without opening the task manager."
-              >
-                <button className="btn btn--ghost btn--sm" onClick={() => void window.klyro.quitApp()}>
-                  <Power className="icon icon--xs" aria-hidden="true" />
-                  <span>Quit</span>
-                </button>
-              </SettingRow>
-              {shortcuts
-                .filter((shortcut) => !shortcut.registered)
-                .map((shortcut) => (
-                  <Hint key={shortcut.kind}>
-                    <AlertCircle className="icon icon--xs" aria-hidden="true" />{' '}
-                    {shortcut.kind === 'toggle'
-                      ? 'The quick-ask'
-                      : shortcut.kind === 'ghost'
-                        ? 'The ghost-mode'
-                        : 'The hide-everything'}{' '}
-                    shortcut{' '}
-                    <code>{shortcut.accelerator || '—'}</code> could not be registered — another app is probably
-                    using it. Pick a different combination, or the key will do nothing.
-                  </Hint>
-                ))}
-            </Group>
+                <SettingRow
+                  label="Tray icon"
+                  hint="Off removes the icon from the tray and the menu bar. The quick-ask shortcut still opens the overlay, and launching Klyro again brings this window back."
+                >
+                  <input
+                    type="checkbox"
+                    checked={settings.showTray}
+                    onChange={(event) => void patch({ showTray: event.target.checked })}
+                  />
+                </SettingRow>
+                <SettingRow
+                  label="Keep this window out of the taskbar"
+                  hint="Removes the taskbar button on Windows and Linux, and the Dock icon on macOS. The window still opens on screen while you are using it."
+                >
+                  <input
+                    type="checkbox"
+                    checked={settings.hideFromTaskbar}
+                    onChange={(event) => void patch({ hideFromTaskbar: event.target.checked })}
+                  />
+                </SettingRow>
+                <SettingRow
+                  label="Local-only network (airgap)"
+                  hint="Refuses every hosted provider request, so only models on this machine (Ollama, LM Studio, the local daemon) can answer. Meeting audio and documents then never leave the device."
+                >
+                  <input
+                    type="checkbox"
+                    checked={settings.airgap === true}
+                    onChange={(event) => {
+                      const next = event.target.checked
+                      void patch({ airgap: next }).then(() => window.klyro.setAirgap(next))
+                    }}
+                  />
+                </SettingRow>
+                <SettingRow
+                  label="Quit Klyro"
+                  hint="With the tray icon off, this is how you stop the app without opening the task manager."
+                >
+                  <button className="btn btn--ghost btn--sm" onClick={() => void window.klyro.quitApp()}>
+                    <Power className="icon icon--xs" aria-hidden="true" />
+                    <span>Quit</span>
+                  </button>
+                </SettingRow>
+              </Group>
+            </>
           )}
 
           {section === 'screen' && (

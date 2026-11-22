@@ -355,7 +355,7 @@ function renderMobileHtml(): string {
       gap: 8px;
       font-weight: 700;
       font-size: 16px;
-      color: #38bdf8;
+      color: #f97316;
       letter-spacing: -0.3px;
     }
     .badge {
@@ -433,8 +433,8 @@ function renderMobileHtml(): string {
       padding: 13px;
       border: 0;
       border-radius: 10px;
-      background: #38bdf8;
-      color: #04121c;
+      background: #f97316;
+      color: #ffffff;
       font-size: 15px;
       font-weight: 700;
     }

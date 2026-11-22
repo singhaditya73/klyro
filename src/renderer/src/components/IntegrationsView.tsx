@@ -404,9 +404,9 @@ export function IntegrationsView(): React.ReactNode {
                               display: 'inline-flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              color: '#38bdf8',
-                              background: showIcalHelp ? 'rgba(56, 189, 248, 0.22)' : 'rgba(56, 189, 248, 0.1)',
-                              border: '1px solid rgba(56, 189, 248, 0.35)',
+                              color: '#f97316',
+                              background: showIcalHelp ? 'rgba(249, 115, 22, 0.22)' : 'rgba(249, 115, 22, 0.1)',
+                              border: '1px solid rgba(249, 115, 22, 0.35)',
                               cursor: 'pointer',
                               flexShrink: 0,
                               transition: 'all 0.15s ease'
