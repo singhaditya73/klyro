@@ -68,42 +68,9 @@ export default function App() {
     }
   }, [])
 
-  // Theme: 'system' follows the OS, the others are explicit. The attribute is
-  // applied to <html> so the whole design system flips in one paint.
+  // Klyro is permanently dark-mode first across all platforms and windows.
   useEffect(() => {
-    let cancelled = false
-    const media = window.matchMedia('(prefers-color-scheme: light)')
-    const apply = (theme: 'system' | 'dark' | 'light'): void => {
-      if (cancelled) return
-      const resolved = theme === 'system' ? (media.matches ? 'light' : 'dark') : theme
-      document.documentElement.dataset.theme = resolved
-    }
-    void window.klyro
-      .getSettings()
-      .then((settings) => apply(settings?.theme ?? 'dark'))
-      .catch(() => apply('dark'))
-    const onChange = (): void => {
-      void window.klyro
-        .getSettings()
-        .then((settings) => apply(settings?.theme ?? 'dark'))
-        .catch(() => undefined)
-    }
-    media.addEventListener('change', onChange)
-    // A change made in another window (or by the user in Settings) must show
-    // up here without a restart.
-    // A preload that is a build behind does not have this method: the app
-    // still works, it just does not follow the change until it is reopened.
-    const offSettings = window.klyro.onSettingsChanged?.(() => {
-      void window.klyro
-        .getSettings()
-        .then((settings) => apply(settings?.theme ?? 'system'))
-        .catch(() => undefined)
-    })
-    return () => {
-      cancelled = true
-      media.removeEventListener('change', onChange)
-      offSettings?.()
-    }
+    document.documentElement.dataset.theme = 'dark'
   }, [])
 
   const go = useCallback(

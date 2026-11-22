@@ -2,6 +2,13 @@
 
 All notable changes to Klyro are recorded here. Versions follow [SemVer](https://semver.org/).
 
+## [0.9.34] — 2026-11-22
+
+Permanent Dark Mode Lock across all windows and platforms.
+
+### Changed
+- **Locked Dark Warm Obsidian Mode.** Made dark mode permanent across all windows, matching pro desktop apps like Spotify and Discord. Removed the legacy light mode CSS overrides and cleaned up the redundant Theme dropdown in Settings.
+
 ## [0.9.33] — 2026-11-22
 
 Frameless modern window polish and default Dark Warm Obsidian theme lock.

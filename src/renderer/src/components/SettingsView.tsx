@@ -276,17 +276,6 @@ export function SettingsView({ onNavigate }: { onNavigate: (route: Route) => voi
     if ('toggleShortcut' in next || 'panicShortcut' in next || 'ghostShortcut' in next) {
       void window.klyro.shortcutStatus().then(setShortcuts).catch(() => undefined)
     }
-    // The theme is applied to <html>; apply it the moment it changes so the
-    // switch feels instant instead of waiting for a restart.
-    if (next.theme) {
-      const resolved =
-        next.theme === 'system'
-          ? window.matchMedia('(prefers-color-scheme: light)').matches
-            ? 'light'
-            : 'dark'
-          : next.theme
-      document.documentElement.dataset.theme = resolved
-    }
   }, [])
 
   if (loadError) {
@@ -358,13 +347,6 @@ export function SettingsView({ onNavigate }: { onNavigate: (route: Route) => voi
                   <option value="concise">Concise</option>
                   <option value="balanced">Balanced</option>
                   <option value="detailed">Detailed</option>
-                </select>
-              </SettingRow>
-              <SettingRow label="Theme" hint="System follows the operating system.">
-                <select value={settings.theme} onChange={(event) => void patch({ theme: event.target.value as AppSettings['theme'] })}>
-                  <option value="system">System</option>
-                  <option value="dark">Dark</option>
-                  <option value="light">Light</option>
                 </select>
               </SettingRow>
             </Group>
