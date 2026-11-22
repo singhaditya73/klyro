@@ -3,13 +3,8 @@ import { motion } from 'framer-motion'
 import {
   AlertCircle,
   Blocks,
-  Briefcase,
-  Calendar,
   Check,
   CheckCircle2,
-  Database,
-  GitBranch,
-  HardDrive,
   Info,
   Loader2,
   Mail,
@@ -22,6 +17,8 @@ import {
   Trash2
 } from 'lucide-react'
 import { Badge, EmptyState, Group, PageHeader } from './ui'
+import { BrandIcon } from './BrandIcon'
+import { WebhookPayloadPreview } from './WebhookPayloadPreview'
 import type { DirectIntegrations, MCPServerState } from '@shared/types'
 
 const PRESET_MCP_SERVERS = [
@@ -30,28 +27,28 @@ const PRESET_MCP_SERVERS = [
     command: 'npx',
     args: ['-y', '@modelcontextprotocol/server-slack'],
     description: 'Post meeting summaries, thread updates, and action items directly to Slack channels.',
-    icon: Share2
+    brand: 'slack'
   },
   {
     name: 'GitHub MCP Server',
     command: 'npx',
     args: ['-y', '@modelcontextprotocol/server-github'],
     description: 'Create pull requests, file repository issues from meeting deliverables, and review code.',
-    icon: GitBranch
+    brand: 'github'
   },
   {
     name: 'Google Drive & Docs MCP',
     command: 'npx',
     args: ['-y', '@modelcontextprotocol/server-gdrive'],
     description: 'Search corporate Google Drive documents and sync meeting notes directly into Google Docs.',
-    icon: HardDrive
+    brand: 'google'
   },
   {
     name: 'PostgreSQL Database MCP',
     command: 'npx',
     args: ['-y', '@modelcontextprotocol/server-postgres'],
     description: 'Live read-only access to company databases to answer client technical questions on calls.',
-    icon: Database
+    brand: 'postgres'
   }
 ]
 
@@ -367,13 +364,13 @@ export function IntegrationsView(): React.ReactNode {
                         width: 34,
                         height: 34,
                         borderRadius: 6,
-                        background: 'rgba(52, 211, 153, 0.12)',
+                        background: 'rgba(255, 255, 255, 0.05)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center'
                       }}
                     >
-                      <Calendar className="icon icon--sm" style={{ color: 'var(--status-ok)' }} />
+                      <BrandIcon brand="google" size={20} />
                     </div>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -548,7 +545,7 @@ export function IntegrationsView(): React.ReactNode {
                         justifyContent: 'center'
                       }}
                     >
-                      <Share2 className="icon icon--sm" style={{ color: 'var(--accent)' }} />
+                      <BrandIcon brand="slack" size={20} />
                     </div>
                     <div>
                       <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
@@ -604,6 +601,8 @@ export function IntegrationsView(): React.ReactNode {
                     <span>{slackFeedback.msg}</span>
                   </div>
                 )}
+
+                <WebhookPayloadPreview type="slack" />
               </div>
 
               {/* CRM Webhook Card (Salesforce / HubSpot) */}
@@ -631,7 +630,7 @@ export function IntegrationsView(): React.ReactNode {
                         justifyContent: 'center'
                       }}
                     >
-                      <Briefcase className="icon icon--sm" style={{ color: 'var(--status-ok)' }} />
+                      <BrandIcon brand={integrations.crmType === 'salesforce' ? 'salesforce' : 'hubspot'} size={20} />
                     </div>
                     <div>
                       <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
@@ -709,6 +708,8 @@ export function IntegrationsView(): React.ReactNode {
                     <span>{crmFeedback.msg}</span>
                   </div>
                 )}
+
+                <WebhookPayloadPreview type="crm" crmType={integrations.crmType || 'hubspot'} />
               </div>
 
               {/* Email / Gmail Card */}
@@ -822,7 +823,6 @@ export function IntegrationsView(): React.ReactNode {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10 }}>
                 {PRESET_MCP_SERVERS.map((preset) => {
                   const alreadyAdded = servers.some((s) => s.config.name === preset.name)
-                  const Icon = preset.icon
                   return (
                     <div
                       key={preset.name}
@@ -838,7 +838,7 @@ export function IntegrationsView(): React.ReactNode {
                     >
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <Icon className="icon icon--xs" style={{ color: 'var(--accent)' }} />
+                          <BrandIcon brand={preset.brand} size={16} />
                           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
                             {preset.name}
                           </span>

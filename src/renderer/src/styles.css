@@ -8,37 +8,38 @@
    ========================================================================== */
 
 :root {
-  /* ---- Palette: obsidian graphite ---- */
-  --app-background: #090a0f;
-  --sidebar-background: #06070b;
-  --surface-base: #0e1119;
-  --surface-secondary: #121622;
-  --surface-raised: #161b2a;
-  --surface-hover: #1e2436;
-  --surface-active: #262e45;
-  --surface-elevated: #1a2032;
-  --surface-input: #0b0d14;
-  --surface-overlay: rgba(7, 9, 14, 0.78);
-  --surface-glass: rgba(18, 22, 34, 0.8);
-  --overlay-bg: rgba(10, 13, 20, 0.88);
+  /* ---- Palette: obsidian charcoal & warm orange (inspired by gethiredmail) ---- */
+  --app-background: #111111;
+  --sidebar-background: #0d0d0d;
+  --surface-base: #141414;
+  --surface-secondary: #171717;
+  --surface-raised: #1c1c1c;
+  --surface-hover: #262626;
+  --surface-active: #2e2e2e;
+  --surface-elevated: #222222;
+  --surface-input: #141414;
+  --surface-sunken: #0d0d0d;
+  --surface-overlay: rgba(13, 13, 13, 0.82);
+  --surface-glass: rgba(22, 22, 22, 0.85);
+  --overlay-bg: rgba(17, 17, 17, 0.92);
 
   --border-subtle: rgba(255, 255, 255, 0.05);
-  --border-default: rgba(255, 255, 255, 0.09);
-  --border-strong: rgba(255, 255, 255, 0.16);
-  --border-focus: rgba(59, 130, 246, 0.65);
+  --border-default: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.15);
+  --border-focus: rgba(249, 115, 22, 0.65);
 
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  --text-disabled: #475569;
-  --placeholder: #64748b;
+  --text-primary: #f5f5f5;
+  --text-secondary: #a3a3a3;
+  --text-muted: #737373;
+  --text-disabled: #525252;
+  --placeholder: #737373;
 
-  --action-primary-bg: #f8fafc;
-  --action-primary-fg: #0f172a;
-  --action-primary-hover: #ffffff;
-  --action-primary-border: rgba(255, 255, 255, 0.6);
-  --accent-soft: rgba(59, 130, 246, 0.14);
-  --accent-softer: rgba(59, 130, 246, 0.06);
+  --action-primary-bg: #f97316;
+  --action-primary-fg: #ffffff;
+  --action-primary-hover: #ea580c;
+  --action-primary-border: #f97316;
+  --accent-soft: rgba(249, 115, 22, 0.14);
+  --accent-softer: rgba(249, 115, 22, 0.06);
 
   --danger: #f43f5e;
   --danger-hover: #fb7185;
@@ -51,14 +52,14 @@
   --info: #38bdf8;
   --info-soft: rgba(56, 189, 248, 0.12);
 
-  --focus-ring: #3b82f6;
-  --focus-ring-soft: rgba(59, 130, 246, 0.2);
+  --focus-ring: #f97316;
+  --focus-ring-soft: rgba(249, 115, 22, 0.2);
 
-  /* ---- Refined precision electric azure accent ---- */
-  --accent: #3b82f6;
-  --accent-hover: #60a5fa;
+  /* ---- Refined vibrant warm orange accent (matching gethiredmail) ---- */
+  --accent: #f97316;
+  --accent-hover: #fb923c;
   --accent-ink: #ffffff;
-  --accent-line: rgba(59, 130, 246, 0.35);
+  --accent-line: rgba(249, 115, 22, 0.35);
 
   /* ---- Status ---- */
   --status-ok: #10b981;
@@ -512,7 +513,7 @@ p {
   width: 22px;
   height: 22px;
   border-radius: 6px;
-  box-shadow: 0 0 14px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 .sidebar__brand-name {
@@ -566,15 +567,20 @@ p {
 }
 
 .nav-item--active {
-  background: rgba(59, 130, 246, 0.12);
+  background: rgba(249, 115, 22, 0.12);
   color: #ffffff;
   font-weight: 600;
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  border: 1px solid rgba(249, 115, 22, 0.3);
   border-radius: var(--radius-md);
 }
 
 .nav-item--active .icon {
-  color: #60a5fa;
+  color: #fb923c;
+}
+
+.nav-item--active .nav-item__count {
+  color: #fb923c;
+  font-weight: 600;
 }
 
 .nav-item .icon {
@@ -602,19 +608,19 @@ p {
 }
 
 .sidebar__footer .btn--accent {
-  background: linear-gradient(180deg, #222838 0%, #151924 100%);
-  color: #f8fafc;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.16);
-  font-weight: 550;
+  background: #f97316;
+  color: #ffffff;
+  border: 1px solid #f97316;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  font-weight: 600;
   border-radius: var(--radius-md);
   transition: all 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .sidebar__footer .btn--accent:hover {
-  background: linear-gradient(180deg, #2c3346 0%, #1b202e 100%);
-  border-color: rgba(255, 255, 255, 0.24);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  background: #ea580c;
+  border-color: #ea580c;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
   color: #ffffff;
   transform: translateY(-1px);
 }
@@ -676,7 +682,7 @@ p {
 .group {
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(20, 25, 38, 0.72) 0%, rgba(13, 16, 25, 0.72) 100%);
+  background: linear-gradient(180deg, rgba(28, 28, 28, 0.78) 0%, rgba(18, 18, 18, 0.78) 100%);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -722,6 +728,10 @@ p {
 
 .group__body {
   padding: 0 var(--space-4) var(--space-4);
+}
+
+.group > .group__body:first-child {
+  padding-top: var(--space-4);
 }
 
 .group__body--flush {
@@ -892,16 +902,19 @@ p {
 .kbd {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 3px;
-  padding: 1px 6px;
+  padding: 2px 7px;
   border-radius: var(--radius-xs);
-  border: 1px solid var(--border-default);
-  border-bottom-width: 2px;
-  background: var(--surface-raised);
-  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  line-height: 1.5;
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 1.4;
 }
 
 .hint {
@@ -954,25 +967,27 @@ p {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
-  border-radius: var(--radius-md);
-  background: var(--surface-raised);
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border-subtle);
-  color: var(--text-disabled);
+  color: var(--text-muted);
   margin-bottom: var(--space-1);
 }
 
 .empty__title {
   font-size: var(--text-md);
-  font-weight: 550;
-  color: var(--text-secondary);
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.015em;
 }
 
 .empty__text {
   font-size: var(--text-sm);
   max-width: 46ch;
-  line-height: 1.6;
+  line-height: 1.55;
+  color: var(--text-muted);
 }
 
 .empty__actions {
@@ -1073,17 +1088,17 @@ p {
 }
 
 .btn--primary {
-  background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 100%);
-  color: #0f172a;
-  border-color: rgba(255, 255, 255, 0.8);
+  background: #f97316;
+  color: #ffffff;
+  border-color: #f97316;
   font-weight: 600;
-  box-shadow: 0 2px 8px -1px rgba(0, 0, 0, 0.4), inset 0 1px 0 #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 
 .btn--primary:hover {
-  background: #ffffff;
-  border-color: #ffffff;
-  box-shadow: 0 4px 16px -1px rgba(255, 255, 255, 0.25), inset 0 1px 0 #ffffff;
+  background: #ea580c;
+  border-color: #ea580c;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
   transform: translateY(-1px);
 }
 
@@ -1186,38 +1201,36 @@ p {
 }
 
 .btn--accent {
-  background: linear-gradient(180deg, #222838 0%, #151924 100%);
-  color: #f8fafc;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.16);
-  font-weight: 550;
+  background: #f97316;
+  color: #ffffff;
+  border: 1px solid #f97316;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  font-weight: 600;
   letter-spacing: -0.01em;
 }
 
 .btn--accent:hover {
-  background: linear-gradient(180deg, #2c3346 0%, #1b202e 100%);
-  border-color: rgba(255, 255, 255, 0.24);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  background: #ea580c;
+  border-color: #ea580c;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
   color: #ffffff;
   transform: translateY(-1px);
 }
 
 .btn--accent:active {
-  background: linear-gradient(180deg, #181c28 0%, #12151f 100%);
-  border-color: rgba(255, 255, 255, 0.12);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), inset 0 1px 2px rgba(0, 0, 0, 0.3);
+  background: #c2410c;
+  border-color: #c2410c;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
   transform: translateY(0);
 }
 
 .btn--accent .icon {
-  color: #38bdf8;
-  filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.35));
+  color: #ffffff;
   transition: all 150ms ease;
 }
 
 .btn--accent:hover .icon {
-  color: #7dd3fc;
-  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.55));
+  color: #ffffff;
 }
 
 /* A button that is waiting for something: it must not look pressable. */
@@ -1452,6 +1465,7 @@ input[type='range']::-moz-range-thumb {
   font-size: var(--text-xs);
   font-weight: 550;
   letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -1469,9 +1483,9 @@ button.pill:hover {
 }
 
 .pill--accent {
-  color: #bfdbfe;
-  background: rgba(59, 130, 246, 0.14);
-  border-color: rgba(59, 130, 246, 0.3);
+  color: #fdba74;
+  background: rgba(249, 115, 22, 0.14);
+  border-color: rgba(249, 115, 22, 0.3);
 }
 
 .pill--ok {
@@ -1486,11 +1500,17 @@ button.pill:hover {
   border-color: rgba(245, 158, 11, 0.3);
 }
 
+.pill--info {
+  color: #7dd3fc;
+  background: rgba(56, 189, 248, 0.14);
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
 .card {
   padding: var(--space-4);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-default);
-  background: linear-gradient(180deg, rgba(20, 25, 38, 0.72) 0%, rgba(13, 16, 25, 0.72) 100%);
+  background: linear-gradient(180deg, rgba(28, 28, 28, 0.78) 0%, rgba(18, 18, 18, 0.78) 100%);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -2540,9 +2560,9 @@ button.pill:hover {
 
 .overlay__input:focus {
   outline: none;
-  background: rgba(15, 19, 30, 0.9);
-  border-color: rgba(59, 130, 246, 0.6);
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3), 0 0 0 3px rgba(59, 130, 246, 0.18), 0 0 22px -3px rgba(59, 130, 246, 0.35);
+  background: rgba(24, 24, 24, 0.95);
+  border-color: rgba(249, 115, 22, 0.6);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3), 0 0 0 3px rgba(249, 115, 22, 0.18), 0 0 22px -3px rgba(249, 115, 22, 0.35);
 }
 
 .overlay__ask {
@@ -2588,13 +2608,13 @@ button.pill:hover {
 }
 
 .overlay__tool--on {
-  background: rgba(59, 130, 246, 0.15);
-  border-color: rgba(59, 130, 246, 0.3);
-  color: #eff6ff;
+  background: rgba(249, 115, 22, 0.15);
+  border-color: rgba(249, 115, 22, 0.3);
+  color: #fff7ed;
 }
 
 .overlay__tool--on .icon {
-  color: #60a5fa;
+  color: #fb923c;
 }
 
 .overlay__tool--record {
@@ -3075,9 +3095,9 @@ button.pill:hover {
 .overlay__timing-badge {
   padding: 2px 8px;
   border-radius: var(--radius-pill);
-  background: rgba(59, 130, 246, 0.12);
-  border: 1px solid rgba(59, 130, 246, 0.25);
-  color: #bfdbfe;
+  background: rgba(249, 115, 22, 0.12);
+  border: 1px solid rgba(249, 115, 22, 0.25);
+  color: #fdba74;
   font-weight: 550;
   font-variant-numeric: tabular-nums;
   font-size: 11px;
@@ -4306,10 +4326,10 @@ button.pill:hover {
 }
 
 .overlay__copilot-chip--active {
-  background: rgba(59, 130, 246, 0.2);
+  background: rgba(249, 115, 22, 0.2);
   color: #ffffff;
-  border-color: rgba(59, 130, 246, 0.5);
-  box-shadow: 0 0 12px rgba(59, 130, 246, 0.25);
+  border-color: rgba(249, 115, 22, 0.5);
+  box-shadow: 0 0 12px rgba(249, 115, 22, 0.25);
 }
 
 .overlay__copilot-dot {
@@ -4427,9 +4447,9 @@ button.pill:hover {
   width: 32px;
   height: 32px;
   border-radius: var(--radius-sm);
-  background: rgba(59, 130, 246, 0.12);
-  border: 1px solid rgba(59, 130, 246, 0.28);
-  color: #60a5fa;
+  background: rgba(249, 115, 22, 0.12);
+  border: 1px solid rgba(249, 115, 22, 0.28);
+  color: #fb923c;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -4460,7 +4480,7 @@ button.pill:hover {
 }
 
 .crm-talk-meter-user {
-  background: linear-gradient(90deg, #1d4ed8 0%, #3b82f6 100%);
+  background: linear-gradient(90deg, #ea580c 0%, #f97316 100%);
   height: 100%;
   display: flex;
   align-items: center;
@@ -4524,8 +4544,8 @@ button.pill:hover {
 }
 
 .crm-talk-dot--user {
-  background: #3b82f6;
-  box-shadow: 0 0 8px rgba(59, 130, 246, 0.7);
+  background: #f97316;
+  box-shadow: 0 0 8px rgba(249, 115, 22, 0.7);
 }
 
 .crm-talk-dot--others {
@@ -4639,10 +4659,10 @@ button.pill:hover {
   gap: 10px;
   padding: 8px 12px;
   margin: 6px 12px;
-  background: linear-gradient(135deg, rgba(20, 26, 40, 0.95) 0%, rgba(13, 17, 26, 0.95) 100%);
-  border: 1px solid rgba(59, 130, 246, 0.45);
+  background: linear-gradient(135deg, rgba(28, 28, 28, 0.95) 0%, rgba(18, 18, 18, 0.95) 100%);
+  border: 1px solid rgba(249, 115, 22, 0.45);
   border-radius: 10px;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 0 16px -2px rgba(59, 130, 246, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 0 16px -2px rgba(249, 115, 22, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15);
   font-size: 12px;
   animation: pulseIn 220ms cubic-bezier(0.16, 1, 0.3, 1);
   backdrop-filter: blur(12px);
@@ -4672,13 +4692,13 @@ button.pill:hover {
 
 .overlay__action-pulse-badge {
   font-weight: 650;
-  color: #60a5fa;
+  color: #fb923c;
   font-size: 10.5px;
   letter-spacing: 0.04em;
   padding: 2px 7px;
   border-radius: 999px;
-  background: rgba(59, 130, 246, 0.18);
-  border: 1px solid rgba(59, 130, 246, 0.35);
+  background: rgba(249, 115, 22, 0.18);
+  border: 1px solid rgba(249, 115, 22, 0.35);
 }
 
 .overlay__action-pulse-task {
@@ -5231,7 +5251,7 @@ button.pill:hover {
 }
 
 .overlay__hesitation-card--neutral {
-  border-color: rgba(59, 130, 246, 0.35);
+  border-color: rgba(249, 115, 22, 0.35);
 }
 
 .overlay__hesitation-head {
@@ -5321,7 +5341,7 @@ button.pill:hover {
 }
 
 .overlay__capsule-dot--thinking {
-  background: #3b82f6;
+  background: #f97316;
 }
 
 .overlay__capsule-dot--recording {
@@ -5440,8 +5460,8 @@ button.pill:hover {
 }
 
 .overlay__command-item--selected {
-  background: rgba(59, 130, 246, 0.14) !important;
-  border-color: rgba(59, 130, 246, 0.3) !important;
+  background: rgba(249, 115, 22, 0.14) !important;
+  border-color: rgba(249, 115, 22, 0.3) !important;
 }
 
 .overlay__command-item-main {

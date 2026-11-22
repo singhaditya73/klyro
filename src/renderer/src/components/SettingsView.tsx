@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import type { AppSettings, PermissionState, ProviderStatus } from '@shared/types'
 import { Badge, Group, Hint, PageHeader, SettingRow, StatusDot } from './ui'
+import { AudioDeviceMeter } from './AudioDeviceMeter'
 import { UpdateCard } from './UpdateCard'
 import { providerState } from '../lib/providers'
 import type { Route } from '../hooks/useHashRoute'
@@ -598,6 +599,7 @@ export function SettingsView({ onNavigate }: { onNavigate: (route: Route) => voi
                   ))}
                 </div>
               )}
+              <AudioDeviceMeter />
               <Hint>
                 On Windows and Linux the system never asks per capture. On macOS the operating system asks for Screen
                 Recording once, and that prompt comes from the OS, not from Klyro — it cannot be skipped.

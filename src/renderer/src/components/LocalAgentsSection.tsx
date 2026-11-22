@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Circle, Cpu, Key, Loader2, Play, RefreshCcw, Server } from 'lucide-react'
+import { Circle, Cpu, Key, Loader2, Play, RefreshCcw } from 'lucide-react'
 import { Badge, StatusDot } from './ui'
+import { BrandIcon } from './BrandIcon'
 
 /**
  * What is already running on this machine.
@@ -268,6 +269,7 @@ export function LocalAgentsSection({
           {healthy.map((agent) => (
             <div key={agent.id} className="list__row" style={{ alignItems: 'flex-start' }}>
               <StatusDot state="ok" title="Running" />
+              <BrandIcon brand={agent.kind === 'opencode' ? 'opencode' : 'openai-compatible'} size={20} />
               <div className="list__main">
                 <div className="list__title">
                   {agent.name}
@@ -334,7 +336,7 @@ export function LocalAgentsSection({
       {blocks.opencode && installed && !openCodeRunning && agents !== null && (
         <div className="card" style={{ marginTop: 12 }}>
           <div className="card__row" style={{ flexWrap: 'wrap' }}>
-            <Server className="icon icon--sm" style={{ color: 'var(--text-secondary)' }} aria-hidden="true" />
+            <BrandIcon brand="opencode" size={24} />
             <div style={{ flex: 1, minWidth: 200 }}>
               <div className="card__title">OpenCode is installed here</div>
               <div className="card__subtitle">
@@ -357,7 +359,7 @@ export function LocalAgentsSection({
         <div className="card" style={{ marginTop: 12 }}>
           <div className="card__row" style={{ flexWrap: 'wrap' }}>
             <span className="icon-tile">
-              <Server className="icon icon--sm" aria-hidden="true" />
+              <BrandIcon brand="antigravity" size={22} />
             </span>
             <div style={{ flex: 1, minWidth: 200 }}>
               <div className="card__title">Antigravity is installed, not connected</div>
@@ -387,7 +389,7 @@ export function LocalAgentsSection({
         <div className="card" style={{ marginTop: 12, borderColor: 'var(--border-default)' }}>
           <div className="card__row" style={{ flexWrap: 'wrap' }}>
             <span className="icon-tile">
-              <Server className="icon icon--sm" aria-hidden="true" />
+              <BrandIcon brand="antigravity" size={22} />
             </span>
             <div style={{ flex: 1, minWidth: 200 }}>
               <div className="card__title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -477,8 +479,9 @@ export function LocalAgentsSection({
           {clis
             .filter((cli) => cli.installed)
             .map((cli) => (
-              <div key={cli.id} className="list__row">
+              <div key={cli.id} className="list__row" style={{ alignItems: 'center' }}>
                 <StatusDot state="ok" title="Installed" />
+                <BrandIcon brand={cli.providerId} size={18} />
                 <div className="list__main">
                   <div className="list__title">{cli.name}</div>
                   <div className="list__meta">{cli.note}</div>

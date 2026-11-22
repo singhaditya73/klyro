@@ -98,6 +98,7 @@ const settingsPatchSchema = z
     showTray: z.boolean().optional(),
     hideFromTaskbar: z.boolean().optional(),
     panicShortcut: z.string().max(64).optional(),
+    ghostShortcut: z.string().max(64).optional(),
     memoryEnabled: z.boolean().optional(),
     memoryAutoExtract: z.boolean().optional(),
     memoryRecallCount: z.number().int().min(1).max(20).optional(),
@@ -114,9 +115,17 @@ const settingsPatchSchema = z
     overlayPrivateMode: z.boolean().optional(),
     overlayOpacity: z.number().int().min(20).max(100).optional(),
     diagnosticsOptIn: z.boolean().optional(),
+    airgap: z.boolean().optional(),
+    allowHostedFallback: z.boolean().optional(),
+    remoteHudLan: z.boolean().optional(),
+    autoUpdateCheck: z.boolean().optional(),
+    interviewRetentionDays: z.number().int().min(0).max(3650).optional(),
+    agentConfirmConsequential: z.boolean().optional(),
+    agentMaxSteps: z.number().int().min(1).max(100).optional(),
+    chatMcpTools: z.boolean().optional(),
     providers: providersPatchSchema.optional()
   })
-  .strict()
+  .passthrough()
 
 const sendChatSchema = z.object({
   conversationId: z.string().min(1).max(120),

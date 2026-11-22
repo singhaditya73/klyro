@@ -66,6 +66,7 @@ import type { PickerGroup } from './components/ModelPicker'
 import { GhostPhoneModal } from './components/overlay/GhostPhoneModal'
 import { MeetingBanner } from './components/overlay/MeetingBanner'
 import { OverlayCommandMenu } from './components/overlay/OverlayCommandMenu'
+import { AudioActivityIndicator } from './components/AudioActivityIndicator'
 import { recentModels, rememberModel } from './lib/recent'
 import { knownModelNames, rememberModelNames } from './lib/modelNames'
 import { StatusDot } from './components/ui'
@@ -110,7 +111,7 @@ const SLICE_MS = 250
 
 /** The window is sized by its content, between these two heights. */
 const MIN_OVERLAY_HEIGHT = 150
-const MAX_OVERLAY_HEIGHT = 520
+const MAX_OVERLAY_HEIGHT = 2400
 
 export interface SessionTiming {
   ms: number
@@ -246,6 +247,7 @@ export default function OverlayApp() {
   /** A provider failure, shown as an error rather than as a hint. */
   const [errorText, setErrorText] = useState<string | null>(null)
   const [assistSource, setAssistSource] = useState<string | null>(null)
+  const [liveEnergy, setLiveEnergy] = useState<{ mic: number; sys: number }>({ mic: 0, sys: 0 })
   const audioCleanupRef = useRef<(() => void) | null>(null)
   const audioFeaturesRef = useRef<(() => { micEnergy: number; sysEnergy: number; sysFft?: Uint8Array }) | null>(null)
   // A screen capture waiting to be sent with the next question.
@@ -273,10 +275,24 @@ export default function OverlayApp() {
       const next: CadencePreset = prev === 'snappy' ? 'balanced' : prev === 'balanced' ? 'patient' : 'snappy'
       try {
         localStorage.setItem('klyro:voice_cadence', next)
-      } catch {}
+      } catch { }
       return next
     })
   }, [])
+
+  useEffect(() => {
+    if (mode === 'idle' && talkState === 'idle') {
+      setLiveEnergy({ mic: 0, sys: 0 })
+      return
+    }
+    const timer = window.setInterval(() => {
+      const feat = audioFeaturesRef.current?.()
+      if (feat) {
+        setLiveEnergy({ mic: feat.micEnergy, sys: feat.sysEnergy })
+      }
+    }, 80)
+    return () => window.clearInterval(timer)
+  }, [mode, talkState])
   // Screens and windows to choose from (instant capture turned off).
   const [overlaySources, setOverlaySources] = useState<Array<{ id: string; name: string; thumbnail: string }> | null>(null)
   // The provider the overlay answers with, and the model it uses.
@@ -340,6 +356,7 @@ export default function OverlayApp() {
   const autoRef = useRef(true)
   const chainRef = useRef<Promise<void>>(Promise.resolve())
   const lastQuestionRef = useRef('')
+  const userManualHeightRef = useRef<number | null>(null)
   const isWindows = /Win/i.test(navigator.platform)
   const isLinux = /Linux/i.test(navigator.platform) && !isWindows
 
@@ -412,7 +429,10 @@ export default function OverlayApp() {
     if (!inner) return
     // The wrapper is as tall as its content wants to be; the window follows it.
     const wanted = inner.scrollHeight
-    const height = Math.max(MIN_OVERLAY_HEIGHT, Math.min(MAX_OVERLAY_HEIGHT, Math.round(wanted)))
+    const targetHeight = userManualHeightRef.current
+      ? Math.max(userManualHeightRef.current, Math.round(wanted))
+      : Math.round(wanted)
+    const height = Math.max(MIN_OVERLAY_HEIGHT, Math.min(MAX_OVERLAY_HEIGHT, targetHeight))
     void window.klyro.resizeOverlay?.(height)
   }, [])
 
@@ -454,8 +474,11 @@ export default function OverlayApp() {
       const onPointerMove = (moveEv: PointerEvent) => {
         const deltaX = moveEv.screenX - startX
         const deltaY = moveEv.screenY - startY
-        const newWidth = axis === 'y' ? undefined : Math.max(420, Math.min(1400, Math.round(startWidth + deltaX)))
+        const newWidth = axis === 'y' ? undefined : Math.max(380, Math.min(2560, Math.round(startWidth + deltaX)))
         const newHeight = axis === 'x' ? window.innerHeight : Math.max(MIN_OVERLAY_HEIGHT, Math.min(MAX_OVERLAY_HEIGHT, Math.round(startHeight + deltaY)))
+        if (axis !== 'x') {
+          userManualHeightRef.current = newHeight
+        }
         void window.klyro.resizeOverlay?.(newHeight, newWidth)
       }
 
@@ -1128,7 +1151,7 @@ export default function OverlayApp() {
     talk.timer = null
     try {
       talk.processor?.disconnect()
-    } catch {}
+    } catch { }
     talk.processor = null
     talk.stream?.getTracks().forEach((track) => track.stop())
     talk.stream = null
@@ -1256,7 +1279,7 @@ export default function OverlayApp() {
                     isHoldingFloor: talk.prosodyTracker.isHoldingFloor()
                   })
                 }
-              } catch {}
+              } catch { }
             })()
           }
 
@@ -1823,12 +1846,12 @@ export default function OverlayApp() {
   const glowClass = talkState === 'hearing'
     ? ' overlay--glow-hearing'
     : busy || talkState === 'thinking'
-    ? ' overlay--glow-thinking'
-    : mode === 'listening' || talkState === 'listening'
-    ? ' overlay--glow-listening'
-    : mode === 'recording'
-    ? ' overlay--glow-recording'
-    : ''
+      ? ' overlay--glow-thinking'
+      : mode === 'listening' || talkState === 'listening'
+        ? ' overlay--glow-listening'
+        : mode === 'recording'
+          ? ' overlay--glow-recording'
+          : ''
 
   return (
     <div
@@ -1955,10 +1978,10 @@ export default function OverlayApp() {
                             activeProvider: target,
                             providers: {
                               ...settings.providers,
-                              [target]: { ...settings.providers[target], fastModel: next }
+                              [target]: { ...settings.providers[target], model: next, fastModel: next }
                             }
                           })
-                        } catch {}
+                        } catch { }
                       })()
                     }}
                   />
@@ -2027,783 +2050,780 @@ export default function OverlayApp() {
               </div>
             </header>
 
-      {showRemoteHudModal && remoteHudUrl && (
-        <GhostPhoneModal
-          url={remoteHudUrl}
-          pairingCode={remoteHudPairing?.code ?? null}
-          expiresAt={remoteHudPairing?.expiresAt ?? null}
-          copied={linkCopied}
-          onClose={() => setShowRemoteHudModal(false)}
-          onCopy={async () => {
-            const ok = await copyToClipboard(remoteHudUrl)
-            setLinkCopied(ok)
-            if (ok) {
-              window.setTimeout(() => setLinkCopied(false), 2000)
-            } else {
-              setAssistNote('Could not copy the link. Select the address and copy it manually.')
-            }
-          }}
-          onNewCode={() => {
-            void window.klyro.remoteHudPairing?.().then((next) => {
-              if (next) setRemoteHudPairing(next)
-            })
-          }}
-          onHide={() => {
-            setShowRemoteHudModal(false)
-            void window.klyro.hideOverlay?.()
-          }}
-        />
-      )}
+            {showRemoteHudModal && remoteHudUrl && (
+              <GhostPhoneModal
+                url={remoteHudUrl}
+                pairingCode={remoteHudPairing?.code ?? null}
+                expiresAt={remoteHudPairing?.expiresAt ?? null}
+                copied={linkCopied}
+                onClose={() => setShowRemoteHudModal(false)}
+                onCopy={async () => {
+                  const ok = await copyToClipboard(remoteHudUrl)
+                  setLinkCopied(ok)
+                  if (ok) {
+                    window.setTimeout(() => setLinkCopied(false), 2000)
+                  } else {
+                    setAssistNote('Could not copy the link. Select the address and copy it manually.')
+                  }
+                }}
+                onNewCode={() => {
+                  void window.klyro.remoteHudPairing?.().then((next) => {
+                    if (next) setRemoteHudPairing(next)
+                  })
+                }}
+                onHide={() => {
+                  setShowRemoteHudModal(false)
+                  void window.klyro.hideOverlay?.()
+                }}
+              />
+            )}
 
-      {upcomingMeeting && mode === 'idle' && (
-        <MeetingBanner
-          meeting={upcomingMeeting}
-          onStart={(meeting) => void startMeetingCoPilot(meeting)}
-          onDismiss={(id) => void dismissUpcomingMeeting(id)}
-        />
-      )}
+            {upcomingMeeting && mode === 'idle' && (
+              <MeetingBanner
+                meeting={upcomingMeeting}
+                onStart={(meeting) => void startMeetingCoPilot(meeting)}
+                onDismiss={(id) => void dismissUpcomingMeeting(id)}
+              />
+            )}
 
-      <div className="overlay__composer">
-        <textarea
-          ref={inputRef}
-          className="overlay__input"
-          rows={1}
-          value={text}
-          placeholder={assistBusy ? 'Assist runs in this box…' : 'Ask anything…'}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-              if (!text.trim() && upcomingMeeting && mode === 'idle') {
-                event.preventDefault()
-                void startMeetingCoPilot(upcomingMeeting)
-                return
-              }
-              event.preventDefault()
-              void ask()
-            }
-          }}
-        />
-        {busy ? (
-          <button className="btn btn--danger overlay__ask" onClick={() => void window.klyro.abortChat()}>
-            <Square className="icon icon--sm" aria-hidden="true" />
-            <span>Stop</span>
-          </button>
-        ) : (
-          <button className="btn btn--primary overlay__ask" onClick={() => void ask()} disabled={!text.trim()}>
-            <span>Ask</span>
-          </button>
-        )}
-      </div>
-
-      <div className="overlay__toolbar" role="group" aria-label="Meeting assist">
-        {mode === 'idle' && (
-          <>
-            <button
-              className={`overlay__tool${capture ? ' overlay__tool--on' : ''}`}
-              onClick={() => void captureScreen()}
-              disabled={busy || capturing}
-              title="Capture what is on screen and ask about it"
-              aria-label="Capture screen"
-            >
-              {capturing ? (
-                <Loader2 className="icon icon--xs spin" aria-hidden="true" />
+            <div className="overlay__composer">
+              <textarea
+                ref={inputRef}
+                className="overlay__input"
+                rows={1}
+                value={text}
+                placeholder={assistBusy ? 'Assist runs in this box…' : 'Ask anything…'}
+                onChange={(event) => setText(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    if (!text.trim() && upcomingMeeting && mode === 'idle') {
+                      event.preventDefault()
+                      void startMeetingCoPilot(upcomingMeeting)
+                      return
+                    }
+                    event.preventDefault()
+                    void ask()
+                  }
+                }}
+              />
+              {busy ? (
+                <button className="btn btn--danger overlay__ask" onClick={() => void window.klyro.abortChat()}>
+                  <Square className="icon icon--sm" aria-hidden="true" />
+                  <span>Stop</span>
+                </button>
               ) : (
-                <Monitor className="icon icon--xs" aria-hidden="true" />
+                <button className="btn btn--primary overlay__ask" onClick={() => void ask()} disabled={!text.trim()}>
+                  <span>Ask</span>
+                </button>
               )}
-              <span>{capture ? 'Captured' : 'Screen'}</span>
-            </button>
-            <button
-              className={`overlay__tool${talkState !== 'idle' ? ' overlay__tool--on' : ''}`}
-              onClick={() => {
-                if (talkState === 'idle') void startTalking()
-                else stopTalking()
-              }}
-              disabled={busy}
-              title="Talk to Klyro — it answers when you stop speaking"
-              aria-label="Talk to Klyro"
-            >
-              <Mic className="icon icon--xs" aria-hidden="true" />
-              <span>{talkState === 'idle' ? 'Talk' : 'Stop talking'}</span>
-            </button>
-            <button
-              className="overlay__tool"
-              onClick={() => void startSnippet()}
-              disabled={busy || talkState !== 'idle'}
-              title="Record one question: press once when it starts, once when it ends"
-              aria-label="Record a question"
-            >
-              <Mic className="icon icon--xs" aria-hidden="true" />
-              <span>Record</span>
-            </button>
-            <button
-              className="overlay__tool"
-              onClick={() => void startListening()}
-              disabled={busy || talkState !== 'idle'}
-              title="Listen to the meeting and answer the questions you hear"
-              aria-label="Listen to the meeting"
-            >
-              <Headphones className="icon icon--xs" aria-hidden="true" />
-              <span>Listen</span>
-            </button>
-          </>
-        )}
+            </div>
 
-        {mode === 'recording' && (
-          <button className="overlay__tool overlay__tool--record" onClick={() => void endSnippet()}>
-            <Square className="icon icon--xs" aria-hidden="true" />
-            <span>Stop &amp; answer</span>
-          </button>
-        )}
+            <div className="overlay__toolbar" role="group" aria-label="Meeting assist">
+              {mode === 'idle' && (
+                <>
+                  <button
+                    className={`overlay__tool${capture ? ' overlay__tool--on' : ''}`}
+                    onClick={() => void captureScreen()}
+                    disabled={busy || capturing}
+                    title="Capture what is on screen and ask about it"
+                    aria-label="Capture screen"
+                  >
+                    {capturing ? (
+                      <Loader2 className="icon icon--xs spin" aria-hidden="true" />
+                    ) : (
+                      <Monitor className="icon icon--xs" aria-hidden="true" />
+                    )}
+                    <span>{capture ? 'Captured' : 'Screen'}</span>
+                  </button>
+                  <button
+                    className={`overlay__tool${talkState !== 'idle' ? ' overlay__tool--on' : ''}`}
+                    onClick={() => {
+                      if (talkState === 'idle') void startTalking()
+                      else stopTalking()
+                    }}
+                    disabled={busy}
+                    title="Talk to Klyro — it answers when you stop speaking"
+                    aria-label="Talk to Klyro"
+                  >
+                    <Mic className="icon icon--xs" aria-hidden="true" />
+                    <span>{talkState === 'idle' ? 'Talk' : 'Stop talking'}</span>
+                  </button>
+                  <button
+                    className="overlay__tool"
+                    onClick={() => void startSnippet()}
+                    disabled={busy || talkState !== 'idle'}
+                    title="Record one question: press once when it starts, once when it ends"
+                    aria-label="Record a question"
+                  >
+                    <Mic className="icon icon--xs" aria-hidden="true" />
+                    <span>Record</span>
+                  </button>
+                  <button
+                    className="overlay__tool"
+                    onClick={() => void startListening()}
+                    disabled={busy || talkState !== 'idle'}
+                    title="Listen to the meeting and answer the questions you hear"
+                    aria-label="Listen to the meeting"
+                  >
+                    <Headphones className="icon icon--xs" aria-hidden="true" />
+                    <span>Listen</span>
+                  </button>
+                </>
+              )}
 
-        {mode === 'listening' && (
-          <button className="overlay__tool overlay__tool--record" onClick={() => void stopListening()}>
-            <Square className="icon icon--xs" aria-hidden="true" />
-            <span>Stop listening</span>
-          </button>
-        )}
+              {mode === 'recording' && (
+                <button className="overlay__tool overlay__tool--record" onClick={() => void endSnippet()}>
+                  <Square className="icon icon--xs" aria-hidden="true" />
+                  <span>Stop &amp; answer</span>
+                </button>
+              )}
 
-        {recording && (
-          <span className="overlay__recording" role="status">
-            <span className="overlay__recdot" aria-hidden="true" />
-            {mode === 'recording' ? 'Recording' : 'Listening'}
-            {mode === 'listening' && (
-              <span className="overlay__waveform" title="Live audio activity" aria-hidden="true">
-                <span className="overlay__waveform-bar" />
-                <span className="overlay__waveform-bar" />
-                <span className="overlay__waveform-bar" />
-                <span className="overlay__waveform-bar" />
-                <span className="overlay__waveform-bar" />
-              </span>
-            )}
-          </span>
-        )}
+              {mode === 'listening' && (
+                <button className="overlay__tool overlay__tool--record" onClick={() => void stopListening()}>
+                  <Square className="icon icon--xs" aria-hidden="true" />
+                  <span>Stop listening</span>
+                </button>
+              )}
 
-        {assistSource && (
-          <span
-            className={`overlay__source ${assistSource.includes('Dual') ? 'overlay__source--dual' : ''}`}
-            title="Bot-free meeting recording source"
-          >
-            {assistSource.includes('Dual') ? (
-              <Headphones className="icon icon--xs" aria-hidden="true" />
-            ) : (
-              <Mic className="icon icon--xs" aria-hidden="true" />
-            )}
-            <span>{assistSource}</span>
-          </span>
-        )}
+              {recording && (
+                <span className="overlay__recording" role="status" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span className="overlay__recdot" aria-hidden="true" />
+                  <span>{mode === 'recording' ? 'Recording' : 'Listening'}</span>
+                  <AudioActivityIndicator
+                    active={recording}
+                    micEnergy={liveEnergy.mic}
+                    sysEnergy={liveEnergy.sys}
+                    source={assistSource || undefined}
+                  />
+                </span>
+              )}
 
-        {mode === 'listening' && (
-          <label className="overlay__tool" style={{ cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={autoAnswer}
-              onChange={(event) => {
-                autoRef.current = event.target.checked
-                setAutoAnswer(event.target.checked)
-              }}
-            />
-            <span>Auto-answer</span>
-          </label>
-        )}
-
-        {assistNote && (
-          <span className="overlay__note" role="status">
-            <Info className="icon icon--xs" aria-hidden="true" />
-            <span>{assistNote}</span>
-          </span>
-        )}
-
-        {history.length > 0 && mode === 'idle' && (
-          <span className="overlay__session-badge" title="Questions asked in this session">
-            <History className="icon icon--xs" aria-hidden="true" />
-            <span>{history.length + (question ? 1 : 0)} in thread</span>
-          </span>
-        )}
-
-        <span className="overlay__toolbar-hint">Esc to close · Enter to ask</span>
-      </div>
-
-      {mode === 'listening' && (
-        <div className="overlay__copilot-bar">
-          <button
-            type="button"
-            className={`overlay__copilot-chip ${showCatchUp ? 'overlay__copilot-chip--active' : ''}`}
-            disabled={transcript.length === 0}
-            onClick={() => {
-              const briefing = generateCatchUpBriefing(transcript)
-              setCatchUpBriefing(briefing)
-              setDeckTab('catchup')
-              setShowCatchUp(!showCatchUp)
-            }}
-            title="Instant late-joiner briefing of missed context and active topic (Alt+U)"
-          >
-            <Zap className="icon icon--xs" aria-hidden="true" />
-            <span>Catch-up</span>
-          </button>
-
-          <button
-            type="button"
-            className={`overlay__copilot-chip ${hesitationRadarOn ? 'overlay__copilot-chip--active' : ''}`}
-            onClick={() => {
-              const nextState = !hesitationRadarOn
-              setHesitationRadarOn(nextState)
-              setDeckTab('radar')
-              if (nextState && transcript.length > 0) {
-                const sampleText = transcript[transcript.length - 1]
-                const analysis = analyzeBuyerHesitation({
-                  text: sampleText,
-                  durationMs: 4500,
-                  latencyMs: 500
-                })
-                setLiveHesitation(analysis)
-              }
-            }}
-            title="Toggle Live Buyer Hesitation & Intent Heatmap Radar (Alt+H)"
-            aria-label="Buyer Hesitation Radar"
-          >
-            <Activity
-              className="icon icon--xs"
-              style={{ color: hesitationRadarOn ? '#10b981' : undefined }}
-              aria-hidden="true"
-            />
-            <span>{hesitationRadarOn ? 'Radar Active' : 'Pacing Radar'}</span>
-          </button>
-
-          <button
-            type="button"
-            className="overlay__copilot-chip"
-            disabled={busy || transcript.length === 0}
-            onClick={async () => {
-              const recent = transcript.slice(-4).join('\n')
-              if (!recent) return
-              archiveCurrentTurnIfAny()
-              currentTurnRef.current = { question: 'Suggest response to objection', answer: '', timing: null }
-              setQuestion('Suggest response to objection')
-              setAnswer('')
-              await askAssist(`The meeting attendee voiced this objection or point:\n"${recent}"\n\nProvide 2 tactful, persuasive, and professional ways to overcome this objection:`)
-            }}
-            title="Diplomatic responses to customer objections or skepticism"
-          >
-            <ShieldAlert className="icon icon--xs" aria-hidden="true" />
-            <span>Objections</span>
-          </button>
-
-          <button
-            type="button"
-            className={`overlay__copilot-chip ${showScratchpad ? 'overlay__copilot-chip--active' : ''}`}
-            onClick={() => {
-              setDeckTab('notes')
-              setShowScratchpad(!showScratchpad)
-            }}
-            title="Jot private notes live that automatically merge into the CRM recap"
-          >
-            <FileText className="icon icon--xs" aria-hidden="true" />
-            <span>{showScratchpad ? 'Close Notes' : 'Notes'}</span>
-            {scratchpadText.trim() && <span className="overlay__copilot-dot" aria-hidden="true" />}
-          </button>
-
-          {agendaItems.length > 0 && (
-            <button
-              type="button"
-              className={`overlay__copilot-chip ${showAgenda ? 'overlay__copilot-chip--active' : ''}`}
-              onClick={() => {
-                setDeckTab('agenda')
-                setShowAgenda(!showAgenda)
-              }}
-              title="Meeting Agenda Tracking"
-            >
-              <Calendar className="icon icon--xs" aria-hidden="true" />
-              <span>
-                Agenda ({agendaItems.filter((i) => i.addressed).length}/{agendaItems.length})
-              </span>
-            </button>
-          )}
-
-          {talkRatioPct > 0 && (
-            <span className="overlay__pacing-badge" title="Live audio active speaking percentage">
-              <Mic className="icon icon--xs" aria-hidden="true" />
-              <span>Audio: {talkRatioPct}%</span>
-            </span>
-          )}
-        </div>
-      )}
-
-      {mode === 'listening' && (activeBattlecard || (showCatchUp && catchUpBriefing) || (hesitationRadarOn && liveHesitation) || (showAgenda && agendaItems.length > 0) || showScratchpad) && (
-        <div className="overlay__intelligence-deck" role="region" aria-label="Live Intelligence Deck">
-          <div className="overlay__intelligence-tabs">
-            {activeBattlecard && (
-              <button
-                type="button"
-                className={`overlay__intelligence-tab ${deckTab === 'battlecard' ? 'overlay__intelligence-tab--active' : ''}`}
-                onClick={() => setDeckTab('battlecard')}
-              >
-                <ShieldAlert className="icon icon--xs" style={{ color: '#eab308' }} />
-                <span>{activeBattlecard.battlecard.title}</span>
-              </button>
-            )}
-            {showCatchUp && catchUpBriefing && (
-              <button
-                type="button"
-                className={`overlay__intelligence-tab ${deckTab === 'catchup' ? 'overlay__intelligence-tab--active' : ''}`}
-                onClick={() => setDeckTab('catchup')}
-              >
-                <Zap className="icon icon--xs" style={{ color: '#3b82f6' }} />
-                <span>Catch-up</span>
-              </button>
-            )}
-            {hesitationRadarOn && liveHesitation && (
-              <button
-                type="button"
-                className={`overlay__intelligence-tab ${deckTab === 'radar' ? 'overlay__intelligence-tab--active' : ''}`}
-                onClick={() => setDeckTab('radar')}
-              >
-                <Activity
-                  className="icon icon--xs"
-                  style={{
-                    color:
-                      liveHesitation.level === 'hesitant'
-                        ? '#f97316'
-                        : liveHesitation.level === 'guarded'
-                        ? '#eab308'
-                        : '#10b981'
-                  }}
-                />
-                <span>Pacing ({liveHesitation.score}%)</span>
-              </button>
-            )}
-            {showAgenda && agendaItems.length > 0 && (
-              <button
-                type="button"
-                className={`overlay__intelligence-tab ${deckTab === 'agenda' ? 'overlay__intelligence-tab--active' : ''}`}
-                onClick={() => setDeckTab('agenda')}
-              >
-                <Calendar className="icon icon--xs" style={{ color: '#38bdf8' }} />
-                <span>Agenda ({agendaItems.filter((i) => i.addressed).length}/{agendaItems.length})</span>
-              </button>
-            )}
-            {showScratchpad && (
-              <button
-                type="button"
-                className={`overlay__intelligence-tab ${deckTab === 'notes' ? 'overlay__intelligence-tab--active' : ''}`}
-                onClick={() => setDeckTab('notes')}
-              >
-                <FileText className="icon icon--xs" />
-                <span>Notes</span>
-              </button>
-            )}
-            <button
-              type="button"
-              className="btn btn--icon btn--xs btn--quiet"
-              style={{ marginLeft: 'auto' }}
-              onClick={() => {
-                if (deckTab === 'battlecard') setActiveBattlecard(null)
-                else if (deckTab === 'catchup') setShowCatchUp(false)
-                else if (deckTab === 'radar') setLiveHesitation(null)
-                else if (deckTab === 'agenda') setShowAgenda(false)
-                else if (deckTab === 'notes') setShowScratchpad(false)
-              }}
-              title="Dismiss active card (Esc)"
-              aria-label="Dismiss card"
-            >
-              <X className="icon icon--xs" />
-            </button>
-          </div>
-          <div className="overlay__intelligence-body">
-            {deckTab === 'battlecard' && activeBattlecard && (
-              <div className="overlay__cue-card">
-                <div className="overlay__cue-header">
-                  <span className="overlay__cue-badge">Competitor Brief: {activeBattlecard.battlecard.title}</span>
-                </div>
-                <ul className="overlay__cue-bullets">
-                  {activeBattlecard.battlecard.keyPoints.map((point, idx) => (
-                    <li key={idx} className="overlay__cue-bullet">
-                      {point}
-                    </li>
-                  ))}
-                </ul>
-                {activeBattlecard.battlecard.trapQuestion && (
-                  <div className="overlay__cue-meta-box">
-                    <span className="overlay__cue-meta-label">Trap question:</span> {activeBattlecard.battlecard.trapQuestion}
-                  </div>
-                )}
-              </div>
-            )}
-            {deckTab === 'catchup' && catchUpBriefing && (
-              <div className="overlay__cue-card">
-                <div className="overlay__cue-header">
-                  <span className="overlay__cue-badge">Active: {catchUpBriefing.activeTopic.topic}</span>
-                  {catchUpBriefing.activeTopic.lastSpeaker && (
-                    <span className="overlay__cue-sub">Speaker: {catchUpBriefing.activeTopic.lastSpeaker}</span>
+              {assistSource && (
+                <span
+                  className={`overlay__source ${assistSource.includes('Dual') ? 'overlay__source--dual' : ''}`}
+                  title="Bot-free meeting recording source"
+                >
+                  {assistSource.includes('Dual') ? (
+                    <Headphones className="icon icon--xs" aria-hidden="true" />
+                  ) : (
+                    <Mic className="icon icon--xs" aria-hidden="true" />
                   )}
-                </div>
+                  <span>{assistSource}</span>
+                </span>
+              )}
 
-                <div className="overlay__cue-lead">
-                  <span className="overlay__cue-lead-label">Suggested response</span>
-                  <div className="overlay__cue-lead-text">{catchUpBriefing.activeTopic.suggestedContribution}</div>
-                </div>
+              {mode === 'listening' && (
+                <label className="overlay__tool" style={{ cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={autoAnswer}
+                    onChange={(event) => {
+                      autoRef.current = event.target.checked
+                      setAutoAnswer(event.target.checked)
+                    }}
+                  />
+                  <span>Auto-answer</span>
+                </label>
+              )}
 
-                <div className="overlay__cue-context">
-                  <div className="overlay__cue-context-label">Context summary</div>
-                  <div className="overlay__cue-context-text">{catchUpBriefing.missedSummary}</div>
-                </div>
+              {assistNote && (
+                <span className="overlay__note" role="status">
+                  <Info className="icon icon--xs" aria-hidden="true" />
+                  <span>{assistNote}</span>
+                </span>
+              )}
 
-                {catchUpBriefing.keyDecisions.length > 0 && (
-                  <div className="overlay__cue-decisions">
-                    <span className="overlay__cue-decisions-label">Settled:</span>
-                    <span className="overlay__cue-decisions-text">{catchUpBriefing.keyDecisions.join(' · ')}</span>
-                  </div>
-                )}
-              </div>
-            )}
-            {deckTab === 'radar' && liveHesitation && (
-              <div className="overlay__cue-card">
-                <div className="overlay__cue-header">
-                  <span className="overlay__cue-badge">
-                    {liveHesitation.level === 'hesitant' ? 'Buyer Pacing: Hesitant' :
-                     liveHesitation.level === 'guarded' ? 'Buyer Pacing: Guarded' :
-                     liveHesitation.level === 'decisive' ? 'Buyer Pacing: High Conviction' :
-                     'Buyer Pacing: Steady'}
-                  </span>
-                  <span className="overlay__cue-sub">
-                    {liveHesitation.speechRateWpm} WPM · {liveHesitation.topicCategory}
-                  </span>
-                </div>
+              {history.length > 0 && mode === 'idle' && (
+                <span className="overlay__session-badge" title="Questions asked in this session">
+                  <History className="icon icon--xs" aria-hidden="true" />
+                  <span>{history.length + (question ? 1 : 0)} in thread</span>
+                </span>
+              )}
 
-                <div className="overlay__cue-lead">
-                  <span className="overlay__cue-lead-label">Recommended guidance</span>
-                  <div className="overlay__cue-lead-text">{liveHesitation.tacticalCue}</div>
-                </div>
-              </div>
-            )}
-            {deckTab === 'agenda' && showAgenda && agendaItems.length > 0 && (
-              <div className="overlay__agenda-body">
-                <ul className="overlay__agenda-list">
-                  {agendaItems.map((item) => (
-                    <li
-                      key={item.id}
-                      className={`overlay__agenda-item ${item.addressed ? 'overlay__agenda-item--done' : ''}`}
-                      onClick={() => {
-                        const updated = agendaItems.map((i) =>
-                          i.id === item.id ? { ...i, addressed: !i.addressed } : i
-                        )
-                        setAgendaItems(updated)
-                        agendaItemsRef.current = updated
-                      }}
-                    >
-                      {item.addressed ? (
-                        <Check className="icon icon--xs" style={{ color: 'var(--status-ok)', flexShrink: 0 }} />
-                      ) : (
-                        <span className="overlay__agenda-dot" aria-hidden="true" />
-                      )}
-                      <span>{item.title}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {deckTab === 'notes' && showScratchpad && (
-              <div className="overlay__scratchpad">
-                <textarea
-                  rows={2}
-                  placeholder="Jot private notes live (will be blended into the final CRM notes)…"
-                  value={scratchpadText}
-                  onChange={(e) => {
-                    const val = e.target.value
-                    setScratchpadText(val)
-                    if (interviewRef.current) {
-                      void window.klyro.interviewsUpdate({ id: interviewRef.current, notes: val })
+              <span className="overlay__toolbar-hint">Esc to close · Enter to ask</span>
+            </div>
+
+            {mode === 'listening' && (
+              <div className="overlay__copilot-bar">
+                <button
+                  type="button"
+                  className={`overlay__copilot-chip ${showCatchUp ? 'overlay__copilot-chip--active' : ''}`}
+                  disabled={transcript.length === 0}
+                  onClick={() => {
+                    const briefing = generateCatchUpBriefing(transcript)
+                    setCatchUpBriefing(briefing)
+                    setDeckTab('catchup')
+                    setShowCatchUp(!showCatchUp)
+                  }}
+                  title="Instant late-joiner briefing of missed context and active topic (Alt+U)"
+                >
+                  <Zap className="icon icon--xs" aria-hidden="true" />
+                  <span>Catch-up</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`overlay__copilot-chip ${hesitationRadarOn ? 'overlay__copilot-chip--active' : ''}`}
+                  onClick={() => {
+                    const nextState = !hesitationRadarOn
+                    setHesitationRadarOn(nextState)
+                    setDeckTab('radar')
+                    if (nextState && transcript.length > 0) {
+                      const sampleText = transcript[transcript.length - 1]
+                      const analysis = analyzeBuyerHesitation({
+                        text: sampleText,
+                        durationMs: 4500,
+                        latencyMs: 500
+                      })
+                      setLiveHesitation(analysis)
                     }
                   }}
-                />
+                  title="Toggle Live Buyer Hesitation & Intent Heatmap Radar (Alt+H)"
+                  aria-label="Buyer Hesitation Radar"
+                >
+                  <Activity
+                    className="icon icon--xs"
+                    style={{ color: hesitationRadarOn ? '#10b981' : undefined }}
+                    aria-hidden="true"
+                  />
+                  <span>{hesitationRadarOn ? 'Radar Active' : 'Pacing Radar'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="overlay__copilot-chip"
+                  disabled={busy || transcript.length === 0}
+                  onClick={async () => {
+                    const recent = transcript.slice(-4).join('\n')
+                    if (!recent) return
+                    archiveCurrentTurnIfAny()
+                    currentTurnRef.current = { question: 'Suggest response to objection', answer: '', timing: null }
+                    setQuestion('Suggest response to objection')
+                    setAnswer('')
+                    await askAssist(`The meeting attendee voiced this objection or point:\n"${recent}"\n\nProvide 2 tactful, persuasive, and professional ways to overcome this objection:`)
+                  }}
+                  title="Diplomatic responses to customer objections or skepticism"
+                >
+                  <ShieldAlert className="icon icon--xs" aria-hidden="true" />
+                  <span>Objections</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`overlay__copilot-chip ${showScratchpad ? 'overlay__copilot-chip--active' : ''}`}
+                  onClick={() => {
+                    setDeckTab('notes')
+                    setShowScratchpad(!showScratchpad)
+                  }}
+                  title="Jot private notes live that automatically merge into the CRM recap"
+                >
+                  <FileText className="icon icon--xs" aria-hidden="true" />
+                  <span>{showScratchpad ? 'Close Notes' : 'Notes'}</span>
+                  {scratchpadText.trim() && <span className="overlay__copilot-dot" aria-hidden="true" />}
+                </button>
+
+                {agendaItems.length > 0 && (
+                  <button
+                    type="button"
+                    className={`overlay__copilot-chip ${showAgenda ? 'overlay__copilot-chip--active' : ''}`}
+                    onClick={() => {
+                      setDeckTab('agenda')
+                      setShowAgenda(!showAgenda)
+                    }}
+                    title="Meeting Agenda Tracking"
+                  >
+                    <Calendar className="icon icon--xs" aria-hidden="true" />
+                    <span>
+                      Agenda ({agendaItems.filter((i) => i.addressed).length}/{agendaItems.length})
+                    </span>
+                  </button>
+                )}
+
+                {talkRatioPct > 0 && (
+                  <span className="overlay__pacing-badge" title="Live audio active speaking percentage">
+                    <Mic className="icon icon--xs" aria-hidden="true" />
+                    <span>Audio: {talkRatioPct}%</span>
+                  </span>
+                )}
               </div>
             )}
-          </div>
-        </div>
-      )}
 
-      {mode === 'listening' && liveAction && (
-        <div className="overlay__action-pulse" role="status" aria-live="polite">
-          <div className="overlay__action-pulse-main">
-            <span className="overlay__action-pulse-badge">
-              ⚡ Action: {liveAction.category.toUpperCase().replace('_', ' ')}
-            </span>
-            <span className="overlay__action-pulse-task">{liveAction.task}</span>
-            {liveAction.owner && <span className="overlay__action-pulse-meta">(@{liveAction.owner})</span>}
-            {liveAction.deadline && <span className="overlay__action-pulse-meta">[{liveAction.deadline}]</span>}
-          </div>
-          <div className="overlay__action-pulse-btns">
-            <button
-              type="button"
-              className="btn btn--primary btn--xs"
-              onClick={() => {
-                const noteItem = `- [ ] [${liveAction.category.toUpperCase()}] ${liveAction.task}${liveAction.owner ? ` (@${liveAction.owner})` : ''}${liveAction.deadline ? ` [Due: ${liveAction.deadline}]` : ''}`
-                setScratchpadText((prev) => (prev ? `${prev}\n${noteItem}` : noteItem))
-                if (interviewRef.current) {
-                  const updatedNotes = scratchpadText ? `${scratchpadText}\n${noteItem}` : noteItem
-                  void window.klyro.interviewsUpdate({ id: interviewRef.current, notes: updatedNotes })
-                }
-                setLiveAction(null)
-              }}
-              title="Add this commitment to meeting action items"
-            >
-              <Check className="icon icon--xs" />
-              <span>Add</span>
-            </button>
-            <button
-              type="button"
-              className="btn btn--quiet btn--xs"
-              onClick={() => setLiveAction(null)}
-              aria-label="Dismiss action item"
-            >
-              <X className="icon icon--xs" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {lastFinishedInterviewId && (
-        <div className="overlay__meeting-end-banner" role="status">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Sparkles className="icon icon--xs" style={{ color: 'var(--accent)' }} aria-hidden="true" />
-            <span>Meeting captured · CRM Notes ready to build</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <button
-              type="button"
-              className="btn btn--primary btn--xs"
-              onClick={async () => {
-                if (lastFinishedInterviewId) {
-                  const targetId = lastFinishedInterviewId
-                  setLastFinishedInterviewId(null)
-                  await window.klyro.interviewsGenerateCrmNotes({ id: targetId })
-                }
-              }}
-            >
-              <span>Generate Notes</span>
-            </button>
-            <button
-              type="button"
-              className="btn btn--quiet btn--xs"
-              onClick={() => setLastFinishedInterviewId(null)}
-              aria-label="Dismiss"
-            >
-              <X className="icon icon--xs" aria-hidden="true" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {talkState !== 'idle' && (
-        <div className="overlay__talk" aria-live="polite">
-          <span className={`overlay__talk-dot overlay__talk-dot--${talkState}`} aria-hidden="true" />
-          <span className="overlay__talk-label">
-            {pushToTalkActive
-              ? '🎙️ [Space held] Speaking — release to send'
-              : talkState === 'listening'
-                ? 'Listening — speak freely (or hold Space)'
-                : talkState === 'hearing'
-                  ? partialText ? `“${partialText}…”` : 'Hearing you…'
-                  : 'Thinking…'}
-          </span>
-          <span className="overlay__meter" aria-hidden="true">
-            <span className="overlay__meter-fill" style={{ width: `${Math.round(Math.min(1, level) * 100)}%` }} />
-          </span>
-          <button
-            type="button"
-            className="overlay__cadence-btn"
-            onClick={cycleCadence}
-            title="Click to cycle pause sensitivity (Snappy: 0.8s / Balanced: 1.6s / Patient: 2.4s)"
-          >
-            {cadencePreset === 'snappy' ? '⚡ Snappy' : cadencePreset === 'patient' ? '🧠 Patient' : '⚖️ Balanced'}
-          </button>
-        </div>
-      )}
-
-      {transcript.length > 0 && (
-        <div className="overlay__transcript" aria-live="polite">
-          {transcript.slice(-3).map((line, index) => (
-            <div key={`${index}-${line.slice(0, 24)}`} className="overlay__line">
-              {line}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {overlaySources && (
-        <div className="overlay__sources">
-          {overlaySources.map((source) => (
-            <button key={source.id} className="overlay__source-card" onClick={() => void captureSource(source.id)}>
-              <img src={source.thumbnail} alt={source.name} />
-              <span>{source.name}</span>
-            </button>
-          ))}
-          <button className="btn btn--icon btn--icon-sm btn--ghost" onClick={() => setOverlaySources(null)} aria-label="Cancel">
-            <span aria-hidden="true">×</span>
-          </button>
-        </div>
-      )}
-
-      {capture && (
-        <div className="overlay__capture">
-          <img src={capture.dataUrl} alt={`Captured: ${capture.name}`} />
-          <div className="overlay__capture-text">
-            <strong>Screen captured</strong>
-            <span>{capture.name} — attached to your next question</span>
-          </div>
-          <button
-            className="btn btn--icon btn--icon-sm btn--ghost"
-            onClick={() => setCapture(null)}
-            aria-label="Remove the screen capture"
-          >
-            <span aria-hidden="true">×</span>
-          </button>
-        </div>
-      )}
-
-      {(history.length > 0 || question || hasAnswer || errorText || busy) && (
-        <section className="overlay__response" ref={responseRef} aria-live="polite">
-          {history.length > 0 && (
-            <div className="overlay__session-header">
-              <span className="overlay__session-title">
-                <History className="icon icon--xs" aria-hidden="true" />
-                <span>Session Thread ({history.length + (question ? 1 : 0)})</span>
-              </span>
-              <button
-                type="button"
-                className="btn btn--quiet btn--xs"
-                onClick={() => {
-                  setHistory([])
-                  currentTurnRef.current = { question: '', answer: '', timing: null }
-                }}
-                title="Clear session history"
-              >
-                <Trash2 className="icon icon--xs" aria-hidden="true" />
-                <span>Clear</span>
-              </button>
-            </div>
-          )}
-
-          {/* Previous turns from this session */}
-          {history.map((turn) => (
-            <div key={turn.id} className="overlay__turn">
-              <div className="overlay__turn-user">
-                <div className="overlay__user-bubble">{turn.question}</div>
-              </div>
-              <div className="overlay__turn-assistant">
-                <div className="overlay__answer">
-                  <div className="overlay__answer-text">
-                    <RenderAnswerWithCitations text={turn.answer} />
-                  </div>
+            {mode === 'listening' && (activeBattlecard || (showCatchUp && catchUpBriefing) || (hesitationRadarOn && liveHesitation) || (showAgenda && agendaItems.length > 0) || showScratchpad) && (
+              <div className="overlay__intelligence-deck" role="region" aria-label="Live Intelligence Deck">
+                <div className="overlay__intelligence-tabs">
+                  {activeBattlecard && (
+                    <button
+                      type="button"
+                      className={`overlay__intelligence-tab ${deckTab === 'battlecard' ? 'overlay__intelligence-tab--active' : ''}`}
+                      onClick={() => setDeckTab('battlecard')}
+                    >
+                      <ShieldAlert className="icon icon--xs" style={{ color: '#eab308' }} />
+                      <span>{activeBattlecard.battlecard.title}</span>
+                    </button>
+                  )}
+                  {showCatchUp && catchUpBriefing && (
+                    <button
+                      type="button"
+                      className={`overlay__intelligence-tab ${deckTab === 'catchup' ? 'overlay__intelligence-tab--active' : ''}`}
+                      onClick={() => setDeckTab('catchup')}
+                    >
+                      <Zap className="icon icon--xs" style={{ color: '#3b82f6' }} />
+                      <span>Catch-up</span>
+                    </button>
+                  )}
+                  {hesitationRadarOn && liveHesitation && (
+                    <button
+                      type="button"
+                      className={`overlay__intelligence-tab ${deckTab === 'radar' ? 'overlay__intelligence-tab--active' : ''}`}
+                      onClick={() => setDeckTab('radar')}
+                    >
+                      <Activity
+                        className="icon icon--xs"
+                        style={{
+                          color:
+                            liveHesitation.level === 'hesitant'
+                              ? '#f97316'
+                              : liveHesitation.level === 'guarded'
+                                ? '#eab308'
+                                : '#10b981'
+                        }}
+                      />
+                      <span>Pacing ({liveHesitation.score}%)</span>
+                    </button>
+                  )}
+                  {showAgenda && agendaItems.length > 0 && (
+                    <button
+                      type="button"
+                      className={`overlay__intelligence-tab ${deckTab === 'agenda' ? 'overlay__intelligence-tab--active' : ''}`}
+                      onClick={() => setDeckTab('agenda')}
+                    >
+                      <Calendar className="icon icon--xs" style={{ color: '#38bdf8' }} />
+                      <span>Agenda ({agendaItems.filter((i) => i.addressed).length}/{agendaItems.length})</span>
+                    </button>
+                  )}
+                  {showScratchpad && (
+                    <button
+                      type="button"
+                      className={`overlay__intelligence-tab ${deckTab === 'notes' ? 'overlay__intelligence-tab--active' : ''}`}
+                      onClick={() => setDeckTab('notes')}
+                    >
+                      <FileText className="icon icon--xs" />
+                      <span>Notes</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn--icon btn--xs btn--quiet"
+                    style={{ marginLeft: 'auto' }}
+                    onClick={() => {
+                      if (deckTab === 'battlecard') setActiveBattlecard(null)
+                      else if (deckTab === 'catchup') setShowCatchUp(false)
+                      else if (deckTab === 'radar') setLiveHesitation(null)
+                      else if (deckTab === 'agenda') setShowAgenda(false)
+                      else if (deckTab === 'notes') setShowScratchpad(false)
+                    }}
+                    title="Dismiss active card (Esc)"
+                    aria-label="Dismiss card"
+                  >
+                    <X className="icon icon--xs" />
+                  </button>
                 </div>
-                <div className="overlay__turn-footer">
+                <div className="overlay__intelligence-body">
+                  {deckTab === 'battlecard' && activeBattlecard && (
+                    <div className="overlay__cue-card">
+                      <div className="overlay__cue-header">
+                        <span className="overlay__cue-badge">Competitor Brief: {activeBattlecard.battlecard.title}</span>
+                      </div>
+                      <ul className="overlay__cue-bullets">
+                        {activeBattlecard.battlecard.keyPoints.map((point, idx) => (
+                          <li key={idx} className="overlay__cue-bullet">
+                            {point}
+                          </li>
+                        ))}
+                      </ul>
+                      {activeBattlecard.battlecard.trapQuestion && (
+                        <div className="overlay__cue-meta-box">
+                          <span className="overlay__cue-meta-label">Trap question:</span> {activeBattlecard.battlecard.trapQuestion}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {deckTab === 'catchup' && catchUpBriefing && (
+                    <div className="overlay__cue-card">
+                      <div className="overlay__cue-header">
+                        <span className="overlay__cue-badge">Active: {catchUpBriefing.activeTopic.topic}</span>
+                        {catchUpBriefing.activeTopic.lastSpeaker && (
+                          <span className="overlay__cue-sub">Speaker: {catchUpBriefing.activeTopic.lastSpeaker}</span>
+                        )}
+                      </div>
+
+                      <div className="overlay__cue-lead">
+                        <span className="overlay__cue-lead-label">Suggested response</span>
+                        <div className="overlay__cue-lead-text">{catchUpBriefing.activeTopic.suggestedContribution}</div>
+                      </div>
+
+                      <div className="overlay__cue-context">
+                        <div className="overlay__cue-context-label">Context summary</div>
+                        <div className="overlay__cue-context-text">{catchUpBriefing.missedSummary}</div>
+                      </div>
+
+                      {catchUpBriefing.keyDecisions.length > 0 && (
+                        <div className="overlay__cue-decisions">
+                          <span className="overlay__cue-decisions-label">Settled:</span>
+                          <span className="overlay__cue-decisions-text">{catchUpBriefing.keyDecisions.join(' · ')}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {deckTab === 'radar' && liveHesitation && (
+                    <div className="overlay__cue-card">
+                      <div className="overlay__cue-header">
+                        <span className="overlay__cue-badge">
+                          {liveHesitation.level === 'hesitant' ? 'Buyer Pacing: Hesitant' :
+                            liveHesitation.level === 'guarded' ? 'Buyer Pacing: Guarded' :
+                              liveHesitation.level === 'decisive' ? 'Buyer Pacing: High Conviction' :
+                                'Buyer Pacing: Steady'}
+                        </span>
+                        <span className="overlay__cue-sub">
+                          {liveHesitation.speechRateWpm} WPM · {liveHesitation.topicCategory}
+                        </span>
+                      </div>
+
+                      <div className="overlay__cue-lead">
+                        <span className="overlay__cue-lead-label">Recommended guidance</span>
+                        <div className="overlay__cue-lead-text">{liveHesitation.tacticalCue}</div>
+                      </div>
+                    </div>
+                  )}
+                  {deckTab === 'agenda' && showAgenda && agendaItems.length > 0 && (
+                    <div className="overlay__agenda-body">
+                      <ul className="overlay__agenda-list">
+                        {agendaItems.map((item) => (
+                          <li
+                            key={item.id}
+                            className={`overlay__agenda-item ${item.addressed ? 'overlay__agenda-item--done' : ''}`}
+                            onClick={() => {
+                              const updated = agendaItems.map((i) =>
+                                i.id === item.id ? { ...i, addressed: !i.addressed } : i
+                              )
+                              setAgendaItems(updated)
+                              agendaItemsRef.current = updated
+                            }}
+                          >
+                            {item.addressed ? (
+                              <Check className="icon icon--xs" style={{ color: 'var(--status-ok)', flexShrink: 0 }} />
+                            ) : (
+                              <span className="overlay__agenda-dot" aria-hidden="true" />
+                            )}
+                            <span>{item.title}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {deckTab === 'notes' && showScratchpad && (
+                    <div className="overlay__scratchpad">
+                      <textarea
+                        rows={2}
+                        placeholder="Jot private notes live (will be blended into the final CRM notes)…"
+                        value={scratchpadText}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setScratchpadText(val)
+                          if (interviewRef.current) {
+                            void window.klyro.interviewsUpdate({ id: interviewRef.current, notes: val })
+                          }
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {mode === 'listening' && liveAction && (
+              <div className="overlay__action-pulse" role="status" aria-live="polite">
+                <div className="overlay__action-pulse-main">
+                  <span className="overlay__action-pulse-badge">
+                    ⚡ Action: {liveAction.category.toUpperCase().replace('_', ' ')}
+                  </span>
+                  <span className="overlay__action-pulse-task">{liveAction.task}</span>
+                  {liveAction.owner && <span className="overlay__action-pulse-meta">(@{liveAction.owner})</span>}
+                  {liveAction.deadline && <span className="overlay__action-pulse-meta">[{liveAction.deadline}]</span>}
+                </div>
+                <div className="overlay__action-pulse-btns">
+                  <button
+                    type="button"
+                    className="btn btn--primary btn--xs"
+                    onClick={() => {
+                      const noteItem = `- [ ] [${liveAction.category.toUpperCase()}] ${liveAction.task}${liveAction.owner ? ` (@${liveAction.owner})` : ''}${liveAction.deadline ? ` [Due: ${liveAction.deadline}]` : ''}`
+                      setScratchpadText((prev) => (prev ? `${prev}\n${noteItem}` : noteItem))
+                      if (interviewRef.current) {
+                        const updatedNotes = scratchpadText ? `${scratchpadText}\n${noteItem}` : noteItem
+                        void window.klyro.interviewsUpdate({ id: interviewRef.current, notes: updatedNotes })
+                      }
+                      setLiveAction(null)
+                    }}
+                    title="Add this commitment to meeting action items"
+                  >
+                    <Check className="icon icon--xs" />
+                    <span>Add</span>
+                  </button>
                   <button
                     type="button"
                     className="btn btn--quiet btn--xs"
-                    onClick={async () => {
-                      await copyToClipboard(turn.answer)
-                      setCopiedHistoryId(turn.id)
-                      window.setTimeout(() => setCopiedHistoryId(null), 1500)
-                    }}
-                    title="Copy answer"
+                    onClick={() => setLiveAction(null)}
+                    aria-label="Dismiss action item"
                   >
-                    {copiedHistoryId === turn.id ? (
-                      <Check className="icon icon--xs" aria-hidden="true" />
-                    ) : (
-                      <Copy className="icon icon--xs" aria-hidden="true" />
-                    )}
-                    <span>{copiedHistoryId === turn.id ? 'Copied' : 'Copy'}</span>
+                    <X className="icon icon--xs" />
                   </button>
                 </div>
               </div>
-            </div>
-          ))}
+            )}
 
-          {/* Active / latest turn */}
-          {(question || hasAnswer || errorText || busy) && (
-            <div className="overlay__turn overlay__turn--current">
-              {question && (
-                <div className="overlay__turn-user">
-                  <div className="overlay__user-bubble">{question}</div>
+            {lastFinishedInterviewId && (
+              <div className="overlay__meeting-end-banner" role="status">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Sparkles className="icon icon--xs" style={{ color: 'var(--accent)' }} aria-hidden="true" />
+                  <span>Meeting captured · CRM Notes ready to build</span>
                 </div>
-              )}
-
-              <div className="overlay__turn-assistant">
-                <div className={`overlay__answer${assistNote && !hasAnswer ? ' overlay__answer--error' : ''}`}>
-                  {showRsvp && hasAnswer ? (
-                    <Suspense fallback={null}>
-                      <RsvpReader text={answer} onClose={() => setShowRsvp(false)} />
-                    </Suspense>
-                  ) : hasAnswer ? (
-                    <div className="overlay__answer-text" ref={answerTextRef}>
-                      <RenderAnswerWithCitations text={answer} />
-                    </div>
-                  ) : errorText ? (
-                    <div className="row" style={{ alignItems: 'flex-start', gap: 6 }}>
-                      <TriangleAlert className="icon icon--xs" style={{ marginTop: 3, flexShrink: 0 }} aria-hidden="true" />
-                      <span>{errorText}</span>
-                    </div>
-                  ) : busy ? (
-                    <div className="overlay__optimistic-skeleton" aria-label="Generating response…">
-                      <div className="overlay__skeleton-bar overlay__skeleton-bar--title" />
-                      <div className="overlay__skeleton-bar overlay__skeleton-bar--body" />
-                      <div className="overlay__skeleton-bar overlay__skeleton-bar--short" />
-                    </div>
-                  ) : null}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button
+                    type="button"
+                    className="btn btn--primary btn--xs"
+                    onClick={async () => {
+                      if (lastFinishedInterviewId) {
+                        const targetId = lastFinishedInterviewId
+                        setLastFinishedInterviewId(null)
+                        await window.klyro.interviewsGenerateCrmNotes({ id: targetId })
+                      }
+                    }}
+                  >
+                    <span>Generate Notes</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--quiet btn--xs"
+                    onClick={() => setLastFinishedInterviewId(null)}
+                    aria-label="Dismiss"
+                  >
+                    <X className="icon icon--xs" aria-hidden="true" />
+                  </button>
                 </div>
-
-                <footer className="overlay__footer">
-                  {busy && hasAnswer && (
-                    <span className="overlay__streaming-indicator">
-                      <Zap className="icon icon--xs" />
-                      <span>Streaming live…</span>
-                    </span>
-                  )}
-                  {!busy && !hasAnswer && !errorText && (
-                    <span>Answers stay on this machine unless you use a hosted provider.</span>
-                  )}
-                  <div className="overlay__actions">
-                    {hasAnswer && (
-                      <>
-                        <button className="btn btn--quiet btn--xs" onClick={() => void copyAnswer()} title="Copy the answer">
-                          {copied ? <Check className="icon icon--xs" aria-hidden="true" /> : <Copy className="icon icon--xs" aria-hidden="true" />}
-                          <span>{copied ? 'Copied' : 'Copy'}</span>
-                        </button>
-                        <button
-                          className="btn btn--quiet btn--xs"
-                          onClick={() => void retry()}
-                          disabled={busy || !lastQuestionRef.current}
-                          title="Ask the same question again"
-                        >
-                          <RefreshCcw className="icon icon--xs" aria-hidden="true" />
-                          <span>Retry</span>
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </footer>
               </div>
-            </div>
-          )}
-        </section>
-      )}
-      <div
-        className="overlay__resize-edge-e"
-        onPointerDown={startResize('x')}
-        aria-hidden="true"
-        title="Drag edge to resize width"
-      />
-      <div
-        className="overlay__resize-edge-s"
-        onPointerDown={startResize('y')}
-        aria-hidden="true"
-        title="Drag edge to resize height"
-      />
-      <div
-        className="overlay__resize-corner"
-        onPointerDown={startResize('both')}
-        aria-hidden="true"
-        title="Drag corner to resize"
-      />
+            )}
+
+            {talkState !== 'idle' && (
+              <div className="overlay__talk" aria-live="polite">
+                <span className={`overlay__talk-dot overlay__talk-dot--${talkState}`} aria-hidden="true" />
+                <span className="overlay__talk-label">
+                  {pushToTalkActive
+                    ? '🎙️ [Space held] Speaking — release to send'
+                    : talkState === 'listening'
+                      ? 'Listening — speak freely (or hold Space)'
+                      : talkState === 'hearing'
+                        ? partialText ? `“${partialText}…”` : 'Hearing you…'
+                        : 'Thinking…'}
+                </span>
+                <span className="overlay__meter" aria-hidden="true">
+                  <span className="overlay__meter-fill" style={{ width: `${Math.round(Math.min(1, level) * 100)}%` }} />
+                </span>
+                <button
+                  type="button"
+                  className="overlay__cadence-btn"
+                  onClick={cycleCadence}
+                  title="Click to cycle pause sensitivity (Snappy: 0.8s / Balanced: 1.6s / Patient: 2.4s)"
+                >
+                  {cadencePreset === 'snappy' ? '⚡ Snappy' : cadencePreset === 'patient' ? '🧠 Patient' : '⚖️ Balanced'}
+                </button>
+              </div>
+            )}
+
+            {transcript.length > 0 && (
+              <div className="overlay__transcript" aria-live="polite">
+                {transcript.slice(-3).map((line, index) => (
+                  <div key={`${index}-${line.slice(0, 24)}`} className="overlay__line">
+                    {line}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {overlaySources && (
+              <div className="overlay__sources">
+                {overlaySources.map((source) => (
+                  <button key={source.id} className="overlay__source-card" onClick={() => void captureSource(source.id)}>
+                    <img src={source.thumbnail} alt={source.name} />
+                    <span>{source.name}</span>
+                  </button>
+                ))}
+                <button className="btn btn--icon btn--icon-sm btn--ghost" onClick={() => setOverlaySources(null)} aria-label="Cancel">
+                  <span aria-hidden="true">×</span>
+                </button>
+              </div>
+            )}
+
+            {capture && (
+              <div className="overlay__capture">
+                <img src={capture.dataUrl} alt={`Captured: ${capture.name}`} />
+                <div className="overlay__capture-text">
+                  <strong>Screen captured</strong>
+                  <span>{capture.name} — attached to your next question</span>
+                </div>
+                <button
+                  className="btn btn--icon btn--icon-sm btn--ghost"
+                  onClick={() => setCapture(null)}
+                  aria-label="Remove the screen capture"
+                >
+                  <span aria-hidden="true">×</span>
+                </button>
+              </div>
+            )}
+
+            {(history.length > 0 || question || hasAnswer || errorText || busy) && (
+              <section className="overlay__response" ref={responseRef} aria-live="polite">
+                {history.length > 0 && (
+                  <div className="overlay__session-header">
+                    <span className="overlay__session-title">
+                      <History className="icon icon--xs" aria-hidden="true" />
+                      <span>Session Thread ({history.length + (question ? 1 : 0)})</span>
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn--quiet btn--xs"
+                      onClick={() => {
+                        setHistory([])
+                        currentTurnRef.current = { question: '', answer: '', timing: null }
+                      }}
+                      title="Clear session history"
+                    >
+                      <Trash2 className="icon icon--xs" aria-hidden="true" />
+                      <span>Clear</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Previous turns from this session */}
+                {history.map((turn) => (
+                  <div key={turn.id} className="overlay__turn">
+                    <div className="overlay__turn-user">
+                      <div className="overlay__user-bubble">{turn.question}</div>
+                    </div>
+                    <div className="overlay__turn-assistant">
+                      <div className="overlay__answer">
+                        <div className="overlay__answer-text">
+                          <RenderAnswerWithCitations text={turn.answer} />
+                        </div>
+                      </div>
+                      <div className="overlay__turn-footer">
+                        <button
+                          type="button"
+                          className="btn btn--quiet btn--xs"
+                          onClick={async () => {
+                            await copyToClipboard(turn.answer)
+                            setCopiedHistoryId(turn.id)
+                            window.setTimeout(() => setCopiedHistoryId(null), 1500)
+                          }}
+                          title="Copy answer"
+                        >
+                          {copiedHistoryId === turn.id ? (
+                            <Check className="icon icon--xs" aria-hidden="true" />
+                          ) : (
+                            <Copy className="icon icon--xs" aria-hidden="true" />
+                          )}
+                          <span>{copiedHistoryId === turn.id ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Active / latest turn */}
+                {(question || hasAnswer || errorText || busy) && (
+                  <div className="overlay__turn overlay__turn--current">
+                    {question && (
+                      <div className="overlay__turn-user">
+                        <div className="overlay__user-bubble">{question}</div>
+                      </div>
+                    )}
+
+                    <div className="overlay__turn-assistant">
+                      <div className={`overlay__answer${assistNote && !hasAnswer ? ' overlay__answer--error' : ''}`}>
+                        {showRsvp && hasAnswer ? (
+                          <Suspense fallback={null}>
+                            <RsvpReader text={answer} onClose={() => setShowRsvp(false)} />
+                          </Suspense>
+                        ) : hasAnswer ? (
+                          <div className="overlay__answer-text" ref={answerTextRef}>
+                            <RenderAnswerWithCitations text={answer} />
+                          </div>
+                        ) : errorText ? (
+                          <div className="row" style={{ alignItems: 'flex-start', gap: 6 }}>
+                            <TriangleAlert className="icon icon--xs" style={{ marginTop: 3, flexShrink: 0 }} aria-hidden="true" />
+                            <span>{errorText}</span>
+                          </div>
+                        ) : busy ? (
+                          <div className="overlay__optimistic-skeleton" aria-label="Generating response…">
+                            <div className="overlay__skeleton-bar overlay__skeleton-bar--title" />
+                            <div className="overlay__skeleton-bar overlay__skeleton-bar--body" />
+                            <div className="overlay__skeleton-bar overlay__skeleton-bar--short" />
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <footer className="overlay__footer">
+                        {busy && hasAnswer && (
+                          <span className="overlay__streaming-indicator">
+                            <Zap className="icon icon--xs" />
+                            <span>Streaming live…</span>
+                          </span>
+                        )}
+                        {!busy && !hasAnswer && !errorText && (
+                          <span>Answers stay on this machine unless you use a hosted provider.</span>
+                        )}
+                        <div className="overlay__actions">
+                          {hasAnswer && (
+                            <>
+                              <button className="btn btn--quiet btn--xs" onClick={() => void copyAnswer()} title="Copy the answer">
+                                {copied ? <Check className="icon icon--xs" aria-hidden="true" /> : <Copy className="icon icon--xs" aria-hidden="true" />}
+                                <span>{copied ? 'Copied' : 'Copy'}</span>
+                              </button>
+                              <button
+                                className="btn btn--quiet btn--xs"
+                                onClick={() => void retry()}
+                                disabled={busy || !lastQuestionRef.current}
+                                title="Ask the same question again"
+                              >
+                                <RefreshCcw className="icon icon--xs" aria-hidden="true" />
+                                <span>Retry</span>
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </footer>
+                    </div>
+                  </div>
+                )}
+              </section>
+            )}
+            <div
+              className="overlay__resize-edge-e"
+              onPointerDown={startResize('x')}
+              aria-hidden="true"
+              title="Drag edge to resize width"
+            />
+            <div
+              className="overlay__resize-edge-s"
+              onPointerDown={startResize('y')}
+              aria-hidden="true"
+              title="Drag edge to resize height"
+            />
+            <div
+              className="overlay__resize-corner"
+              onPointerDown={startResize('both')}
+              aria-hidden="true"
+              title="Drag corner to resize"
+            />
           </>
         )}
       </div>

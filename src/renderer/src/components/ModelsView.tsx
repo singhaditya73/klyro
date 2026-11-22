@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertCircle, Bot, Cloud, Cpu, Server, Sparkles } from 'lucide-react'
 import type { AppSettings, ProviderId, ProviderStatus } from '@shared/types'
 import { Badge, Group, PageHeader, StatusDot } from './ui'
+import { BrandIcon } from './BrandIcon'
 import { ProviderCard } from './ProviderCard'
 import { LocalAgentsSection, type CliAgent, type LocalAgent } from './LocalAgentsSection'
 import { AGENT_PROVIDERS, HOSTED_PROVIDERS, LOCAL_PROVIDERS, providerState } from '../lib/providers'
@@ -71,7 +72,10 @@ export function ModelsView({ onNavigate }: { onNavigate: (route: Route) => void 
     async (id: ProviderId, field: 'baseUrl' | 'model' | 'fastModel', value: string): Promise<void> => {
       if (!settings) return
       const current = settings.providers[id]
-      await patch({ providers: { ...settings.providers, [id]: { ...current, [field]: value } } })
+      await patch({
+        activeProvider: id,
+        providers: { ...settings.providers, [id]: { ...current, [field]: value } }
+      })
     },
     [patch, settings]
   )
@@ -100,7 +104,6 @@ export function ModelsView({ onNavigate }: { onNavigate: (route: Route) => void 
         }
         const current = await window.klyro.getSettings()
         await window.klyro.updateSettings({
-          ...current,
           activeProvider: providerId,
           providers: {
             ...current.providers,
@@ -220,8 +223,9 @@ export function ModelsView({ onNavigate }: { onNavigate: (route: Route) => void 
                 const state = providerState(provider, agents, clis, health[provider.id])
                 const isActive = settings?.activeProvider === provider.id
                 return (
-                  <div key={provider.id} className="list__row">
+                  <div key={provider.id} className="list__row" style={{ alignItems: 'center' }}>
                     <StatusDot state={state.tone === 'ok' ? 'ok' : 'idle'} title={state.label} />
+                    <BrandIcon brand={provider.id} size={18} />
                     <div className="list__main">
                       <div className="list__title">
                         {provider.label}

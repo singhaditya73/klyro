@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AlertCircle, CheckCircle, CheckCircle2, Key, Loader2, Trash2, Zap } from 'lucide-react'
 import type { AppSettings, ProviderId, ProviderStatus } from '@shared/types'
+import { BrandIcon } from './BrandIcon'
 import { ModelPicker } from './ModelPicker'
 import { Badge, Hint } from './ui'
 import { type CliInfo, type LocalAgentInfo, type ProviderHealth, providerState } from '../lib/providers'
@@ -82,7 +83,7 @@ export function ProviderCard({ provider, settings, agents, clis, health, onSetti
   return (
     <div className={`provider-card${isActive ? ' provider-card--active' : ''}`}>
       <div className="provider-card__head">
-        <label className="row" style={{ cursor: 'pointer', gap: 10, flex: 1, minWidth: 0 }}>
+        <label className="row" style={{ cursor: 'pointer', gap: 10, flex: 1, minWidth: 0, alignItems: 'center' }}>
           <input
             type="radio"
             name="active-provider"
@@ -90,6 +91,7 @@ export function ProviderCard({ provider, settings, agents, clis, health, onSetti
             onChange={() => void onSettings({ activeProvider: provider.id })}
             aria-label={`Use ${provider.label}`}
           />
+          <BrandIcon brand={provider.id} size={18} />
           <span className="list__title">
             {provider.label}
             {isActive && <Badge tone="accent">In use</Badge>}

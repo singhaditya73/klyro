@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import type { AppSettings, DataSummary, ProviderId, ProviderStatus, ProviderUsageRow } from '@shared/types'
 import { Badge, EmptyState, Group, Loading, PageHeader, StatusDot } from './ui'
+import { BrandIcon } from './BrandIcon'
 import {
   type CliInfo,
   type LocalAgentInfo,
@@ -101,6 +102,12 @@ export function HomeView({ onNavigate }: { onNavigate: (route: Route) => void })
 
   useEffect(() => {
     void load()
+    const unsubscribe = window.klyro.onSettingsChanged?.(() => {
+      void load()
+    })
+    return () => {
+      unsubscribe?.()
+    }
   }, [load])
 
   // Recent activity only when there is some: the history may be off, and the
@@ -140,7 +147,11 @@ export function HomeView({ onNavigate }: { onNavigate: (route: Route) => void })
     [providers, settings]
   )
   const activeState = active ? providerState(active, agents, clis, health[active.id]) : null
-  const activeModel = active?.model || ''
+  const activeModel =
+    (settings?.activeProvider && settings.providers[settings.activeProvider]?.model) ||
+    (settings?.activeProvider && settings.providers[settings.activeProvider]?.fastModel) ||
+    active?.model ||
+    ''
 
   const connected = useMemo(
     () => providers.filter((provider) => {
@@ -209,12 +220,6 @@ export function HomeView({ onNavigate }: { onNavigate: (route: Route) => void })
       <PageHeader
         title="Klyro"
         description="Your meeting assistant. It answers about the screen or the conversation, in place, using the models you already have."
-        actions={
-          <button className="btn btn--accent" onClick={() => void window.klyro.toggleOverlay?.()}>
-            <Zap className="icon icon--sm" aria-hidden="true" />
-            <span>Open Klyro</span>
-          </button>
-        }
       />
 
       {error && (
@@ -241,12 +246,12 @@ export function HomeView({ onNavigate }: { onNavigate: (route: Route) => void })
                 width: 44,
                 height: 44,
                 borderRadius: 'var(--radius-md)',
-                background: 'rgba(59, 130, 246, 0.12)',
-                border: '1px solid rgba(59, 130, 246, 0.25)',
+                background: 'rgba(249, 115, 22, 0.12)',
+                border: '1px solid rgba(249, 115, 22, 0.25)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#60a5fa',
+                color: '#fb923c',
                 flexShrink: 0
               }}
             >
@@ -409,6 +414,7 @@ export function HomeView({ onNavigate }: { onNavigate: (route: Route) => void })
                       onClick={() => onNavigate('models')}
                     >
                       <StatusDot state={state.tone === 'ok' ? 'ok' : state.tone === 'warn' ? 'warn' : 'idle'} title={state.label} />
+                      <BrandIcon brand={provider.id} size={18} />
                       <div className="list__main">
                         <div className="list__title">
                           {provider.label}

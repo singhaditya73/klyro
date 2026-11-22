@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, ChevronDown, Loader2, RefreshCcw, Search } from 'lucide-react'
+import { BrandIcon } from './BrandIcon'
 import { knownModelNames, rememberModelNames, tidyModelId } from '../lib/modelNames'
 
 /**
@@ -393,6 +394,7 @@ export function ModelPicker({
           aria-expanded={open}
           title={value ? `${label} — ${value}` : 'Pick a model'}
         >
+          {providerId && <BrandIcon brand={providerId} size={14} />}
           <span className="model-picker__chip-label">{label}</span>
           <ChevronDown className="icon icon--xs" aria-hidden="true" />
         </button>
@@ -517,7 +519,8 @@ function ModelList({
           <div key={group.id || 'models'} className="model-picker__group">
             {showHeaders && (
               <div className="model-picker__group-head">
-                <span className="row" style={{ gap: 6 }}>
+                <span className="row" style={{ gap: 6, alignItems: 'center' }}>
+                  <BrandIcon brand={group.id} size={14} />
                   <span>{group.label}</span>
                   {group.local !== undefined && (
                     <span className={`pill ${group.local ? 'pill--ok' : ''}`}>{group.local ? 'Local' : 'Hosted'}</span>

@@ -21,6 +21,7 @@ import {
   Mail,
   MessageSquare,
   Plus,
+  Printer,
   Save,
   Search,
   Share2,
@@ -324,14 +325,180 @@ export function InterviewsView(): React.ReactNode {
     window.open(mailtoUrl, '_blank')
   }, [])
 
+  const downloadFile = (content: string, filename: string, mimeType: string): void => {
+    const blob = new Blob([content], { type: mimeType })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   const exportMarkdown = useCallback(
-    async (id: string): Promise<void> => {
+    async (id: string, title?: string): Promise<void> => {
       const md = await window.klyro.interviewsExportMarkdown(id)
       if (!md) return
+      const filename = `${(title || 'meeting').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-notes.md`
+      downloadFile(md, filename, 'text/markdown;charset=utf-8')
       await copyToClipboard(md, 'markdown')
     },
     [copyToClipboard]
   )
+
+  const exportSessionCsv = useCallback(
+    (detail: Session): void => {
+      const notes = detail.crmNotes
+      const title = detail.company && detail.role ? `${detail.company} - ${detail.role}` : detail.company || detail.role || 'Meeting Session'
+      const rows: string[][] = [
+        ['Meeting Field', 'Details'],
+        ['Title', title],
+        ['Company', detail.company || ''],
+        ['Role', detail.role || ''],
+        ['Date', detail.startedAt ? new Date(detail.startedAt).toLocaleString() : ''],
+        ['Duration', detail.durationMs ? `${Math.round(detail.durationMs / 60000)} min` : ''],
+        ['Executive Summary', notes?.executiveSummary || detail.summary || ''],
+        ['Talk Ratio (User %)', notes?.talkRatio?.userPct !== undefined ? `${notes.talkRatio.userPct}%` : ''],
+        ['Talk Ratio (Others %)', notes?.talkRatio?.othersPct !== undefined ? `${notes.talkRatio.othersPct}%` : ''],
+        ['Talk Pacing', notes?.talkRatio?.pacingNote || ''],
+        [],
+        ['Action Item Task', 'Owner', 'Deadline', 'Status'],
+        ...(notes?.actionItems || []).map((a: MeetingActionItem) => [a.task, a.owner || '', a.deadline || '', a.done ? 'Completed' : 'Pending']),
+        [],
+        ['MEDDPIC Dimension', 'Notes'],
+        ['Metrics', notes?.meddpic?.metrics || ''],
+        ['Economic Buyer', notes?.meddpic?.economicBuyer || ''],
+        ['Decision Criteria', notes?.meddpic?.decisionCriteria || ''],
+        ['Decision Process', notes?.meddpic?.decisionProcess || ''],
+        ['Identify Pain / Pain Points', notes?.meddpic?.painPoints || ''],
+        ['Champion', notes?.meddpic?.champion || ''],
+        [],
+        ['Question / Transcript', 'Answer / Response'],
+        ...detail.questions.map((q: Question) => [q.text, q.answer || ''])
+      ]
+
+      const csvContent = rows
+        .map((row) =>
+          row
+            .map((cell) => {
+              const str = (cell || '').replace(/"/g, '""')
+              return `"${str}"`
+            })
+            .join(',')
+        )
+        .join('\r\n')
+
+      const filename = `${title.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-summary.csv`
+      downloadFile(csvContent, filename, 'text/csv;charset=utf-8;')
+      void copyToClipboard(csvContent, 'csv')
+    },
+    [copyToClipboard]
+  )
+
+  const printSessionPdf = useCallback((detail: Session): void => {
+    const notes = detail.crmNotes
+    const title = detail.company && detail.role ? `${detail.company} - ${detail.role}` : detail.company || detail.role || 'Meeting Session'
+    const printWindow = window.open('', '_blank', 'width=800,height=900')
+    if (!printWindow) return
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${title} - Meeting Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.5; color: #111; padding: 36px; margin: 0; }
+    h1 { font-size: 22px; margin-bottom: 4px; color: #0f172a; }
+    .meta { font-size: 13px; color: #64748b; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
+    h2 { font-size: 15px; margin-top: 20px; margin-bottom: 8px; color: #1e293b; border-bottom: 1px solid #f1f5f9; padding-bottom: 4px; }
+    p { margin: 0 0 10px 0; font-size: 13.5px; }
+    .box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px 14px; margin-bottom: 14px; font-size: 13.5px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 12.5px; }
+    th, td { text-align: left; padding: 7px 10px; border: 1px solid #e2e8f0; }
+    th { background: #f1f5f9; font-weight: 600; }
+    .done { text-decoration: line-through; color: #94a3b8; }
+    .qa-item { margin-bottom: 14px; page-break-inside: avoid; }
+    .q { font-weight: 600; font-size: 13.5px; color: #0f172a; margin-bottom: 4px; }
+    .a { font-size: 13px; color: #334155; }
+    @media print {
+      body { padding: 0; }
+      @page { margin: 15mm; }
+    }
+  </style>
+</head>
+<body>
+  <h1>${title}</h1>
+  <div class="meta">
+    Date: ${detail.startedAt ? new Date(detail.startedAt).toLocaleDateString() : '—'} · 
+    Duration: ${detail.durationMs ? Math.round(detail.durationMs / 60000) + ' min' : '—'}
+    ${notes?.talkRatio ? ` · Pacing: You ${notes.talkRatio.userPct}% / Others ${notes.talkRatio.othersPct}%` : ''}
+  </div>
+
+  ${notes?.executiveSummary ? `<h2>Executive Summary</h2><div class="box">${notes.executiveSummary.replace(/\n/g, '<br/>')}</div>` : ''}
+
+  ${notes?.actionItems && notes.actionItems.length > 0 ? `
+    <h2>Action Items & Deliverables</h2>
+    <table>
+      <thead><tr><th>Task</th><th>Owner</th><th>Deadline</th><th>Status</th></tr></thead>
+      <tbody>
+        ${notes.actionItems.map((a: MeetingActionItem) => `<tr><td class="${a.done ? 'done' : ''}">${a.task}</td><td>${a.owner || '—'}</td><td>${a.deadline || '—'}</td><td>${a.done ? 'Completed' : 'Pending'}</td></tr>`).join('')}
+      </tbody>
+    </table>
+  ` : ''}
+
+  ${notes?.meddpic && (notes.meddpic.metrics || notes.meddpic.painPoints || notes.meddpic.champion) ? `
+    <h2>MEDDPIC Framework</h2>
+    <table>
+      <thead><tr><th>Element</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Metrics</strong></td><td>${notes.meddpic.metrics || '—'}</td></tr>
+        <tr><td><strong>Economic Buyer</strong></td><td>${notes.meddpic.economicBuyer || '—'}</td></tr>
+        <tr><td><strong>Decision Criteria</strong></td><td>${notes.meddpic.decisionCriteria || '—'}</td></tr>
+        <tr><td><strong>Decision Process</strong></td><td>${notes.meddpic.decisionProcess || '—'}</td></tr>
+        <tr><td><strong>Identify Pain / Pain Points</strong></td><td>${notes.meddpic.painPoints || '—'}</td></tr>
+        <tr><td><strong>Champion</strong></td><td>${notes.meddpic.champion || '—'}</td></tr>
+      </tbody>
+    </table>
+  ` : ''}
+
+  ${detail.questions && detail.questions.length > 0 ? `
+    <h2>Questions & Answers</h2>
+    ${detail.questions.map((q: Question, i: number) => `<div class="qa-item"><div class="q">${i + 1}. ${q.text}</div><div class="a">${(q.answer || 'No answer recorded').replace(/\n/g, '<br/>')}</div></div>`).join('')}
+  ` : ''}
+
+  <script>
+    window.onload = function() {
+      setTimeout(function() { window.print(); }, 200);
+    };
+  </script>
+</body>
+</html>`
+
+    printWindow.document.open()
+    printWindow.document.write(html)
+    printWindow.document.close()
+  }, [])
+
+  const exportAllSessionsCsv = useCallback((): void => {
+    if (!sessions || sessions.length === 0) return
+    const headers = ['ID', 'Company', 'Role', 'Date', 'Duration (Min)', 'Questions Count', 'Preview']
+    const rows = sessions.map((s) => [
+      s.id,
+      s.company || '',
+      s.role || '',
+      s.startedAt ? new Date(s.startedAt).toISOString() : '',
+      String(Math.round((s.durationMs || 0) / 60000)),
+      String(s.questionCount || 0),
+      s.preview || ''
+    ])
+    const csvContent = [headers, ...rows]
+      .map((r) => r.map((c) => `"${(c || '').replace(/"/g, '""')}"`).join(','))
+      .join('\r\n')
+    downloadFile(csvContent, 'all-meetings-export.csv', 'text/csv;charset=utf-8;')
+    void copyToClipboard(csvContent, 'all-csv')
+  }, [sessions, copyToClipboard])
 
   const copySlackRecap = useCallback(
     async (notes: MeetingCrmNotes): Promise<void> => {
@@ -672,10 +839,20 @@ export function InterviewsView(): React.ReactNode {
                 </span>
               </div>
             ) : (
-              <button className="btn btn--danger-quiet btn--sm" onClick={() => setConfirmClearAll(true)}>
-                <Trash2 className="icon icon--xs" aria-hidden="true" />
-                <span>Delete all</span>
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  className="btn btn--primary btn--sm"
+                  onClick={exportAllSessionsCsv}
+                  title="Export complete session history as CSV spreadsheet"
+                >
+                  <Download className="icon icon--xs" aria-hidden="true" />
+                  <span>Export list</span>
+                </button>
+                <button className="btn btn--danger-quiet btn--sm" onClick={() => setConfirmClearAll(true)}>
+                  <Trash2 className="icon icon--xs" aria-hidden="true" />
+                  <span>Delete all</span>
+                </button>
+              </div>
             )
           ) : undefined
         }
@@ -1164,15 +1341,35 @@ export function InterviewsView(): React.ReactNode {
                           </button>
                           <button
                             className="btn btn--quiet btn--sm"
-                            onClick={() => void exportMarkdown(open.id)}
-                            title="Export complete session as Markdown document"
+                            onClick={() => void exportMarkdown(open.id, open.crmNotes?.title || `${open.company} - ${open.role}`)}
+                            title="Download complete session as Markdown (.md) document"
                           >
                             {copiedKey === 'markdown' ? (
                               <Check className="icon icon--xs" style={{ color: 'var(--status-ok)' }} />
                             ) : (
                               <Download className="icon icon--xs" />
                             )}
-                            <span>{copiedKey === 'markdown' ? 'Copied MD!' : 'Export MD'}</span>
+                            <span>{copiedKey === 'markdown' ? 'Saved MD!' : 'Export MD'}</span>
+                          </button>
+                          <button
+                            className="btn btn--quiet btn--sm"
+                            onClick={() => exportSessionCsv(open)}
+                            title="Download structured meeting dataset as CSV spreadsheet"
+                          >
+                            {copiedKey === 'csv' ? (
+                              <Check className="icon icon--xs" style={{ color: 'var(--status-ok)' }} />
+                            ) : (
+                              <Database className="icon icon--xs" />
+                            )}
+                            <span>{copiedKey === 'csv' ? 'Saved CSV!' : 'Export CSV'}</span>
+                          </button>
+                          <button
+                            className="btn btn--quiet btn--sm"
+                            onClick={() => printSessionPdf(open)}
+                            title="Format and print or Save as PDF"
+                          >
+                            <Printer className="icon icon--xs" />
+                            <span>Print / PDF</span>
                           </button>
 
                           {/* Direct 1-Click Push Channels */}
