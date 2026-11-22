@@ -2,6 +2,22 @@
 
 All notable changes to Klyro are recorded here. Versions follow [SemVer](https://semver.org/).
 
+## [0.9.32] — 2026-11-22
+
+Interactive Custom Hotkey Recorder, Real-time Audio Activity Visualizer, Hardware Audio & dB Meter Diagnostics, Multi-Format Meeting Dossier Export (MD / CSV / Print PDF), Interactive Webhook Live Preview, Official Vector Brand Logos, and Warm Obsidian UI Polish.
+
+### Added
+- **Interactive Hotkey Recorder.** Physical keycap recording component in Settings allowing 1-click binding of global shortcuts (<kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + keys) with live modifier tracking, conflict detection, and instant backend re-registration without restart.
+- **Live Audio Activity Indicator.** Reactive 5-bar visualizer in the overlay HUD distinguishing live local voice vs attendee audio loopback.
+- **Hardware Audio Diagnostic Meter.** Real-time RMS-to-dB input level meter with peak hold and built-in Web Audio speaker chime testing in Settings.
+- **One-Click Multi-Format Export.** Export meeting dossiers directly to formatted Markdown (`.md`), structured spreadsheet (`.csv`), or printer-optimized PDF from the session detail view, plus a master list CSV export in Meetings.
+- **Webhook Live Payload Preview.** Collapsible, syntax-colored JSON payload preview for Slack and CRM webhooks with 1-click clipboard copy in Integrations.
+- **Official Brand Vector Icons.** High-fidelity vector logos for OpenAI, Anthropic Claude, Google Gemini, Antigravity, Codex, Grok, Groq, Ollama, Slack, HubSpot, and Salesforce.
+
+### Changed
+- **Warm Obsidian & Amber Palette Harmonization.** Purged legacy cyan and sky blue accents across financial stats, HUD icons, and modals; refined button hover states with subtle interior lighting instead of harsh outer glows.
+- **Cleaned Sidebar Footer.** Removed redundant shortcut text and version string beneath the Quick Ask button.
+
 ## [0.9.31] — 2026-11-16
 
 Autonomous GTM Deal Dispatch Staging Deck, live in-call battlecards HUD, "Catch Me Up" late-joiner briefing, 1-click follow-up calendar scheduler, expansive widescreen CRM layout, intelligent multi-layer speech endpointing, and resilient CI/CD release workflow.
