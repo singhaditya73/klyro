@@ -428,11 +428,31 @@ p {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: var(--space-4) var(--space-3) var(--space-3);
+  padding: var(--space-6) var(--space-3) var(--space-3);
   background: linear-gradient(180deg, #07080c 0%, #050508 100%);
   border-right: 1px solid rgba(255, 255, 255, 0.05);
   transform: translateX(0);
   transition: transform var(--duration-3) var(--ease-out);
+  -webkit-app-region: drag;
+}
+
+.sidebar button,
+.sidebar a,
+.sidebar input,
+.sidebar .nav-item {
+  -webkit-app-region: no-drag;
+}
+
+.window-drag-region {
+  height: 36px;
+  width: 100%;
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.sidebar-toggle {
+  -webkit-app-region: no-drag;
 }
 
 .sidebar__brand {

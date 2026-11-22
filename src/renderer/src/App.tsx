@@ -171,6 +171,7 @@ export default function App() {
 
       <main className="main" role="main">
         <div className="workspace">
+          <div className="window-drag-region" />
           <div className="workspace-content view-in" key={route}>
             <Suspense fallback={<div className="loading-line">Loading…</div>}>
               {route === 'home' && <HomeView onNavigate={go} />}

@@ -126,8 +126,15 @@ export function createMainWindow(options: { show?: boolean } = {}): BrowserWindo
     show: false,
     title: 'Klyro',
     autoHideMenuBar: true,
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : process.platform === 'win32' ? 'hidden' : 'default',
+    titleBarOverlay: process.platform === 'win32' ? {
+      color: '#111111',
+      symbolColor: '#a0a0a0',
+      height: 36
+    } : false,
+    trafficLightPosition: { x: 16, y: 16 },
     icon: nativeImage.createFromDataURL(KLYRO_ICON_DATA_URL),
-    backgroundColor: '#0b0d12',
+    backgroundColor: '#111111',
     webPreferences: baseWebPreferences()
   })
   mainWindow.removeMenu()
