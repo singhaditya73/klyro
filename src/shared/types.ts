@@ -892,6 +892,7 @@ export interface KlyroApi {
   ocrExtract(image: string): Promise<string>
 
   checkPermissions(): Promise<PermissionState>
+  openMicrophoneSettings?(): Promise<boolean>
   hideOverlay(): Promise<void>
   /** Bring the control panel to the front (HUD-first launches start with it hidden). */
   showMainWindow(): Promise<void>

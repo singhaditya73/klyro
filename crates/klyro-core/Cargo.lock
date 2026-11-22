@@ -537,7 +537,7 @@ dependencies = [
 
 [[package]]
 name = "klyro-core"
-version = "0.9.31"
+version = "0.9.34"
 dependencies = [
  "async-stream",
  "base64 0.22.1",

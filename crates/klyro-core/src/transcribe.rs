@@ -4,11 +4,11 @@
 //! whisper.cpp model. Keeps the context cached across calls so subsequent
 //! utterances transcribe in under 200 ms.
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use base64::Engine;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
-static WHISPER_CACHE: Mutex<Option<(String, WhisperContext)>> = Mutex::new(None);
+static WHISPER_CACHE: Mutex<Option<(String, Arc<WhisperContext>)>> = Mutex::new(None);
 
 /// Pre-load the Whisper model context into memory so that subsequent utterances
 /// transcribe with zero disk read overhead.
@@ -24,7 +24,7 @@ pub fn prewarm(model_path: &str) -> Result<(), String> {
     if need_load {
         let ctx = WhisperContext::new_with_params(model_path, WhisperContextParameters::default())
             .map_err(|e| format!("Failed to prewarm Whisper model: {e}"))?;
-        *cache = Some((model_path.to_string(), ctx));
+        *cache = Some((model_path.to_string(), Arc::new(ctx)));
     }
     Ok(())
 }
@@ -48,22 +48,27 @@ pub fn transcribe(audio_pcm_base64: &str, model_path: &str) -> Result<String, St
         return Ok(String::new());
     }
 
-    let mut cache = WHISPER_CACHE.lock().map_err(|e| e.to_string())?;
-    let need_load = match &*cache {
-        Some((path, _)) => path != model_path,
-        None => true,
-    };
+    // Extract a shared reference to the cached Whisper context and drop the mutex
+    // lock immediately so subsequent requests never deadlock or block on inference.
+    let ctx = {
+        let mut cache = WHISPER_CACHE.lock().map_err(|e| e.to_string())?;
+        let need_load = match &*cache {
+            Some((path, _)) => path != model_path,
+            None => true,
+        };
 
-    if need_load {
-        if !std::path::Path::new(model_path).exists() {
-            return Err(format!("Whisper model file not found at: {model_path}"));
+        if need_load {
+            if !std::path::Path::new(model_path).exists() {
+                return Err(format!("Whisper model file not found at: {model_path}"));
+            }
+            let new_ctx = WhisperContext::new_with_params(model_path, WhisperContextParameters::default())
+                .map_err(|e| format!("Failed to load Whisper model: {e}"))?;
+            *cache = Some((model_path.to_string(), Arc::new(new_ctx)));
         }
-        let ctx = WhisperContext::new_with_params(model_path, WhisperContextParameters::default())
-            .map_err(|e| format!("Failed to load Whisper model: {e}"))?;
-        *cache = Some((model_path.to_string(), ctx));
-    }
 
-    let (_, ctx) = cache.as_ref().unwrap();
+        let (_, ctx) = cache.as_ref().unwrap();
+        ctx.clone()
+    };
 
     let mut state = ctx
         .create_state()

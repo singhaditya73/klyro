@@ -4654,6 +4654,74 @@ button.pill:hover {
   flex-shrink: 0;
 }
 
+/* Microphone Permission Modal */
+.overlay__mic-modal {
+  margin: 8px 12px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, rgba(28, 28, 28, 0.98) 0%, rgba(18, 18, 18, 0.98) 100%);
+  border: 1px solid rgba(249, 115, 22, 0.5);
+  border-radius: 12px;
+  box-shadow: 0 16px 36px -6px rgba(0, 0, 0, 0.7), 0 0 20px -3px rgba(249, 115, 22, 0.25);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  animation: pulseIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.overlay__mic-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.overlay__mic-modal-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(249, 115, 22, 0.16);
+  border: 1px solid rgba(249, 115, 22, 0.3);
+}
+
+.overlay__mic-modal-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  margin: 0;
+}
+
+.overlay__mic-modal-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.overlay__mic-modal-body {
+  margin-bottom: 12px;
+}
+
+.overlay__mic-modal-p {
+  font-size: 12px;
+  color: #cbd5e1;
+  margin: 0 0 10px;
+  line-height: 1.4;
+}
+
+.overlay__mic-modal-box {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.overlay__mic-modal-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+}
+
 /* Agenda Checklist Flyout */
 .overlay__agenda-flyout {
   margin: 6px 12px;

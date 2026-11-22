@@ -38,6 +38,7 @@ interface KlyroApi {
   ocrExtract(image: string): Promise<string>
 
   checkPermissions(): Promise<any>
+  openMicrophoneSettings(): Promise<boolean>
   hideOverlay(): Promise<void>
   showMainWindow(): Promise<void>
   copyText(text: string): Promise<boolean>

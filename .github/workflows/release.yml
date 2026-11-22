@@ -63,6 +63,8 @@ jobs:
         with:
           toolchain: 1.99.1
       - run: cargo build --release --manifest-path crates/klyro-core/Cargo.toml
+        env:
+          RUSTFLAGS: "-C target-feature=+crt-static"
       - name: Install dependencies
         env:
           ONNXRUNTIME_NODE_INSTALL: 'skip'

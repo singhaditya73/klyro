@@ -136,6 +136,7 @@ class DaemonClient {
   private buffer = ''
   private listeners = new Set<(event: DaemonEvent) => void>()
   private connecting: Promise<boolean> | null = null
+  private transcribeQueue: Promise<unknown> = Promise.resolve()
 
   /** Is the daemon there? */
   async available(): Promise<boolean> {
@@ -249,9 +250,17 @@ class DaemonClient {
     })
     socket.on('close', () => {
       this.socket = null
+      for (const listener of this.listeners) {
+        listener({ kind: 'error', message: 'Local speech engine daemon disconnected' })
+      }
+      this.listeners.clear()
     })
-    socket.on('error', () => {
+    socket.on('error', (err) => {
       this.socket = null
+      for (const listener of this.listeners) {
+        listener({ kind: 'error', message: `Local speech engine socket error: ${err.message}` })
+      }
+      this.listeners.clear()
     })
   }
 
@@ -348,34 +357,39 @@ class DaemonClient {
 
   /** Transcribe 16kHz mono float32 audio samples using local bundled whisper. */
   async transcribe(audioPcmBase64: string, modelPath: string): Promise<string> {
-    if (!(await this.connect())) throw new Error('Local speech engine daemon is not running')
-    const socket = this.socket
-    if (!socket) throw new Error('Local speech engine socket is not connected')
-    return new Promise<string>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.listeners.delete(listener)
-        reject(new Error('Local transcription timed out'))
-      }, 60000)
-      const listener = (event: DaemonEvent): void => {
-        if (event.kind === 'transcribed') {
-          clearTimeout(timer)
+    const run = async (): Promise<string> => {
+      if (!(await this.connect())) throw new Error('Local speech engine daemon is not running')
+      const socket = this.socket
+      if (!socket) throw new Error('Local speech engine socket is not connected')
+      return new Promise<string>((resolve, reject) => {
+        const timer = setTimeout(() => {
           this.listeners.delete(listener)
-          resolve(event.text)
-        } else if (event.kind === 'error') {
-          clearTimeout(timer)
-          this.listeners.delete(listener)
-          reject(new Error(event.message))
+          reject(new Error('Local transcription timed out'))
+        }, 60000)
+        const listener = (event: DaemonEvent): void => {
+          if (event.kind === 'transcribed') {
+            clearTimeout(timer)
+            this.listeners.delete(listener)
+            resolve(event.text)
+          } else if (event.kind === 'error') {
+            clearTimeout(timer)
+            this.listeners.delete(listener)
+            reject(new Error(event.message))
+          }
         }
-      }
-      this.listeners.add(listener)
-      socket.write(
-        `${JSON.stringify({
-          kind: 'transcribe',
-          audio_pcm_base64: audioPcmBase64,
-          model_path: modelPath
-        })}\n`
-      )
-    })
+        this.listeners.add(listener)
+        socket.write(
+          `${JSON.stringify({
+            kind: 'transcribe',
+            audio_pcm_base64: audioPcmBase64,
+            model_path: modelPath
+          })}\n`
+        )
+      })
+    }
+    const result = this.transcribeQueue.then(run, run)
+    this.transcribeQueue = result.catch(() => '')
+    return result
   }
 
   /** Prewarm the local Whisper model in RAM for zero first-utterance latency. */

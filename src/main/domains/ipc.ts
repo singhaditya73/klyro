@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, ipcMain } from 'electron'
+import { app, BrowserWindow, clipboard, ipcMain, shell } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import { z } from 'zod'
 import { IPC } from '@shared/ipc'
@@ -290,6 +290,18 @@ export function registerIpcHandlers(): void {
   })
 
   handle(IPC.permissionsCheck, () => checkPermissions())
+  handle(IPC.openMicrophoneSettings, async () => {
+    try {
+      if (process.platform === 'win32') {
+        await shell.openExternal('ms-settings:privacy-microphone')
+      } else if (process.platform === 'darwin') {
+        await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone')
+      }
+      return true
+    } catch {
+      return false
+    }
+  })
 
   handle(IPC.securityStatus, (): SecurityStatus => ({
     encryptionAvailable: secrets.isEncryptionAvailable(),

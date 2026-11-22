@@ -29,6 +29,7 @@ export const IPC = {
   ocrExtract: 'ocr:extract',
 
   permissionsCheck: 'permissions:check',
+  openMicrophoneSettings: 'system:open-microphone-settings',
 
   securityStatus: 'security:status',
   dataSummary: 'data:summary',

@@ -62,6 +62,7 @@ const api: KlyroApi = {
   ocrExtract: (image: string) => ipcRenderer.invoke(IPC.ocrExtract, image),
 
    checkPermissions: () => ipcRenderer.invoke(IPC.permissionsCheck),
+  openMicrophoneSettings: () => ipcRenderer.invoke(IPC.openMicrophoneSettings),
   hideOverlay: () => ipcRenderer.invoke(IPC.windowHideOverlay),
   showMainWindow: () => ipcRenderer.invoke(IPC.windowShowMain),
   copyText: (text: string) => ipcRenderer.invoke(IPC.clipboardWrite, text),

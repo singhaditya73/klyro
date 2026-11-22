@@ -64,6 +64,7 @@ import { parseAgendaItems, checkAgendaProgress, type AgendaItem } from './lib/ag
 import type { Attachment, CalendarEvent } from '@shared/types'
 import type { PickerGroup } from './components/ModelPicker'
 import { GhostPhoneModal } from './components/overlay/GhostPhoneModal'
+import { MicrophonePermissionModal } from './components/overlay/MicrophonePermissionModal'
 import { MeetingBanner } from './components/overlay/MeetingBanner'
 import { OverlayCommandMenu } from './components/overlay/OverlayCommandMenu'
 import { AudioActivityIndicator } from './components/AudioActivityIndicator'
@@ -169,6 +170,21 @@ function RenderAnswerWithCitations({ text }: { text: string }): React.ReactEleme
   return <>{parts}</>
 }
 
+function isPermissionError(err: unknown): boolean {
+  if (!err) return false
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase()
+  const name = (err instanceof Error ? err.name : '').toLowerCase()
+  return (
+    name.includes('notallowed') ||
+    name.includes('permission') ||
+    name.includes('security') ||
+    msg.includes('permission') ||
+    msg.includes('not allowed') ||
+    msg.includes('denied') ||
+    msg.includes('blocked')
+  )
+}
+
 export default function OverlayApp() {
   const [text, setText] = useState('')
   const [answer, setAnswer] = useState('')
@@ -235,6 +251,8 @@ export default function OverlayApp() {
   const [showCommandMenu, setShowCommandMenu] = useState(false)
   const [deckTab, setDeckTab] = useState<'catchup' | 'radar' | 'battlecard' | 'agenda' | 'notes'>('catchup')
   const [showRemoteHudModal, setShowRemoteHudModal] = useState(false)
+  const [showMicPermissionModal, setShowMicPermissionModal] = useState(false)
+  const [isStartingAudio, setIsStartingAudio] = useState<'record' | 'listen' | 'talk' | null>(null)
   const [linkCopied, setLinkCopied] = useState(false)
   const [remoteHudUrl, setRemoteHudUrl] = useState<string | null>(null)
   /** Six-digit, one-device pairing code; the address alone carries no secret. */
@@ -690,6 +708,10 @@ export default function OverlayApp() {
           setShowRemoteHudModal(false)
           return
         }
+        if (showMicPermissionModal) {
+          setShowMicPermissionModal(false)
+          return
+        }
         if (activeBattlecard) {
           setActiveBattlecard(null)
           return
@@ -784,6 +806,7 @@ export default function OverlayApp() {
     decoyMode,
     showRsvp,
     showRemoteHudModal,
+    showMicPermissionModal,
     showCommandMenu,
     showAgenda,
     showScratchpad,
@@ -1167,6 +1190,7 @@ export default function OverlayApp() {
   }, [])
 
   const startTalking = useCallback(async (): Promise<void> => {
+    setIsStartingAudio('talk')
     setAssistNote(null)
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: HARDWARE_AUDIO_CONSTRAINTS })
@@ -1297,8 +1321,13 @@ export default function OverlayApp() {
         }
       }, 100)
     } catch (error) {
+      if (isPermissionError(error)) {
+        setShowMicPermissionModal(true)
+      }
       setAssistNote(`Microphone unavailable: ${(error as Error).message}`)
       stopTalking()
+    } finally {
+      setIsStartingAudio(null)
     }
   }, [stopTalking])
 
@@ -1312,6 +1341,7 @@ export default function OverlayApp() {
   // Snippet mode: press once when a question starts, once when it ends.
   // ---------------------------------------------------------------------
   async function startSnippet(): Promise<void> {
+    setIsStartingAudio('record')
     try {
       // The interview starts first: a snippet is part of an interview, and
       // the question and the answer are written down.
@@ -1325,8 +1355,13 @@ export default function OverlayApp() {
       modeRef.current = 'recording'
       setMode('recording')
     } catch (error) {
+      if (isPermissionError(error)) {
+        setShowMicPermissionModal(true)
+      }
       setAssistNote((error as Error).message)
       teardownRecording()
+    } finally {
+      setIsStartingAudio(null)
     }
   }
 
@@ -1362,6 +1397,7 @@ export default function OverlayApp() {
     meetingUrl?: string
     description?: string
   }): Promise<void> {
+    setIsStartingAudio('listen')
     try {
       const company = meetingContext?.company || ''
       const role = meetingContext?.title || ''
@@ -1455,8 +1491,13 @@ export default function OverlayApp() {
         void handleQuestion(utterance)
       }, 100)
     } catch (error) {
+      if (isPermissionError(error)) {
+        setShowMicPermissionModal(true)
+      }
       setAssistNote((error as Error).message)
       teardownRecording()
+    } finally {
+      setIsStartingAudio(null)
     }
   }
 
@@ -2078,6 +2119,16 @@ export default function OverlayApp() {
               />
             )}
 
+            {showMicPermissionModal && (
+              <MicrophonePermissionModal
+                onClose={() => setShowMicPermissionModal(false)}
+                onRetry={() => {
+                  setShowMicPermissionModal(false)
+                  void startSnippet()
+                }}
+              />
+            )}
+
             {upcomingMeeting && mode === 'idle' && (
               <MeetingBanner
                 meeting={upcomingMeeting}
@@ -2136,37 +2187,49 @@ export default function OverlayApp() {
                     <span>{capture ? 'Captured' : 'Screen'}</span>
                   </button>
                   <button
-                    className={`overlay__tool${talkState !== 'idle' ? ' overlay__tool--on' : ''}`}
+                    className={`overlay__tool${talkState !== 'idle' || isStartingAudio === 'talk' ? ' overlay__tool--on' : ''}`}
                     onClick={() => {
                       if (talkState === 'idle') void startTalking()
                       else stopTalking()
                     }}
-                    disabled={busy}
+                    disabled={busy || isStartingAudio !== null}
                     title="Talk to Klyro — it answers when you stop speaking"
                     aria-label="Talk to Klyro"
                   >
-                    <Mic className="icon icon--xs" aria-hidden="true" />
-                    <span>{talkState === 'idle' ? 'Talk' : 'Stop talking'}</span>
+                    {isStartingAudio === 'talk' ? (
+                      <Loader2 className="icon icon--xs spin" aria-hidden="true" />
+                    ) : (
+                      <Mic className="icon icon--xs" aria-hidden="true" />
+                    )}
+                    <span>{isStartingAudio === 'talk' ? 'Starting…' : talkState === 'idle' ? 'Talk' : 'Stop talking'}</span>
                   </button>
                   <button
-                    className="overlay__tool"
+                    className={`overlay__tool${isStartingAudio === 'record' ? ' overlay__tool--on' : ''}`}
                     onClick={() => void startSnippet()}
-                    disabled={busy || talkState !== 'idle'}
+                    disabled={busy || talkState !== 'idle' || isStartingAudio !== null}
                     title="Record one question: press once when it starts, once when it ends"
                     aria-label="Record a question"
                   >
-                    <Mic className="icon icon--xs" aria-hidden="true" />
-                    <span>Record</span>
+                    {isStartingAudio === 'record' ? (
+                      <Loader2 className="icon icon--xs spin" aria-hidden="true" />
+                    ) : (
+                      <Mic className="icon icon--xs" aria-hidden="true" />
+                    )}
+                    <span>{isStartingAudio === 'record' ? 'Starting…' : 'Record'}</span>
                   </button>
                   <button
-                    className="overlay__tool"
+                    className={`overlay__tool${isStartingAudio === 'listen' ? ' overlay__tool--on' : ''}`}
                     onClick={() => void startListening()}
-                    disabled={busy || talkState !== 'idle'}
+                    disabled={busy || talkState !== 'idle' || isStartingAudio !== null}
                     title="Listen to the meeting and answer the questions you hear"
                     aria-label="Listen to the meeting"
                   >
-                    <Headphones className="icon icon--xs" aria-hidden="true" />
-                    <span>Listen</span>
+                    {isStartingAudio === 'listen' ? (
+                      <Loader2 className="icon icon--xs spin" aria-hidden="true" />
+                    ) : (
+                      <Headphones className="icon icon--xs" aria-hidden="true" />
+                    )}
+                    <span>{isStartingAudio === 'listen' ? 'Starting…' : 'Listen'}</span>
                   </button>
                 </>
               )}
