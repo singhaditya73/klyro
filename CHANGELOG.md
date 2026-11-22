@@ -2,6 +2,15 @@
 
 All notable changes to Klyro are recorded here. Versions follow [SemVer](https://semver.org/).
 
+## [0.9.33] — 2026-11-22
+
+Frameless modern window polish and default Dark Warm Obsidian theme lock.
+
+### Fixed
+- **Stripped Legacy Menu Bar.** Removed the default Chromium `File Edit View Window` application menu bar on Windows and Linux for a clean, modern desktop app window.
+- **Dark-First Default Theme.** Locked default theme to signature Dark Warm Obsidian (`theme: 'dark'`) so the UI remains high-contrast, beautiful, and consistent even on laptops configured with Windows Light Mode.
+- **Card Styling in Light Mode.** Corrected `.group` card styling in light mode to cleanly adapt to white cards with soft borders instead of conflicting with dark gradients.
+
 ## [0.9.32] — 2026-11-22
 
 Interactive Custom Hotkey Recorder, Real-time Audio Activity Visualizer, Hardware Audio & dB Meter Diagnostics, Multi-Format Meeting Dossier Export (MD / CSV / Print PDF), Interactive Webhook Live Preview, Official Vector Brand Logos, and Warm Obsidian UI Polish.

@@ -80,12 +80,12 @@ export default function App() {
     }
     void window.klyro
       .getSettings()
-      .then((settings) => apply(settings?.theme ?? 'system'))
-      .catch(() => apply('system'))
+      .then((settings) => apply(settings?.theme ?? 'dark'))
+      .catch(() => apply('dark'))
     const onChange = (): void => {
       void window.klyro
         .getSettings()
-        .then((settings) => apply(settings?.theme ?? 'system'))
+        .then((settings) => apply(settings?.theme ?? 'dark'))
         .catch(() => undefined)
     }
     media.addEventListener('change', onChange)

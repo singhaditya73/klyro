@@ -125,10 +125,12 @@ export function createMainWindow(options: { show?: boolean } = {}): BrowserWindo
     minHeight: 560,
     show: false,
     title: 'Klyro',
+    autoHideMenuBar: true,
     icon: nativeImage.createFromDataURL(KLYRO_ICON_DATA_URL),
     backgroundColor: '#0b0d12',
     webPreferences: baseWebPreferences()
   })
+  mainWindow.removeMenu()
   // A hidden control panel is created for the HUD-first startup: it must not
   // put itself on screen, and `showMainWindow()` can reveal it later.
   if (options.show !== false) {

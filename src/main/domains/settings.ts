@@ -10,7 +10,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   systemPrompt:
     'You are Klyro, a helpful, precise desktop AI assistant. You can see the user\'s screen when they share it. Answer clearly, be accurate, and never claim to have done something you did not do.',
   responseStyle: 'balanced',
-  theme: 'system',
+  theme: 'dark',
   launchAtLogin: false,
   toggleShortcut: 'CommandOrControl+Shift+Space',
   // The tray is the normal way back to the control panel; it can be turned off.

@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { setFlagsFromString } from 'node:v8'
 import { runInNewContext } from 'node:vm'
-import { BrowserWindow, app, desktopCapturer, session } from 'electron'
+import { BrowserWindow, Menu, app, desktopCapturer, session } from 'electron'
 import { logger } from './logger'
 import { diagnostics } from './diagnostics'
 import { secrets } from './security/secrets'
@@ -145,6 +145,7 @@ if (!gotLock) {
   app.on('second-instance', () => showMainWindow())
 
   app.whenReady().then(() => {
+    Menu.setApplicationMenu(null)
     diagnostics.init()
     secrets.init()
     setPackagedRenderer(join(__dirname, '../renderer/index.html'))
